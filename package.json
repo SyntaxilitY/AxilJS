@@ -7,6 +7,13 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "build:common": "cd packages/common && npm run build",
+    "build:config": "cd packages/config && npm run build",
+    "build:security": "cd packages/security && npm run build",
+    "build:pm": "cd packages/pm && npm run build",
+    "build:core": "cd packages/core && npm run build",
+    "build:cli": "cd packages/cli && npm run build",
+    "build:all": "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:core && npm run build:cli",
     "dev": "npm run dev --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
   },
