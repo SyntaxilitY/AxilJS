@@ -947,7 +947,6 @@ Built with passion by [Tariq Mehmood](https://github.com/tariqmehmood)
 ⭐ Star this repo if REstJS saves you from assembling another ecosystem from scratch.
 
 </div>
-```
 
 ---
 
