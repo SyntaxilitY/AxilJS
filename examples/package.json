@@ -19,7 +19,8 @@
     "@restjs/queue":         "0.1.0",
     "@restjs/security":      "0.1.0",
     "@restjs/validation":    "0.1.0",
-    "@restjs/websocket":     "0.1.0"
+    "@restjs/websocket":     "0.1.0",
+    "@restjs/cloud":         "0.1.0"
   },
   "devDependencies": {
     "@restjs/cli": "0.1.0",

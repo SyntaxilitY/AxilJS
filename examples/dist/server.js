@@ -14,6 +14,7 @@ const queue_2 = require("@restjs/queue");
 const circuit_1 = require("@restjs/circuit");
 const observability_1 = require("@restjs/observability");
 const ai_1 = require("@restjs/ai");
+const cloud_1 = require("@restjs/cloud");
 // ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
     console.error('\x1b[31m[REstJS] Uncaught Exception:\x1b[0m', err.message);
@@ -2648,6 +2649,939 @@ app.get('/api/phase5/health', async (req, res) => {
         });
     }
 });
+// ─── Phase 6 Infrastructure ───────────────────────────────────────────────────
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+const flags = new cloud_1.FeatureFlagManager();
+// Register some default feature flags for testing
+flags.define({
+    name: 'new-dashboard',
+    enabled: true,
+    description: 'New admin dashboard UI',
+    rolloutPercentage: 100
+});
+flags.define({
+    name: 'ai-chat',
+    enabled: true,
+    description: 'AI chat feature for users',
+    rolloutPercentage: 50
+});
+flags.define({
+    name: 'beta-api',
+    enabled: true,
+    description: 'Beta API endpoints',
+    allowedTenants: ['tenant-beta', 'tenant-dev'],
+    rolloutPercentage: 100
+});
+flags.define({
+    name: 'dark-mode',
+    enabled: true,
+    description: 'Dark mode for the UI',
+    allowedUsers: [1, 2, 3],
+    rolloutPercentage: 100
+});
+flags.define({
+    name: 'maintenance-mode',
+    enabled: false,
+    description: 'Put the app in maintenance mode',
+    rolloutPercentage: 0
+});
+flags.define({
+    name: 'expired-feature',
+    enabled: true,
+    description: 'This flag has expired',
+    expiresAt: '2020-01-01T00:00:00.000Z',
+    rolloutPercentage: 100
+});
+const tenants = [
+    {
+        id: 'tenant-acme',
+        name: 'Acme Corporation',
+        plan: 'enterprise',
+        createdAt: new Date().toISOString(),
+        active: true
+    },
+    {
+        id: 'tenant-beta',
+        name: 'Beta Testers Inc',
+        plan: 'pro',
+        createdAt: new Date().toISOString(),
+        active: true
+    },
+    {
+        id: 'tenant-dev',
+        name: 'Dev Team',
+        plan: 'free',
+        createdAt: new Date().toISOString(),
+        active: true
+    }
+];
+// ── Audit Log Store ───────────────────────────────────────────────────────────
+// In-memory audit log store (in production: write to database or S3)
+const auditLogs = [];
+// Subscribe to audit events from the global event bus
+// Every auditLog() call emits 'audit.log' — we collect them here
+eventBus.on('audit.log', (event) => {
+    auditLogs.push(event.payload);
+    // Keep only last 1000 audit logs in memory
+    if (auditLogs.length > 1000) {
+        auditLogs.shift();
+    }
+});
+// =============================================================================
+//  PHASE 6 — Enterprise Cloud Platform
+//  Multi-Tenancy, Audit Logging, Feature Flags, Deployment, Dashboard
+// =============================================================================
+// ── Multi-Tenancy ─────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase6/tenants
+ * List all registered tenants
+ */
+app.get('/api/phase6/tenants', (req, res) => {
+    res.json({
+        data: tenants,
+        total: tenants.length,
+        tip: 'Send x-tenant-id header to identify your tenant in requests'
+    });
+});
+/**
+ * POST /api/phase6/tenants
+ * Create a new tenant
+ *
+ * Body:
+ * {
+ *   "id":   "tenant-xyz",
+ *   "name": "XYZ Company",
+ *   "plan": "pro"
+ * }
+ */
+app.post('/api/phase6/tenants', (req, res) => {
+    const body = req.body;
+    if (!body.id || !body.name) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'id and name are required' }
+        });
+        return;
+    }
+    const exists = tenants.find(t => t.id === body.id);
+    if (exists) {
+        res.status(409).json({
+            error: { code: 'CONFLICT', message: `Tenant '${body.id}' already exists` }
+        });
+        return;
+    }
+    const tenant = {
+        id: body.id,
+        name: body.name,
+        plan: body.plan || 'free',
+        createdAt: new Date().toISOString(),
+        active: true
+    };
+    tenants.push(tenant);
+    // Audit log the tenant creation
+    (0, cloud_1.auditLog)({
+        action: 'tenant.create',
+        actor: { id: 'system', type: 'system' },
+        metadata: { tenantId: tenant.id, plan: tenant.plan },
+        success: true
+    });
+    res.status(201).json({
+        message: 'Tenant created',
+        data: tenant
+    });
+});
+/**
+ * GET /api/phase6/tenant/me
+ * Get current tenant from the x-tenant-id header
+ * Header: x-tenant-id: tenant-acme
+ *
+ * This route uses multiTenancy() middleware inline
+ * so you can see exactly how it works.
+ */
+app.get('/api/phase6/tenant/me', (0, cloud_1.multiTenancy)({
+    strategy: 'header',
+    headerName: 'x-tenant-id',
+    resolveTenant: async (id) => {
+        const found = tenants.find(t => t.id === id);
+        if (!found)
+            return null;
+        return { id: found.id, name: found.name, plan: found.plan };
+    }
+}), (req, res) => {
+    const tenant = (0, cloud_1.getTenant)(req);
+    res.json({
+        message: 'Tenant identified from x-tenant-id header',
+        tenant,
+        tip: 'Change the x-tenant-id header value to switch tenants'
+    });
+});
+/**
+ * GET /api/phase6/tenant/data
+ * Simulate tenant-isolated data — each tenant sees only their own data
+ * Header: x-tenant-id: tenant-acme | tenant-beta | tenant-dev
+ */
+app.get('/api/phase6/tenant/data', (0, cloud_1.multiTenancy)({
+    strategy: 'header',
+    headerName: 'x-tenant-id',
+    resolveTenant: async (id) => {
+        const found = tenants.find(t => t.id === id);
+        return found ? { id: found.id, name: found.name, plan: found.plan } : null;
+    }
+}), (req, res) => {
+    const tenant = (0, cloud_1.getTenant)(req);
+    // Simulate tenant-scoped data
+    const tenantData = {
+        'tenant-acme': {
+            users: 1250,
+            projects: 48,
+            storage: '2.4 TB',
+            plan: 'enterprise',
+            features: ['ai', 'sso', 'audit', 'custom-domain']
+        },
+        'tenant-beta': {
+            users: 85,
+            projects: 12,
+            storage: '120 GB',
+            plan: 'pro',
+            features: ['ai', 'audit']
+        },
+        'tenant-dev': {
+            users: 5,
+            projects: 3,
+            storage: '2 GB',
+            plan: 'free',
+            features: []
+        }
+    };
+    const data = tenantData[tenant.id] || {
+        users: 0,
+        projects: 0,
+        storage: '0 GB',
+        plan: 'free',
+        features: []
+    };
+    // Audit this data access
+    (0, cloud_1.auditLog)({
+        action: 'tenant.data.read',
+        actor: { id: 'api-client', type: 'api' },
+        tenantId: tenant.id,
+        metadata: { endpoint: '/api/phase6/tenant/data' },
+        success: true
+    });
+    res.json({
+        tenant: {
+            id: tenant.id,
+            name: tenant.name,
+            plan: tenant.plan
+        },
+        data,
+        note: 'Each tenant sees only their own isolated data'
+    });
+});
+/**
+ * GET /api/phase6/tenant/subdomain
+ * Demonstrate subdomain-based tenant resolution
+ * Header: Host: tenant-acme.localhost
+ *
+ * In Postman: Add Host header = tenant-acme.localhost
+ */
+app.get('/api/phase6/tenant/subdomain', (0, cloud_1.multiTenancy)({
+    strategy: 'subdomain',
+    required: false,
+    resolveTenant: async (id) => {
+        const found = tenants.find(t => t.id === id);
+        return found ? { id: found.id, name: found.name, plan: found.plan } : null;
+    }
+}), (req, res) => {
+    const tenant = req.locals.tenant;
+    res.json({
+        message: tenant
+            ? `Tenant resolved from subdomain`
+            : 'No tenant resolved — no subdomain detected',
+        tenant: tenant || null,
+        hostHeader: req.headers['host'],
+        tip: 'In Postman: Add Header → Host: tenant-acme.localhost'
+    });
+});
+// ── Audit Logging ─────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase6/audit/logs
+ * View audit log entries collected since server started
+ * Query: ?limit=20&action=user.login&tenantId=tenant-acme
+ */
+app.get('/api/phase6/audit/logs', (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 20, 100);
+    const action = req.query.action;
+    const tenantId = req.query.tenantId;
+    const actorId = req.query.actorId;
+    let filtered = [...auditLogs];
+    // Apply filters
+    if (action) {
+        filtered = filtered.filter(log => log.action?.includes(action));
+    }
+    if (tenantId) {
+        filtered = filtered.filter(log => log.tenantId === tenantId);
+    }
+    if (actorId) {
+        filtered = filtered.filter(log => String(log.actor?.id) === actorId);
+    }
+    // Return most recent first
+    const results = filtered.reverse().slice(0, limit);
+    res.json({
+        total: filtered.length,
+        limit,
+        filters: { action, tenantId, actorId },
+        logs: results
+    });
+});
+/**
+ * POST /api/phase6/audit/log
+ * Manually write an audit log entry
+ * Demonstrates the auditLog() function directly
+ *
+ * Body:
+ * {
+ *   "action":   "user.login",
+ *   "actorId":  "123",
+ *   "actorType": "user",
+ *   "tenantId": "tenant-acme",
+ *   "success":  true,
+ *   "metadata": { "ip": "192.168.1.1" }
+ * }
+ */
+app.post('/api/phase6/audit/log', (req, res) => {
+    const body = req.body;
+    if (!body.action) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'action field is required' }
+        });
+        return;
+    }
+    (0, cloud_1.auditLog)({
+        action: body.action,
+        actor: {
+            id: body.actorId || 'postman-test',
+            type: body.actorType || 'api'
+        },
+        tenantId: body.tenantId,
+        metadata: body.metadata || {},
+        success: body.success ?? true,
+        error: body.error
+    });
+    res.status(201).json({
+        message: 'Audit event logged',
+        action: body.action,
+        timestamp: new Date().toISOString(),
+        tip: 'GET /api/phase6/audit/logs to see all logs'
+    });
+});
+/**
+ * DELETE /api/phase6/audit/clear
+ * Clear all audit logs from memory (testing only)
+ */
+app.delete('/api/phase6/audit/clear', (req, res) => {
+    const count = auditLogs.length;
+    auditLogs.splice(0, auditLogs.length);
+    res.json({
+        message: 'Audit logs cleared',
+        cleared: count
+    });
+});
+/**
+ * GET /api/phase6/audit/stats
+ * Audit log statistics
+ */
+app.get('/api/phase6/audit/stats', (req, res) => {
+    const actionCounts = {};
+    const actorCounts = {};
+    let successCount = 0;
+    let failureCount = 0;
+    for (const log of auditLogs) {
+        // Count by action
+        actionCounts[log.action] = (actionCounts[log.action] || 0) + 1;
+        // Count by actor
+        const actorKey = String(log.actor?.id || 'unknown');
+        actorCounts[actorKey] = (actorCounts[actorKey] || 0) + 1;
+        // Count success/failure
+        if (log.success)
+            successCount++;
+        else
+            failureCount++;
+    }
+    res.json({
+        total: auditLogs.length,
+        successCount,
+        failureCount,
+        topActions: Object.entries(actionCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([action, count]) => ({ action, count })),
+        topActors: Object.entries(actorCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([actor, count]) => ({ actor, count }))
+    });
+});
+// ── Feature Flags ─────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase6/flags
+ * List all registered feature flags
+ */
+app.get('/api/phase6/flags', (req, res) => {
+    res.json({
+        flags: flags.getAll(),
+        total: flags.getAll().length
+    });
+});
+/**
+ * POST /api/phase6/flags
+ * Create or update a feature flag
+ *
+ * Body:
+ * {
+ *   "name":              "my-feature",
+ *   "enabled":           true,
+ *   "description":       "My new feature",
+ *   "rolloutPercentage": 50,
+ *   "allowedTenants":    ["tenant-acme"],
+ *   "allowedUsers":      [1, 2, 3]
+ * }
+ */
+app.post('/api/phase6/flags', (req, res) => {
+    const body = req.body;
+    if (!body.name) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'name is required' }
+        });
+        return;
+    }
+    flags.define({
+        name: body.name,
+        enabled: body.enabled ?? true,
+        description: body.description,
+        rolloutPercentage: body.rolloutPercentage ?? 100,
+        allowedTenants: body.allowedTenants,
+        allowedUsers: body.allowedUsers,
+        expiresAt: body.expiresAt
+    });
+    res.status(201).json({
+        message: `Feature flag '${body.name}' defined`,
+        flag: flags.getAll().find(f => f.name === body.name)
+    });
+});
+/**
+ * GET /api/phase6/flags/:name/check
+ * Check if a feature flag is enabled for a given context
+ * Query: ?tenantId=tenant-acme&userId=1&percentage=75
+ *
+ * Examples:
+ *   /api/phase6/flags/new-dashboard/check
+ *   /api/phase6/flags/beta-api/check?tenantId=tenant-acme
+ *   /api/phase6/flags/ai-chat/check?percentage=25
+ *   /api/phase6/flags/ai-chat/check?percentage=75
+ *   /api/phase6/flags/dark-mode/check?userId=1
+ *   /api/phase6/flags/dark-mode/check?userId=99
+ */
+app.get('/api/phase6/flags/:name/check', (req, res) => {
+    const name = req.params.name;
+    const tenantId = req.query.tenantId;
+    const userId = req.query.userId
+        ? Number(req.query.userId)
+        : undefined;
+    const percentage = req.query.percentage
+        ? Number(req.query.percentage)
+        : undefined;
+    const enabled = flags.isEnabled(name, {
+        tenantId,
+        userId,
+        percentage
+    });
+    const allFlags = flags.getAll();
+    const flag = allFlags.find(f => f.name === name);
+    res.json({
+        flag: name,
+        enabled,
+        context: { tenantId, userId, percentage },
+        definition: flag || null,
+        reason: !flag
+            ? 'Flag not found'
+            : !flag.enabled
+                ? 'Flag is disabled'
+                : flag.expiresAt && new Date(flag.expiresAt) < new Date()
+                    ? 'Flag has expired'
+                    : flag.allowedTenants && tenantId && !flag.allowedTenants.includes(tenantId)
+                        ? 'Tenant not in allowed list'
+                        : flag.allowedUsers && userId !== undefined && !flag.allowedUsers.includes(userId)
+                            ? 'User not in allowed list'
+                            : enabled
+                                ? 'All conditions passed'
+                                : 'Rollout percentage check failed'
+    });
+});
+/**
+ * PATCH /api/phase6/flags/:name
+ * Enable or disable a feature flag
+ *
+ * Body: { "enabled": true | false }
+ */
+app.patch('/api/phase6/flags/:name', (req, res) => {
+    const name = req.params.name;
+    const body = req.body;
+    const allFlags = flags.getAll();
+    const flag = allFlags.find(f => f.name === name);
+    if (!flag) {
+        res.status(404).json({
+            error: {
+                code: 'NOT_FOUND',
+                message: `Feature flag '${name}' not found`
+            }
+        });
+        return;
+    }
+    if (body.enabled === undefined) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'enabled field is required' }
+        });
+        return;
+    }
+    // Redefine with updated enabled state
+    flags.define({ ...flag, enabled: body.enabled });
+    // Audit log the change
+    (0, cloud_1.auditLog)({
+        action: body.enabled ? 'flag.enable' : 'flag.disable',
+        actor: { id: 'postman-test', type: 'api' },
+        metadata: { flag: name },
+        success: true
+    });
+    res.json({
+        message: `Flag '${name}' ${body.enabled ? 'enabled' : 'disabled'}`,
+        flag: { ...flag, enabled: body.enabled }
+    });
+});
+/**
+ * POST /api/phase6/flags/evaluate-batch
+ * Check multiple flags at once for a given context
+ * Useful for frontend apps that need to know all flags on load.
+ *
+ * Body:
+ * {
+ *   "flags":    ["new-dashboard", "ai-chat", "dark-mode", "beta-api"],
+ *   "tenantId": "tenant-acme",
+ *   "userId":   1,
+ *   "percentage": 60
+ * }
+ */
+app.post('/api/phase6/flags/evaluate-batch', (req, res) => {
+    const body = req.body;
+    if (!body.flags || !Array.isArray(body.flags)) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'flags array is required' }
+        });
+        return;
+    }
+    const context = {
+        tenantId: body.tenantId,
+        userId: body.userId,
+        percentage: body.percentage
+    };
+    const results = {};
+    for (const name of body.flags) {
+        results[name] = flags.isEnabled(name, context);
+    }
+    res.json({
+        context,
+        flags: results,
+        enabled: Object.entries(results)
+            .filter(([, v]) => v)
+            .map(([k]) => k),
+        disabled: Object.entries(results)
+            .filter(([, v]) => !v)
+            .map(([k]) => k)
+    });
+});
+// ── Deployment ────────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase6/deploy/info
+ * Information about the rest deploy command
+ */
+app.get('/api/phase6/deploy/info', (req, res) => {
+    res.json({
+        feature: 'Deployment Toolkit',
+        command: 'rest deploy',
+        generates: ['Dockerfile', 'deployment.yaml', 'deploy.sh'],
+        kubernetes: {
+            resources: [
+                'Deployment — runs the app in pods',
+                'Service    — exposes the app internally',
+                'HPA        — auto-scales based on CPU'
+            ]
+        },
+        workflow: [
+            '1. npm run build          → compile TypeScript',
+            '2. rest deploy            → generate deploy/ files',
+            '3. docker build           → build container image',
+            '4. docker push            → push to registry',
+            '5. kubectl apply          → deploy to Kubernetes',
+            '6. kubectl rollout status → verify deployment'
+        ]
+    });
+});
+/**
+ * POST /api/phase6/deploy/generate
+ * Generate deployment files for a custom configuration
+ * Files are written to ./deploy/ directory
+ *
+ * Body:
+ * {
+ *   "appName":  "my-api",
+ *   "version":  "1.2.0",
+ *   "port":     3000,
+ *   "replicas": 3,
+ *   "env": {
+ *     "NODE_ENV":    "production",
+ *     "DATABASE_URL": "postgres://..."
+ *   }
+ * }
+ */
+app.post('/api/phase6/deploy/generate', (req, res) => {
+    const body = req.body;
+    if (!body.appName) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'appName is required' }
+        });
+        return;
+    }
+    try {
+        (0, cloud_1.generateDeployment)({
+            appName: body.appName,
+            version: body.version || '1.0.0',
+            port: body.port || 3000,
+            replicas: body.replicas || 3,
+            env: body.env || { NODE_ENV: 'production' }
+        });
+        (0, cloud_1.auditLog)({
+            action: 'deploy.generate',
+            actor: { id: 'postman-test', type: 'api' },
+            metadata: {
+                appName: body.appName,
+                version: body.version,
+                port: body.port,
+                replicas: body.replicas
+            },
+            success: true
+        });
+        res.json({
+            message: 'Deployment files generated',
+            outputDir: './deploy/',
+            files: [
+                'Dockerfile         — multi-stage production build',
+                'deployment.yaml   — Kubernetes Deployment + Service + HPA',
+                'deploy.sh         — build, push, deploy script'
+            ],
+            appName: body.appName,
+            version: body.version || '1.0.0',
+            port: body.port || 3000,
+            replicas: body.replicas || 3
+        });
+    }
+    catch (err) {
+        res.status(500).json({
+            error: {
+                code: 'DEPLOY_ERROR',
+                message: err.message
+            }
+        });
+    }
+});
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase6/dashboard
+ * Complete system dashboard — all metrics in one response
+ */
+app.get('/api/phase6/dashboard', (req, res) => {
+    const memMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    const uptime = Math.round(process.uptime());
+    res.json({
+        system: {
+            uptime: `${uptime}s`,
+            memory: `${memMb}MB`,
+            node: process.version,
+            env: config.NODE_ENV,
+            timestamp: new Date().toISOString()
+        },
+        data: {
+            users: users.length,
+            posts: posts.length,
+            tenants: tenants.length
+        },
+        queue: emailQueue.getStats(),
+        scheduler: {
+            tasks: scheduler.getTasks().length,
+            running: true
+        },
+        circuitBreaker: externalCB.getStats(),
+        events: {
+            historySize: eventBus.getHistory().length,
+            types: eventBus.getEventTypes().length
+        },
+        audit: {
+            totalLogs: auditLogs.length,
+            recent: auditLogs.slice(-5).reverse()
+        },
+        featureFlags: {
+            total: flags.getAll().length,
+            enabled: flags.getAll().filter(f => f.enabled).length,
+            flags: flags.getAll().map(f => ({
+                name: f.name,
+                enabled: f.enabled
+            }))
+        },
+        ai: {
+            provider: aiProvider.name,
+            model: aiProvider.defaultModel,
+            vectorStore: vectorStore.size
+        }
+    });
+});
+/**
+ * GET /api/phase6/dashboard/html
+ * Live monitoring dashboard — HTML page that auto-refreshes
+ * Open in browser: http://localhost:3000/api/phase6/dashboard/html
+ */
+app.get('/api/phase6/dashboard/html', (req, res) => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>REstJS Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 24px;
+    }
+    h1 {
+      color: #60a5fa;
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      color: #64748b;
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card h2 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .metric:last-child { border-bottom: none; }
+    .metric-label { color: #94a3b8; font-size: 13px; }
+    .metric-value { font-weight: 600; font-size: 15px; }
+    .green  { color: #22c55e; }
+    .blue   { color: #60a5fa; }
+    .yellow { color: #fbbf24; }
+    .red    { color: #f87171; }
+    .flag-list { margin-top: 8px; }
+    .flag-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #334155;
+    }
+    .flag-item:last-child { border-bottom: none; }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-green  { background: #166534; color: #4ade80; }
+    .badge-red    { background: #7f1d1d; color: #f87171; }
+    .badge-yellow { background: #78350f; color: #fbbf24; }
+    .refresh {
+      display: inline-block;
+      margin-top: 24px;
+      color: #475569;
+      font-size: 13px;
+    }
+    pre {
+      background: #0f172a;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      overflow-x: auto;
+      margin-top: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⚡ REstJS Dashboard</h1>
+  <p class="subtitle">Live monitoring — auto-refreshes every 3 seconds</p>
+
+  <div class="grid" id="grid">
+    <div class="card">
+      <h2>Loading...</h2>
+    </div>
+  </div>
+
+  <p class="refresh" id="lastUpdate">Last updated: —</p>
+
+  <script>
+    function badge(val, trueLabel, falseLabel) {
+      return val
+        ? '<span class="badge badge-green">' + trueLabel + '</span>'
+        : '<span class="badge badge-red">'  + falseLabel + '</span>';
+    }
+
+    function colorClass(val, warnAt, errAt) {
+      if (val >= errAt)  return 'red';
+      if (val >= warnAt) return 'yellow';
+      return 'green';
+    }
+
+    function render(d) {
+      const grid = document.getElementById('grid');
+
+      grid.innerHTML = [
+
+        // System
+        '<div class="card"><h2>System</h2>' +
+          '<div class="metric"><span class="metric-label">Uptime</span>' +
+          '<span class="metric-value green">' + d.system.uptime + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Memory</span>' +
+          '<span class="metric-value ' + colorClass(parseInt(d.system.memory), 100, 300) + '">' + d.system.memory + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Node.js</span>' +
+          '<span class="metric-value blue">' + d.system.node + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Environment</span>' +
+          '<span class="metric-value yellow">' + d.system.env + '</span></div>' +
+          '</div>',
+
+        // Data
+        '<div class="card"><h2>Data Store</h2>' +
+          '<div class="metric"><span class="metric-label">Users</span>' +
+          '<span class="metric-value blue">' + d.data.users + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Posts</span>' +
+          '<span class="metric-value blue">' + d.data.posts + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Tenants</span>' +
+          '<span class="metric-value blue">' + d.data.tenants + '</span></div>' +
+          '</div>',
+
+        // Queue
+        '<div class="card"><h2>Email Queue</h2>' +
+          '<div class="metric"><span class="metric-label">Pending</span>' +
+          '<span class="metric-value yellow">' + d.queue.pending + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Active</span>' +
+          '<span class="metric-value blue">' + d.queue.active + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Completed</span>' +
+          '<span class="metric-value green">' + d.queue.completed + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Failed</span>' +
+          '<span class="metric-value ' + (d.queue.failed > 0 ? 'red' : 'green') + '">' + d.queue.failed + '</span></div>' +
+          '</div>',
+
+        // Circuit Breaker
+        '<div class="card"><h2>Circuit Breaker</h2>' +
+          '<div class="metric"><span class="metric-label">State</span>' +
+          '<span class="metric-value ' +
+            (d.circuitBreaker.state === 'CLOSED' ? 'green' : d.circuitBreaker.state === 'HALF_OPEN' ? 'yellow' : 'red') + '">' +
+            d.circuitBreaker.state + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Failures</span>' +
+          '<span class="metric-value ' + (d.circuitBreaker.failureCount > 0 ? 'red' : 'green') + '">' + d.circuitBreaker.failureCount + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Requests</span>' +
+          '<span class="metric-value blue">' + d.circuitBreaker.requestCount + '</span></div>' +
+          '</div>',
+
+        // AI
+        '<div class="card"><h2>AI Platform</h2>' +
+          '<div class="metric"><span class="metric-label">Provider</span>' +
+          '<span class="metric-value blue">' + d.ai.provider + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Model</span>' +
+          '<span class="metric-value">' + d.ai.model + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Vector Docs</span>' +
+          '<span class="metric-value green">' + d.ai.vectorStore + '</span></div>' +
+          '</div>',
+
+        // Audit
+        '<div class="card"><h2>Audit Logs</h2>' +
+          '<div class="metric"><span class="metric-label">Total</span>' +
+          '<span class="metric-value blue">' + d.audit.totalLogs + '</span></div>' +
+          '<pre>' +
+            (d.audit.recent.slice(0, 3).map(function(l) {
+              return (l.success ? '✓' : '✗') + ' ' + l.actor.id + ' → ' + l.action;
+            }).join('\\n') || 'No logs yet') +
+          '</pre>' +
+          '</div>',
+
+        // Feature Flags
+        '<div class="card"><h2>Feature Flags (' + d.featureFlags.enabled + '/' + d.featureFlags.total + ' enabled)</h2>' +
+          '<div class="flag-list">' +
+          d.featureFlags.flags.map(function(f) {
+            return '<div class="flag-item"><span>' + f.name + '</span>' +
+              badge(f.enabled, 'ON', 'OFF') + '</div>';
+          }).join('') +
+          '</div></div>',
+
+        // Events
+        '<div class="card"><h2>Events</h2>' +
+          '<div class="metric"><span class="metric-label">History</span>' +
+          '<span class="metric-value blue">' + d.events.historySize + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Event Types</span>' +
+          '<span class="metric-value blue">' + d.events.types + '</span></div>' +
+          '<div class="metric"><span class="metric-label">Scheduler Tasks</span>' +
+          '<span class="metric-value green">' + d.scheduler.tasks + '</span></div>' +
+          '</div>'
+
+      ].join('');
+
+      document.getElementById('lastUpdate').textContent =
+        'Last updated: ' + new Date().toLocaleTimeString();
+    }
+
+    function fetchDashboard() {
+      fetch('/api/phase6/dashboard')
+        .then(function(r) { return r.json(); })
+        .then(render)
+        .catch(function(e) {
+          console.error('Dashboard fetch error:', e);
+        });
+    }
+
+    // Initial load
+    fetchDashboard();
+
+    // Auto-refresh every 3 seconds
+    setInterval(fetchDashboard, 3000);
+  </script>
+</body>
+</html>`;
+    res.html(html);
+});
 // =============================================================================
 //  ROOT — API index listing all endpoints
 // =============================================================================
@@ -2795,6 +3729,29 @@ app.get('/api', (req, res) => {
                     'GET  /api/phase5/mcp/info',
                     'POST /api/phase5/mcp/connect',
                     'POST /api/phase5/mcp/tool'
+                ]
+            },
+            phase6: {
+                description: 'Enterprise Cloud — Multi-Tenancy, Audit, Feature Flags, Deploy, Dashboard',
+                endpoints: [
+                    'GET    /api/phase6/tenants',
+                    'POST   /api/phase6/tenants',
+                    'GET    /api/phase6/tenant/me          [x-tenant-id header]',
+                    'GET    /api/phase6/tenant/data        [x-tenant-id header]',
+                    'GET    /api/phase6/tenant/subdomain   [Host header]',
+                    'GET    /api/phase6/audit/logs',
+                    'GET    /api/phase6/audit/stats',
+                    'POST   /api/phase6/audit/log',
+                    'DELETE /api/phase6/audit/clear',
+                    'GET    /api/phase6/flags',
+                    'POST   /api/phase6/flags',
+                    'GET    /api/phase6/flags/:name/check',
+                    'PATCH  /api/phase6/flags/:name',
+                    'POST   /api/phase6/flags/evaluate-batch',
+                    'GET    /api/phase6/deploy/info',
+                    'POST   /api/phase6/deploy/generate',
+                    'GET    /api/phase6/dashboard',
+                    'GET    /api/phase6/dashboard/html'
                 ]
             }
         }

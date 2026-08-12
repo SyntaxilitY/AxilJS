@@ -6,7 +6,7 @@
  * Commands:
  *   rest create <name>    Create a new project
  *   rest run              Start development server
- *   rest build            Build for production (stub - Phase 2)
+ *   rest build            Build for production
  *   rest --version        Show version
  *   rest --help           Show help
  */

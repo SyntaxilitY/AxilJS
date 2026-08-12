@@ -1,20 +1,20 @@
 {
   "name": "@restjs/cli",
   "version": "0.1.0",
-  "description": "REstJS CLI - rest create, rest run, rest build",
+  "description": "REstJS CLI - rest create, rest run, rest build, rest deploy",
   "main": "dist/index.js",
   "bin": {
     "rest": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev":   "tsc --watch"
   },
   "dependencies": {
     "@restjs/common": "0.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.43",
-    "typescript": "^5.4.0"
+    "typescript":  "^5.4.0",
+    "@types/node": "^20.0.0"
   }
 }
