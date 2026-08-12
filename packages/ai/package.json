@@ -1,0 +1,29 @@
+{
+  "name": "@restjs/ai",
+  "version": "0.1.0",
+  "description": "REstJS AI platform - providers, agents, RAG, vector DB, MCP",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@restjs/common": "0.1.0",
+    "@restjs/events": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "openai": ">=4.0.0",
+    "@anthropic-ai/sdk": ">=0.20.0",
+    "@google/generative-ai": ">=0.1.0"
+  },
+  "peerDependenciesOptional": {
+    "openai": true,
+    "@anthropic-ai/sdk": true,
+    "@google/generative-ai": true
+  }
+}

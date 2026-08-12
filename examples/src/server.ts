@@ -1,25 +1,59 @@
-/**
- * REstJS — Phase 1, 2, 3, 4 Testing Server
- * Run:  npx ts-node src/server.ts
- * Test: Postman → http://localhost:3000
- */
-
-import { createServer }                              from 'http';
+import { createServer } from 'http';
 import { Application, cors, createSSE, sseHeartbeat } from '@restjs/core';
-import { loadEnv, defineConfig }                     from '@restjs/config';
-import { helmet, rateLimit, sanitize }               from '@restjs/security';
-import { JWT }                                       from '@restjs/auth';
-import { authenticate, requireRole }                 from '@restjs/auth';
-import { hashPassword, verifyPassword }              from '@restjs/auth';
-import { v, validate }                               from '@restjs/validation';
-import { EventBus }                                  from '@restjs/events';
-import { WSServer }                                  from '@restjs/websocket';
-import { Queue }                                     from '@restjs/queue';
-import { Scheduler }                                 from '@restjs/queue';
-import { CircuitBreaker, retry, withTimeout }        from '@restjs/circuit';
-import { Logger, MetricsRegistry, HealthChecker,
-         Tracer, observabilityMiddleware,
-         metricsHandler }                            from '@restjs/observability';
+import { loadEnv, defineConfig } from '@restjs/config';
+import { helmet, rateLimit, sanitize } from '@restjs/security';
+import { JWT } from '@restjs/auth';
+import { authenticate, requireRole } from '@restjs/auth';
+import { hashPassword, verifyPassword } from '@restjs/auth';
+import { v, validate } from '@restjs/validation';
+import { EventBus } from '@restjs/events';
+import { WSServer } from '@restjs/websocket';
+import { Queue } from '@restjs/queue';
+import { Scheduler } from '@restjs/queue';
+import { CircuitBreaker, retry, withTimeout } from '@restjs/circuit';
+import {
+  Logger, MetricsRegistry, HealthChecker,
+  Tracer, observabilityMiddleware,
+  metricsHandler
+} from '@restjs/observability';
+import {
+  OpenAIProvider,
+  AnthropicProvider,
+  GeminiProvider,
+  OllamaProvider,
+  RAGPipeline,
+  VectorStore,
+  Agent,
+  createTool,
+  calculatorTool,
+  currentDateTimeTool,
+  jsonTool,
+  loadFromText,
+  loadFromString,
+  DocumentChunker,
+  MCPClient
+} from '@restjs/ai';
+
+import type {
+  AIProvider,
+  Message,
+  CompletionOptions
+} from '@restjs/ai';
+
+
+
+// ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
+
+process.on('uncaughtException', (err) => {
+  console.error('\x1b[31m[REstJS] Uncaught Exception:\x1b[0m', err.message);
+  // Do NOT exit — keep the server running
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('\x1b[31m[REstJS] Unhandled Promise Rejection:\x1b[0m', reason);
+  // Do NOT exit — keep the server running
+});
+
 
 // ─── Load .env ────────────────────────────────────────────────────────────────
 
@@ -28,10 +62,16 @@ loadEnv();
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const config = defineConfig({
-  PORT:       { type: 'number', default: 3000 },
-  HOST:       { type: 'string', default: '127.0.0.1' },
-  NODE_ENV:   { type: 'string', default: 'development' },
-  JWT_SECRET: { type: 'string', default: 'restjs-dev-secret-minimum-32-chars!!' }
+  PORT: { type: 'number', default: 3000 },
+  HOST: { type: 'string', default: '127.0.0.1' },
+  NODE_ENV: { type: 'string', default: 'development' },
+  JWT_SECRET: { type: 'string', default: 'restjs-dev-secret-minimum-32-chars!!' },
+  AI_PROVIDER: { type: 'string', default: 'ollama' },
+  OPENAI_API_KEY: { type: 'string', required: false },
+  ANTHROPIC_API_KEY: { type: 'string', required: false },
+  GOOGLE_API_KEY: { type: 'string', required: false },
+  OLLAMA_MODEL: { type: 'string', default: 'llama3.2' },
+  OLLAMA_URL: { type: 'string', default: 'http://127.0.0.1:11434' }
 });
 
 // ─── JWT ──────────────────────────────────────────────────────────────────────
@@ -95,11 +135,11 @@ scheduler.start();
 // Circuit breaker for simulated external service
 const externalCB = new CircuitBreaker('external-api', {
   failureThreshold: 3,
-  resetTimeoutMs:   15000,
+  resetTimeoutMs: 15000,
   requestTimeoutMs: 5000,
   fallback: () => ({
-    data:    null,
-    error:   'External service unavailable',
+    data: null,
+    error: 'External service unavailable',
     circuit: 'OPEN'
   })
 });
@@ -130,19 +170,19 @@ health.addCheck('queue', async () => {
 // ─── In-Memory Data ───────────────────────────────────────────────────────────
 
 interface User {
-  id:        number;
-  name:      string;
-  email:     string;
-  password:  string;
-  role:      string;
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+  role: string;
   createdAt: string;
 }
 
 interface Post {
-  id:        number;
-  title:     string;
-  content:   string;
-  authorId:  number;
+  id: number;
+  title: string;
+  content: string;
+  authorId: number;
   createdAt: string;
 }
 
@@ -155,45 +195,45 @@ let postIdSeq = 1;
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const registerSchema = v.object({
-  name:     v.string().min(2).max(100),
-  email:    v.string().email(),
+  name: v.string().min(2).max(100),
+  email: v.string().email(),
   password: v.string().min(8),
-  role:     v.enum(['admin', 'user', 'guest']).optional()
+  role: v.enum(['admin', 'user', 'guest']).optional()
 });
 
 const loginSchema = v.object({
-  email:    v.string().email(),
+  email: v.string().email(),
   password: v.string().min(1)
 });
 
 const createPostSchema = v.object({
-  title:   v.string().min(3).max(200),
+  title: v.string().min(3).max(200),
   content: v.string().min(10)
 });
 
 const updatePostSchema = v.object({
-  title:   v.string().min(3).max(200).optional(),
+  title: v.string().min(3).max(200).optional(),
   content: v.string().min(10).optional()
 });
 
 const updateUserSchema = v.object({
-  name:  v.string().min(2).max(100).optional(),
+  name: v.string().min(2).max(100).optional(),
   email: v.string().email().optional()
 });
 
 const validateDemoSchema = v.object({
-  name:  v.string().min(2).max(50),
+  name: v.string().min(2).max(50),
   email: v.string().email(),
-  age:   v.number().min(0).max(150).integer().optional(),
-  role:  v.enum(['admin', 'user', 'guest']),
-  tags:  v.array(v.string().min(1)).max(5).optional()
+  age: v.number().min(0).max(150).integer().optional(),
+  role: v.enum(['admin', 'user', 'guest']),
+  tags: v.array(v.string().min(1)).max(5).optional()
 });
 
 // ─── Application ──────────────────────────────────────────────────────────────
 
 const app = new Application({
   server: { port: config.PORT, host: config.HOST },
-  env:    config.NODE_ENV
+  env: config.NODE_ENV
 });
 
 // ─── Global Middleware ────────────────────────────────────────────────────────
@@ -215,7 +255,7 @@ app.use(observabilityMiddleware({ metrics, tracer }));
 app.get('/api/phase1/hello', (req, res) => {
   res.json({
     message: 'Hello from REstJS!',
-    phase:   1,
+    phase: 1,
     feature: 'Core HTTP Server'
   });
 });
@@ -227,14 +267,14 @@ app.get('/api/phase1/hello', (req, res) => {
  */
 app.get('/api/phase1/echo', (req, res) => {
   res.json({
-    method:  req.method,
-    path:    req.path,
-    query:   req.query,
-    ip:      req.ip,
+    method: req.method,
+    path: req.path,
+    query: req.query,
+    ip: req.ip,
     headers: {
-      'user-agent':   req.headers['user-agent'],
+      'user-agent': req.headers['user-agent'],
       'content-type': req.headers['content-type'],
-      'accept':       req.headers['accept']
+      'accept': req.headers['accept']
     }
   });
 });
@@ -246,9 +286,9 @@ app.get('/api/phase1/echo', (req, res) => {
  */
 app.post('/api/phase1/echo', (req, res) => {
   res.json({
-    method:   req.method,
+    method: req.method,
     received: req.body,
-    path:     req.path
+    path: req.path
   });
 });
 
@@ -258,7 +298,7 @@ app.post('/api/phase1/echo', (req, res) => {
  */
 app.put('/api/phase1/echo', (req, res) => {
   res.json({
-    method:   req.method,
+    method: req.method,
     received: req.body
   });
 });
@@ -269,7 +309,7 @@ app.put('/api/phase1/echo', (req, res) => {
  */
 app.delete('/api/phase1/echo', (req, res) => {
   res.json({
-    method:  req.method,
+    method: req.method,
     message: 'DELETE received'
   });
 });
@@ -281,8 +321,8 @@ app.delete('/api/phase1/echo', (req, res) => {
  */
 app.get('/api/phase1/params/:id', (req, res) => {
   res.json({
-    message:    'Single param extracted',
-    id:         req.params.id,
+    message: 'Single param extracted',
+    id: req.params.id,
     idAsNumber: Number(req.params.id)
   });
 });
@@ -295,8 +335,8 @@ app.get('/api/phase1/params/:id', (req, res) => {
 app.get('/api/phase1/params/:id/items/:itemId', (req, res) => {
   res.json({
     message: 'Multiple params extracted',
-    params:  req.params,
-    query:   req.query
+    params: req.params,
+    query: req.query
   });
 });
 
@@ -307,7 +347,7 @@ app.get('/api/phase1/params/:id/items/:itemId', (req, res) => {
  */
 app.get('/api/phase1/wildcard/*', (req, res) => {
   res.json({
-    message:  'Wildcard matched',
+    message: 'Wildcard matched',
     captured: req.params['*'],
     fullPath: req.path
   });
@@ -323,7 +363,7 @@ app.get(
 
   // Middleware 1 — adds step1 to locals
   (req, res, next) => {
-    req.locals.step1     = 'middleware-one-ran';
+    req.locals.step1 = 'middleware-one-ran';
     req.locals.startedAt = Date.now();
     next();
   },
@@ -343,9 +383,9 @@ app.get(
   // Final handler
   (req, res) => {
     res.json({
-      message:      'All middleware ran in order',
-      locals:       req.locals,
-      totalTimeMs:  Date.now() - (req.locals.startedAt as number)
+      message: 'All middleware ran in order',
+      locals: req.locals,
+      totalTimeMs: Date.now() - (req.locals.startedAt as number)
     });
   }
 );
@@ -374,11 +414,11 @@ app.get('/api/phase1/error-demo', (req, res) => {
     case 'validation':
       res.status(422).json({
         error: {
-          code:    'VALIDATION_ERROR',
+          code: 'VALIDATION_ERROR',
           message: 'Validation failed',
           details: [
             { path: 'email', message: 'email must be a valid email address' },
-            { path: 'name',  message: 'name must be at least 2 characters'  }
+            { path: 'name', message: 'name must be at least 2 characters' }
           ]
         }
       });
@@ -418,7 +458,7 @@ app.get('/api/phase1/status-codes', (req, res) => {
 
   res.status(code).json({
     statusCode: code,
-    message:    messages[code] || 'Unknown'
+    message: messages[code] || 'Unknown'
   });
 });
 
@@ -432,11 +472,11 @@ app.get('/api/phase1/status-codes', (req, res) => {
  */
 app.get('/api/phase2/config', (req, res) => {
   res.json({
-    feature:  'defineConfig — typed and validated env vars',
+    feature: 'defineConfig — typed and validated env vars',
     config: {
-      port:    config.PORT,
-      host:    config.HOST,
-      env:     config.NODE_ENV
+      port: config.PORT,
+      host: config.HOST,
+      env: config.NODE_ENV
     },
     note: 'JWT_SECRET is hidden — never expose secrets in responses'
   });
@@ -449,8 +489,8 @@ app.get('/api/phase2/config', (req, res) => {
  */
 app.get('/api/phase2/security-headers', (req, res) => {
   res.json({
-    feature:  'helmet() — security response headers',
-    message:  'Open Postman Headers tab to see all security headers',
+    feature: 'helmet() — security response headers',
+    message: 'Open Postman Headers tab to see all security headers',
     headers: [
       'Content-Security-Policy',
       'X-Frame-Options: DENY',
@@ -470,11 +510,11 @@ app.get('/api/phase2/security-headers', (req, res) => {
  */
 app.get('/api/phase2/rate-limit', (req, res) => {
   res.json({
-    feature:  'rateLimit() — per-IP request throttling',
-    message:  'Check X-RateLimit-* headers in Postman',
-    limit:    200,
-    window:   '60 seconds',
-    tip:      'Hit this endpoint 200+ times to trigger a 429 response'
+    feature: 'rateLimit() — per-IP request throttling',
+    message: 'Check X-RateLimit-* headers in Postman',
+    limit: 200,
+    window: '60 seconds',
+    tip: 'Hit this endpoint 200+ times to trigger a 429 response'
   });
 });
 
@@ -488,10 +528,10 @@ app.post('/api/phase2/sanitize', (req, res) => {
   const body = req.body as Record<string, unknown>;
 
   res.json({
-    feature:   'sanitize() — HTML escaping middleware',
-    received:  body,
-    message:   'Any HTML in the input has been escaped',
-    tip:       'Send <script>alert(1)</script> and see it become &lt;script&gt;'
+    feature: 'sanitize() — HTML escaping middleware',
+    received: body,
+    message: 'Any HTML in the input has been escaped',
+    tip: 'Send <script>alert(1)</script> and see it become &lt;script&gt;'
   });
 });
 
@@ -501,9 +541,9 @@ app.post('/api/phase2/sanitize', (req, res) => {
  */
 app.get('/api/phase2/health', (req, res) => {
   res.json({
-    status:    'ok',
-    phase:     2,
-    uptime:    process.uptime(),
+    status: 'ok',
+    phase: 2,
+    uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     memory: {
       heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
@@ -524,9 +564,9 @@ app.get('/api/phase2/health', (req, res) => {
  *   Send → watch the response stream in real time
  */
 app.get('/api/phase2/sse', (req, res) => {
-  const sse      = createSSE(res);
+  const sse = createSSE(res);
   const stopBeat = sseHeartbeat(sse, 10000);
-  let   count    = 0;
+  let count = 0;
 
   // First event immediately
   sse.send(
@@ -599,11 +639,11 @@ app.post(
     const hashed = await hashPassword(body.password);
 
     const user: User = {
-      id:        userIdSeq++,
-      name:      body.name,
-      email:     body.email,
-      password:  hashed,
-      role:      body.role || 'user',
+      id: userIdSeq++,
+      name: body.name,
+      email: body.email,
+      password: hashed,
+      role: body.role || 'user',
       createdAt: new Date().toISOString()
     };
 
@@ -614,7 +654,7 @@ app.post(
 
     res.status(201).json({
       message: 'User registered successfully',
-      data:    safeUser
+      data: safeUser
     });
   }
 );
@@ -656,10 +696,10 @@ app.post(
     // Sign JWT with user info embedded in payload
     const token = jwt.sign(
       {
-        sub:   String(user.id),
-        role:  user.role,
+        sub: String(user.id),
+        role: user.role,
         email: user.email,
-        name:  user.name
+        name: user.name
       },
       { expiresIn: '7d' }
     );
@@ -669,7 +709,7 @@ app.post(
     res.json({
       message: 'Login successful',
       token,
-      data:    safeUser
+      data: safeUser
     });
   }
 );
@@ -684,7 +724,7 @@ app.get(
   authenticate(jwt),
   (req, res) => {
     const authUser = req.locals.user as any;
-    const user     = users.find(u => u.id === Number(authUser.sub));
+    const user = users.find(u => u.id === Number(authUser.sub));
 
     if (!user) {
       res.status(404).json({
@@ -697,10 +737,10 @@ app.get(
 
     res.json({
       message: 'Authenticated user',
-      data:    safeUser,
+      data: safeUser,
       token: {
-        sub:       authUser.sub,
-        role:      authUser.role,
+        sub: authUser.sub,
+        role: authUser.role,
         expiresAt: authUser.exp
           ? new Date(authUser.exp * 1000).toISOString()
           : 'no expiry'
@@ -729,14 +769,14 @@ app.post('/api/phase3/auth/verify', (req, res) => {
     const payload = jwt.verify(body.token);
 
     res.json({
-      valid:   true,
+      valid: true,
       payload,
       message: 'Token is valid'
     });
   } catch (err) {
     res.status(401).json({
-      valid:   false,
-      error:   (err as Error).message,
+      valid: false,
+      error: (err as Error).message,
       message: 'Token is invalid or expired'
     });
   }
@@ -755,17 +795,17 @@ app.post(
 
     const newToken = jwt.sign(
       {
-        sub:   authUser.sub,
-        role:  authUser.role,
+        sub: authUser.sub,
+        role: authUser.role,
         email: authUser.email,
-        name:  authUser.name
+        name: authUser.name
       },
       { expiresIn: '7d' }
     );
 
     res.json({
       message: 'Token refreshed — new 7 day expiry',
-      token:   newToken
+      token: newToken
     });
   }
 );
@@ -783,17 +823,17 @@ app.get(
   authenticate(jwt),
   requireRole('admin'),
   (req, res) => {
-    const page    = Number(req.query.page)    || 1;
+    const page = Number(req.query.page) || 1;
     const perPage = Number(req.query.perPage) || 10;
-    const offset  = (page - 1) * perPage;
+    const offset = (page - 1) * perPage;
 
     const safeUsers = users
       .slice(offset, offset + perPage)
       .map(({ password: _, ...u }) => u);
 
     res.json({
-      data:       safeUsers,
-      total:      users.length,
+      data: safeUsers,
+      total: users.length,
       page,
       perPage,
       totalPages: Math.ceil(users.length / perPage)
@@ -843,7 +883,7 @@ app.put(
   (req, res) => {
     const authUser = req.locals.user as any;
     const targetId = Number(req.params.id);
-    const index    = users.findIndex(u => u.id === targetId);
+    const index = users.findIndex(u => u.id === targetId);
 
     if (index === -1) {
       res.status(404).json({
@@ -862,7 +902,7 @@ app.put(
       return;
     }
 
-    const body   = req.body as Record<string, unknown>;
+    const body = req.body as Record<string, unknown>;
     users[index] = { ...users[index], ...body };
 
     const { password: _, ...safeUser } = users[index];
@@ -904,9 +944,9 @@ app.delete(
  * Query: ?page=1&perPage=10
  */
 app.get('/api/phase3/posts', (req, res) => {
-  const page    = Number(req.query.page)    || 1;
+  const page = Number(req.query.page) || 1;
   const perPage = Number(req.query.perPage) || 10;
-  const offset  = (page - 1) * perPage;
+  const offset = (page - 1) * perPage;
 
   const page_posts = posts.slice(offset, offset + perPage);
 
@@ -922,8 +962,8 @@ app.get('/api/phase3/posts', (req, res) => {
   });
 
   res.json({
-    data:       enriched,
-    total:      posts.length,
+    data: enriched,
+    total: posts.length,
     page,
     perPage,
     totalPages: Math.ceil(posts.length / perPage)
@@ -973,13 +1013,13 @@ app.post(
   validate({ body: createPostSchema }),
   (req, res) => {
     const authUser = req.locals.user as any;
-    const body     = req.body as { title: string; content: string };
+    const body = req.body as { title: string; content: string };
 
     const post: Post = {
-      id:        postIdSeq++,
-      title:     body.title,
-      content:   body.content,
-      authorId:  Number(authUser.sub),
+      id: postIdSeq++,
+      title: body.title,
+      content: body.content,
+      authorId: Number(authUser.sub),
       createdAt: new Date().toISOString()
     };
 
@@ -987,7 +1027,7 @@ app.post(
 
     res.status(201).json({
       message: 'Post created',
-      data:    post
+      data: post
     });
   }
 );
@@ -1009,7 +1049,7 @@ app.put(
   validate({ body: updatePostSchema }),
   (req, res) => {
     const authUser = req.locals.user as any;
-    const index    = posts.findIndex(p => p.id === Number(req.params.id));
+    const index = posts.findIndex(p => p.id === Number(req.params.id));
 
     if (index === -1) {
       res.status(404).json({
@@ -1028,7 +1068,7 @@ app.put(
       return;
     }
 
-    const body   = req.body as Record<string, unknown>;
+    const body = req.body as Record<string, unknown>;
     posts[index] = { ...posts[index], ...body };
 
     res.json({ message: 'Post updated', data: posts[index] });
@@ -1045,7 +1085,7 @@ app.delete(
   authenticate(jwt),
   (req, res) => {
     const authUser = req.locals.user as any;
-    const index    = posts.findIndex(p => p.id === Number(req.params.id));
+    const index = posts.findIndex(p => p.id === Number(req.params.id));
 
     if (index === -1) {
       res.status(404).json({
@@ -1090,7 +1130,7 @@ app.post(
   validate({ body: validateDemoSchema }),
   (req, res) => {
     res.json({
-      message:   'All validation passed',
+      message: 'All validation passed',
       validated: req.body
     });
   }
@@ -1115,7 +1155,7 @@ app.post(
     // This handler only runs if validation passes
     // If body is bad, the validate middleware returns 422 automatically
     res.json({
-      message:   'Validation passed (you sent valid data)',
+      message: 'Validation passed (you sent valid data)',
       validated: req.body
     });
   }
@@ -1141,12 +1181,12 @@ app.post(
 app.post('/api/phase3/validate/schema-builder', (req, res) => {
   const schema = v.object({
     username: v.string().min(3).max(30),
-    website:  v.string().url().optional(),
-    score:    v.number().min(0).max(100).integer(),
-    active:   v.boolean(),
-    tags:     v.array(v.string().min(1)).min(1).max(10),
-    address:  v.object({
-      city:    v.string().min(2),
+    website: v.string().url().optional(),
+    score: v.number().min(0).max(100).integer(),
+    active: v.boolean(),
+    tags: v.array(v.string().min(1)).min(1).max(10),
+    address: v.object({
+      city: v.string().min(2),
       country: v.string().min(2).max(2)
     }).optional()
   });
@@ -1156,13 +1196,13 @@ app.post('/api/phase3/validate/schema-builder', (req, res) => {
   if (!result.success) {
     res.status(422).json({
       message: 'Validation failed',
-      errors:  result.errors
+      errors: result.errors
     });
     return;
   }
 
   res.json({
-    message:   'Validation passed',
+    message: 'Validation passed',
     validated: result.data
   });
 });
@@ -1183,7 +1223,7 @@ app.get(
     res.json({
       message: 'Admin area — access granted',
       user: {
-        id:   authUser.sub,
+        id: authUser.sub,
         role: authUser.role
       }
     });
@@ -1204,7 +1244,7 @@ app.get(
     res.json({
       message: 'User area — access granted',
       user: {
-        id:   authUser.sub,
+        id: authUser.sub,
         role: authUser.role
       }
     });
@@ -1224,8 +1264,8 @@ app.get(
     res.json({
       message: 'Authenticated area — access granted',
       user: {
-        id:    authUser.sub,
-        role:  authUser.role,
+        id: authUser.sub,
+        role: authUser.role,
         email: authUser.email
       }
     });
@@ -1247,16 +1287,16 @@ app.get(
 
     if (authUser) {
       res.json({
-        message:       'You are authenticated',
+        message: 'You are authenticated',
         authenticated: true,
         user: {
-          id:   authUser.sub,
+          id: authUser.sub,
           role: authUser.role
         }
       });
     } else {
       res.json({
-        message:       'You are not authenticated — public response',
+        message: 'You are not authenticated — public response',
         authenticated: false
       });
     }
@@ -1295,11 +1335,11 @@ app.post('/api/phase4/events/emit', async (req, res) => {
   });
 
   res.json({
-    message:   'Event emitted',
-    type:      body.type,
-    payload:   body.payload,
+    message: 'Event emitted',
+    type: body.type,
+    payload: body.payload,
     listeners: eventBus.getHandlerCount(body.type),
-    tip:       'Then call GET /api/phase4/events/history to see it'
+    tip: 'Then call GET /api/phase4/events/history to see it'
   });
 });
 
@@ -1309,12 +1349,12 @@ app.post('/api/phase4/events/emit', async (req, res) => {
  * Query: ?type=user.created  ← optional filter
  */
 app.get('/api/phase4/events/history', (req, res) => {
-  const type    = req.query.type as string | undefined;
+  const type = req.query.type as string | undefined;
   const history = eventBus.getHistory(type);
-  const last20  = history.slice(-20).reverse();
+  const last20 = history.slice(-20).reverse();
 
   res.json({
-    total:  history.length,
+    total: history.length,
     filter: type || 'all',
     events: last20
   });
@@ -1339,7 +1379,7 @@ app.get('/api/phase4/events/types', (req, res) => {
  * Body: { "type": "demo.event" }
  */
 app.post('/api/phase4/events/subscribe-demo', async (req, res) => {
-  const body      = req.body as { type?: string };
+  const body = req.body as { type?: string };
   const eventType = body.type || 'demo.event';
   const received: unknown[] = [];
 
@@ -1350,7 +1390,7 @@ app.post('/api/phase4/events/subscribe-demo', async (req, res) => {
 
   // Emit the event
   await eventBus.emit(eventType, {
-    message:   'This is a demo event',
+    message: 'This is a demo event',
     timestamp: Date.now()
   });
 
@@ -1358,10 +1398,10 @@ app.post('/api/phase4/events/subscribe-demo', async (req, res) => {
   await new Promise(r => setTimeout(r, 50));
 
   res.json({
-    message:    'once() listener registered and fired',
+    message: 'once() listener registered and fired',
     eventType,
     received,
-    note:       'The listener is now unsubscribed — it will not fire again'
+    note: 'The listener is now unsubscribed — it will not fire again'
   });
 });
 
@@ -1383,9 +1423,9 @@ app.post('/api/phase4/events/subscribe-demo', async (req, res) => {
  */
 app.post('/api/phase4/queue/add', async (req, res) => {
   const body = req.body as {
-    jobName?:  string;
-    data?:     Record<string, unknown>;
-    delay?:    number;
+    jobName?: string;
+    data?: Record<string, unknown>;
+    delay?: number;
     priority?: number;
   };
 
@@ -1400,7 +1440,7 @@ app.post('/api/phase4/queue/add', async (req, res) => {
   if (!validJobs.includes(body.jobName)) {
     res.status(400).json({
       error: {
-        code:    'BAD_REQUEST',
+        code: 'BAD_REQUEST',
         message: `Invalid jobName. Use: ${validJobs.join(' | ')}`
       }
     });
@@ -1411,8 +1451,8 @@ app.post('/api/phase4/queue/add', async (req, res) => {
     body.jobName,
     body.data || {},
     {
-      delay:       body.delay    || 0,
-      priority:    body.priority || 0,
+      delay: body.delay || 0,
+      priority: body.priority || 0,
       maxAttempts: 3
     }
   );
@@ -1420,11 +1460,11 @@ app.post('/api/phase4/queue/add', async (req, res) => {
   res.status(201).json({
     message: 'Job added to queue',
     job: {
-      id:       job.id,
-      name:     job.name,
-      status:   job.status,
+      id: job.id,
+      name: job.name,
+      status: job.status,
       priority: job.priority,
-      runAt:    job.runAt
+      runAt: job.runAt
     }
   });
 });
@@ -1445,7 +1485,7 @@ app.post('/api/phase4/queue/add', async (req, res) => {
 app.post('/api/phase4/queue/add-many', async (req, res) => {
   const body = req.body as {
     jobName?: string;
-    items?:   Record<string, unknown>[];
+    items?: Record<string, unknown>[];
   };
 
   if (!body.jobName || !body.items || !Array.isArray(body.items)) {
@@ -1459,7 +1499,7 @@ app.post('/api/phase4/queue/add-many', async (req, res) => {
 
   res.status(201).json({
     message: `${jobs.length} jobs added`,
-    jobs:    jobs.map(j => ({ id: j.id, name: j.name, status: j.status }))
+    jobs: jobs.map(j => ({ id: j.id, name: j.name, status: j.status }))
   });
 });
 
@@ -1469,8 +1509,8 @@ app.post('/api/phase4/queue/add-many', async (req, res) => {
  */
 app.get('/api/phase4/queue/stats', (req, res) => {
   res.json({
-    queue:  'emails',
-    stats:  emailQueue.getStats()
+    queue: 'emails',
+    stats: emailQueue.getStats()
   });
 });
 
@@ -1481,12 +1521,12 @@ app.get('/api/phase4/queue/stats', (req, res) => {
  */
 app.get('/api/phase4/queue/jobs', (req, res) => {
   const status = req.query.status as any | undefined;
-  const jobs   = emailQueue.getJobs(status);
+  const jobs = emailQueue.getJobs(status);
 
   res.json({
     filter: status || 'all',
-    total:  jobs.length,
-    jobs:   jobs.slice(0, 50)
+    total: jobs.length,
+    jobs: jobs.slice(0, 50)
   });
 });
 
@@ -1514,7 +1554,7 @@ app.get('/api/phase4/queue/jobs/:id', (req, res) => {
 app.delete('/api/phase4/queue/purge', (req, res) => {
   const before = emailQueue.getStats();
   emailQueue.purge();
-  const after  = emailQueue.getStats();
+  const after = emailQueue.getStats();
 
   res.json({
     message: 'Completed and failed jobs purged',
@@ -1531,7 +1571,7 @@ app.delete('/api/phase4/queue/purge', (req, res) => {
  */
 app.get('/api/phase4/scheduler/tasks', (req, res) => {
   res.json({
-    tasks:   scheduler.getTasks(),
+    tasks: scheduler.getTasks(),
     running: true
   });
 });
@@ -1556,12 +1596,12 @@ app.post('/api/phase4/scheduler/run-now', async (req, res) => {
     await scheduler.runNow(body.name);
     res.json({
       message: `Task '${body.name}' executed immediately`,
-      tip:     'Check server console for task output'
+      tip: 'Check server console for task output'
     });
   } catch (err) {
     res.status(404).json({
       error: {
-        code:    'NOT_FOUND',
+        code: 'NOT_FOUND',
         message: (err as Error).message
       }
     });
@@ -1596,7 +1636,7 @@ app.post('/api/phase4/circuit/call', async (req, res) => {
       }
 
       return {
-        data:      'Success from external API',
+        data: 'Success from external API',
         latencyMs: 100
       };
     });
@@ -1609,7 +1649,7 @@ app.post('/api/phase4/circuit/call', async (req, res) => {
   } catch (err) {
     res.status(503).json({
       success: false,
-      error:   (err as Error).message,
+      error: (err as Error).message,
       circuit: externalCB.getStats()
     });
   }
@@ -1621,11 +1661,11 @@ app.post('/api/phase4/circuit/call', async (req, res) => {
  */
 app.get('/api/phase4/circuit/stats', (req, res) => {
   res.json({
-    name:   'external-api',
-    stats:  externalCB.getStats(),
+    name: 'external-api',
+    stats: externalCB.getStats(),
     states: {
-      CLOSED:    'Normal — requests pass through',
-      OPEN:      'Tripped — requests return fallback immediately',
+      CLOSED: 'Normal — requests pass through',
+      OPEN: 'Tripped — requests return fallback immediately',
       HALF_OPEN: 'Testing — one request allowed to check recovery'
     }
   });
@@ -1639,7 +1679,7 @@ app.post('/api/phase4/circuit/reset', (req, res) => {
   externalCB.reset();
   res.json({
     message: 'Circuit manually reset to CLOSED',
-    stats:   externalCB.getStats()
+    stats: externalCB.getStats()
   });
 });
 
@@ -1659,10 +1699,10 @@ app.post('/api/phase4/circuit/reset', (req, res) => {
  * delay     = milliseconds between retries
  */
 app.post('/api/phase4/retry/fixed', async (req, res) => {
-  const body      = req.body as { failTimes?: number; delay?: number };
+  const body = req.body as { failTimes?: number; delay?: number };
   const failTimes = Math.min(body.failTimes ?? 2, 4);
-  const delayMs   = Math.min(body.delay    ?? 200, 1000);
-  let   attempts  = 0;
+  const delayMs = Math.min(body.delay ?? 200, 1000);
+  let attempts = 0;
   const log: string[] = [];
 
   try {
@@ -1679,8 +1719,8 @@ app.post('/api/phase4/retry/fixed', async (req, res) => {
       },
       {
         attempts: 5,
-        delay:    delayMs,
-        backoff:  'fixed'
+        delay: delayMs,
+        backoff: 'fixed'
       }
     );
 
@@ -1690,7 +1730,7 @@ app.post('/api/phase4/retry/fixed', async (req, res) => {
       strategy: 'fixed',
       delayMs,
       log,
-      error:    (err as Error).message
+      error: (err as Error).message
     });
   }
 });
@@ -1708,10 +1748,10 @@ app.post('/api/phase4/retry/fixed', async (req, res) => {
  * Delays: 100ms, 200ms, 400ms, 800ms...
  */
 app.post('/api/phase4/retry/exponential', async (req, res) => {
-  const body      = req.body as { failTimes?: number; delay?: number };
+  const body = req.body as { failTimes?: number; delay?: number };
   const failTimes = Math.min(body.failTimes ?? 3, 4);
-  const delayMs   = Math.min(body.delay    ?? 100, 500);
-  let   attempts  = 0;
+  const delayMs = Math.min(body.delay ?? 100, 500);
+  let attempts = 0;
   const log: string[] = [];
 
   try {
@@ -1724,10 +1764,10 @@ app.post('/api/phase4/retry/exponential', async (req, res) => {
       },
       {
         attempts: 5,
-        delay:    delayMs,
-        backoff:  'exponential',
-        jitter:   false,
-        onRetry:  (attempt, err, nextDelay) => {
+        delay: delayMs,
+        backoff: 'exponential',
+        jitter: false,
+        onRetry: (attempt, err, nextDelay) => {
           log.push(`  → retry in ${nextDelay}ms`);
         }
       }
@@ -1750,9 +1790,9 @@ app.post('/api/phase4/retry/exponential', async (req, res) => {
  * Body: { "errorType": "retryable" | "permanent" }
  */
 app.post('/api/phase4/retry/skip', async (req, res) => {
-  const body      = req.body as { errorType?: string };
+  const body = req.body as { errorType?: string };
   const permanent = body.errorType === 'permanent';
-  let   attempts  = 0;
+  let attempts = 0;
 
   try {
     const result = await retry(
@@ -1775,7 +1815,7 @@ app.post('/api/phase4/retry/skip', async (req, res) => {
       },
       {
         attempts: 5,
-        delay:    50,
+        delay: 50,
         // Skip retry for permanent errors
         retryIf: (err: any) => !err.permanent
       }
@@ -1784,9 +1824,9 @@ app.post('/api/phase4/retry/skip', async (req, res) => {
     res.json({ result, attempts });
   } catch (err) {
     res.status(500).json({
-      error:    (err as Error).message,
+      error: (err as Error).message,
       attempts,
-      note:     permanent
+      note: permanent
         ? 'Permanent error — retry was skipped'
         : 'All retries exhausted'
     });
@@ -1809,9 +1849,9 @@ app.post('/api/phase4/retry/skip', async (req, res) => {
  * If operationMs < timeoutMs → 200 success
  */
 app.post('/api/phase4/timeout/demo', async (req, res) => {
-  const body        = req.body as { operationMs?: number; timeoutMs?: number };
+  const body = req.body as { operationMs?: number; timeoutMs?: number };
   const operationMs = Math.min(body.operationMs ?? 2000, 8000);
-  const timeoutMs   = Math.min(body.timeoutMs   ?? 1000, 8000);
+  const timeoutMs = Math.min(body.timeoutMs ?? 1000, 8000);
 
   try {
     const result = await withTimeout(
@@ -1822,19 +1862,19 @@ app.post('/api/phase4/timeout/demo', async (req, res) => {
     );
 
     res.json({
-      success:     true,
+      success: true,
       result,
       operationMs,
       timeoutMs,
-      note:        'Operation finished before timeout'
+      note: 'Operation finished before timeout'
     });
   } catch (err) {
     res.status(408).json({
-      success:     false,
-      error:       (err as Error).message,
+      success: false,
+      error: (err as Error).message,
       operationMs,
       timeoutMs,
-      note:        'Operation exceeded timeout and was cancelled'
+      note: 'Operation exceeded timeout and was cancelled'
     });
   }
 });
@@ -1880,8 +1920,8 @@ app.get('/api/phase4/metrics', metricsHandler(metrics));
 app.get('/api/phase4/metrics/summary', (req, res) => {
   res.json({
     feature: 'Prometheus-compatible metrics',
-    note:    'GET /api/phase4/metrics returns raw Prometheus text format',
-    tip:     'Paste http://localhost:3000/api/phase4/metrics into Prometheus',
+    note: 'GET /api/phase4/metrics returns raw Prometheus text format',
+    tip: 'Paste http://localhost:3000/api/phase4/metrics into Prometheus',
     counters: {
       http_requests_total: 'Total HTTP requests by method, path, status'
     },
@@ -1927,28 +1967,28 @@ app.get('/api/phase4/trace/demo', async (req, res) => {
   const rootData = root.end();
 
   res.json({
-    feature:   'Distributed tracing — W3C Trace Context',
-    tip:       'Check traceparent and x-b3-traceid in response Headers tab',
-    traceId:   rootData.traceId,
+    feature: 'Distributed tracing — W3C Trace Context',
+    tip: 'Check traceparent and x-b3-traceid in response Headers tab',
+    traceId: rootData.traceId,
     spans: [
       {
-        name:       rootData.name,
-        spanId:     rootData.spanId,
+        name: rootData.name,
+        spanId: rootData.spanId,
         durationMs: rootData.endTime! - rootData.startTime,
-        status:     rootData.status,
-        events:     rootData.events.map(e => e.name)
+        status: rootData.status,
+        events: rootData.events.map(e => e.name)
       },
       {
-        name:       dbData.name,
-        spanId:     dbData.spanId,
-        parentId:   rootData.spanId,
+        name: dbData.name,
+        spanId: dbData.spanId,
+        parentId: rootData.spanId,
         durationMs: dbData.endTime! - dbData.startTime,
         attributes: dbData.attributes
       },
       {
-        name:       cacheData.name,
-        spanId:     cacheData.spanId,
-        parentId:   rootData.spanId,
+        name: cacheData.name,
+        spanId: cacheData.spanId,
+        parentId: rootData.spanId,
         durationMs: cacheData.endTime! - cacheData.startTime,
         attributes: cacheData.attributes
       }
@@ -1966,11 +2006,11 @@ app.get('/api/phase4/trace/history', (req, res) => {
   res.json({
     total: tracer.getSpans().length,
     last20: spans.map(s => ({
-      traceId:    s.traceId,
-      spanId:     s.spanId,
-      name:       s.name,
+      traceId: s.traceId,
+      spanId: s.spanId,
+      name: s.name,
       durationMs: s.endTime ? s.endTime - s.startTime : null,
-      status:     s.status
+      status: s.status
     }))
   });
 });
@@ -2005,8 +2045,8 @@ app.get('/api/phase4/logger/demo', (req, res) => {
   res.json({
     feature: 'Structured logging',
     level,
-    tip:     'Watch the server console for colored output',
-    note:    'In production (NODE_ENV=production) output is JSON'
+    tip: 'Watch the server console for colored output',
+    note: 'In production (NODE_ENV=production) output is JSON'
   });
 });
 
@@ -2019,18 +2059,1149 @@ app.get('/api/phase4/logger/demo', (req, res) => {
 app.get('/api/phase4/websocket/stats', (req, res) => {
   // wss is defined below in bootstrap — we expose stats here
   res.json({
-    feature:   'WebSocket server (RFC 6455)',
-    endpoint:  `ws://localhost:${config.PORT}/ws`,
-    tip:       'Use Postman WebSocket request to connect',
+    feature: 'WebSocket server (RFC 6455)',
+    endpoint: `ws://localhost:${config.PORT}/ws`,
+    tip: 'Use Postman WebSocket request to connect',
     commands: {
-      ping:      '{ "type": "ping" }',
-      stats:     '{ "type": "stats" }',
-      join:      '{ "type": "join",      "room": "my-room" }',
-      message:   '{ "type": "message",   "room": "my-room", "content": "Hello!" }',
+      ping: '{ "type": "ping" }',
+      stats: '{ "type": "stats" }',
+      join: '{ "type": "join",      "room": "my-room" }',
+      message: '{ "type": "message",   "room": "my-room", "content": "Hello!" }',
       broadcast: '{ "type": "broadcast", "content": "To everyone" }',
-      leave:     '{ "type": "leave",     "room": "my-room" }'
+      leave: '{ "type": "leave",     "room": "my-room" }'
     }
   });
+});
+
+// ─── Phase 5 Infrastructure ───────────────────────────────────────────────────
+
+// ── AI Provider Factory ───────────────────────────────────────────────────────
+
+function buildAIProvider(): AIProvider {
+  const providerName = config.AI_PROVIDER.toLowerCase();
+
+  switch (providerName) {
+    case 'openai':
+      if (!config.OPENAI_API_KEY) {
+        logger.warn('OPENAI_API_KEY not set — falling back to Ollama');
+        return new OllamaProvider({
+          baseUrl: config.OLLAMA_URL,
+          model: config.OLLAMA_MODEL
+        });
+      }
+      logger.info('AI Provider: OpenAI');
+      return new OpenAIProvider({ apiKey: config.OPENAI_API_KEY! });
+
+    case 'anthropic':
+      if (!config.ANTHROPIC_API_KEY) {
+        logger.warn('ANTHROPIC_API_KEY not set — falling back to Ollama');
+        return new OllamaProvider({
+          baseUrl: config.OLLAMA_URL,
+          model: config.OLLAMA_MODEL
+        });
+      }
+      logger.info('AI Provider: Anthropic');
+      return new AnthropicProvider({ apiKey: config.ANTHROPIC_API_KEY! });
+
+    case 'gemini':
+      if (!config.GOOGLE_API_KEY) {
+        logger.warn('GOOGLE_API_KEY not set — falling back to Ollama');
+        return new OllamaProvider({
+          baseUrl: config.OLLAMA_URL,
+          model: config.OLLAMA_MODEL
+        });
+      }
+      logger.info('AI Provider: Google Gemini');
+      return new GeminiProvider({ apiKey: config.GOOGLE_API_KEY! });
+
+    case 'ollama':
+    default:
+      logger.info('AI Provider: Ollama (local)', {
+        url: config.OLLAMA_URL,
+        model: config.OLLAMA_MODEL
+      });
+      return new OllamaProvider({
+        baseUrl: config.OLLAMA_URL,
+        model: config.OLLAMA_MODEL
+      });
+  }
+}
+
+// Build the provider once — reused across all AI routes
+const aiProvider = buildAIProvider();
+
+// ── Vector Store ──────────────────────────────────────────────────────────────
+
+const vectorStore = new VectorStore({ metric: 'cosine' });
+
+// ── RAG Pipeline ──────────────────────────────────────────────────────────────
+
+const ragPipeline = new RAGPipeline({
+  provider: aiProvider,
+  vectorStore,
+  topK: 5,
+  minScore: 0.3,
+  chunker: {
+    chunkSize: 800,
+    overlap: 150
+  }
+});
+
+// ── Index built-in REstJS knowledge ──────────────────────────────────────────
+
+async function indexBuiltinKnowledge(): Promise<void> {
+  const docs = loadFromText([
+    `REstJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
+     It provides a complete platform including runtime, framework, ORM, authentication,
+     validation, testing, events, WebSockets, queues, observability, AI, and cloud deployment.
+     Unlike Express or NestJS, REstJS is batteries-included — everything works out of the box.`,
+
+    `REstJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
+     body parser, CORS, request logger, and the CLI with rest create and rest run commands.
+     The router supports static routes, dynamic parameters like :id, and wildcard routes.`,
+
+    `REstJS Phase 2 adds configuration management with loadEnv and defineConfig, security
+     middleware including helmet, rate limiting, CSRF protection and sanitization, static file
+     serving with ETag caching, Server-Sent Events streaming, and the package manager with
+     SHA-256 checksum verification and a rest.lock file for deterministic installs.`,
+
+    `REstJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
+     builder, base repository with CRUD and pagination, database migrations, JWT authentication
+     with HMAC-SHA256, password hashing with scrypt, role-based access control, and a
+     schema-based validation library with v.string().email() and similar chainable APIs.`,
+
+    `REstJS Phase 4 implements distributed systems including an in-process event bus with
+     wildcard subscriptions, a full RFC 6455 WebSocket server with rooms and broadcasting,
+     message queue with priority and retry, cron scheduler, circuit breaker with three states,
+     retry with exponential backoff, structured logging, Prometheus metrics, and distributed
+     tracing with W3C Trace Context.`,
+
+    `REstJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
+     and local LLMs via Ollama. It provides a RAG pipeline for retrieval-augmented generation,
+     a vector store for semantic similarity search, an agent framework with tool calling using
+     the ReAct reasoning pattern, built-in tools like calculator and datetime, and an MCP
+     client for the Model Context Protocol.`,
+
+    `REstJS CLI commands: rest create <name> creates a new project, rest run starts the
+     development server with hot reload using incremental TypeScript compilation, rest build
+     compiles for production, rest test discovers and runs test files, rest deploy generates
+     Docker and Kubernetes manifests, rest install manages packages, rest doctor diagnoses issues.`,
+
+    `REstJS is different from Node.js Express NestJS Deno and Bun because it provides every
+     layer in one unified ecosystem. No need to assemble 40 packages from different teams.
+     One install gives you HTTP server, ORM, auth, validation, testing, events, WebSockets,
+     queue, observability, AI platform, and cloud deployment tools.`
+  ], 'restjs-docs');
+
+  try {
+    await ragPipeline.index(docs);
+    logger.info('AI knowledge base indexed', {
+      documents: docs.length,
+      vectors: vectorStore.size
+    });
+  } catch (err) {
+    logger.warn('AI knowledge indexing skipped', {
+      reason: (err as Error).message,
+      tip: 'Start Ollama with: ollama serve'
+    });
+  }
+}
+
+// ── Custom Tools ──────────────────────────────────────────────────────────────
+
+// Weather tool (demo — returns mock data)
+const weatherTool = createTool({
+  name: 'get_weather',
+  description: 'Get current weather information for any city',
+  parameters: {
+    type: 'object',
+    properties: {
+      city: {
+        type: 'string',
+        description: 'The city name to get weather for'
+      },
+      unit: {
+        type: 'string',
+        description: 'Temperature unit: celsius or fahrenheit',
+        enum: ['celsius', 'fahrenheit']
+      }
+    },
+    required: ['city']
+  },
+  handler: async ({ city, unit }) => {
+    // Mock weather data — connect a real API in production
+    const temp = unit === 'fahrenheit' ? '72°F' : '22°C';
+    return {
+      city,
+      temperature: temp,
+      condition: 'Partly cloudy',
+      humidity: '65%',
+      wind: '12 km/h',
+      unit: unit || 'celsius',
+      note: 'Demo data — connect OpenWeatherMap API for real data'
+    };
+  }
+});
+
+// User data tool — queries the in-memory users store
+const userDataTool = createTool({
+  name: 'get_user_count',
+  description: 'Get the current number of registered users in the system',
+  parameters: {
+    type: 'object',
+    properties: {}
+  },
+  handler: async () => ({
+    totalUsers: users.length,
+    totalPosts: posts.length,
+    note: 'Data from REstJS in-memory store'
+  })
+});
+
+// All tools available to agents
+const allTools = [
+  calculatorTool,
+  currentDateTimeTool,
+  jsonTool,
+  weatherTool,
+  userDataTool
+];
+
+// =============================================================================
+//  PHASE 5 — AI Platform
+//  Providers, Chat, Streaming, Embeddings, RAG, Agents, Tools, MCP
+// =============================================================================
+
+// ── Provider Info ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/phase5/provider
+ * Show which AI provider is currently active
+ */
+app.get('/api/phase5/provider', (req, res) => {
+  res.json({
+    provider: aiProvider.name,
+    defaultModel: aiProvider.defaultModel,
+    config: {
+      AI_PROVIDER: config.AI_PROVIDER,
+      OLLAMA_MODEL: config.OLLAMA_MODEL,
+      OLLAMA_URL: config.OLLAMA_URL
+    },
+    tip: 'Change AI_PROVIDER in .env to switch: openai | anthropic | gemini | ollama'
+  });
+});
+
+// ── Chat Completion ───────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/chat
+ * Simple chat completion — single turn
+ *
+ * Body:
+ * {
+ *   "message": "What is REstJS?",
+ *   "system":  "You are a helpful assistant."
+ * }
+ */
+app.post('/api/phase5/chat', async (req, res) => {
+  const body = req.body as {
+    message?: string;
+    system?: string;
+    model?: string;
+    temperature?: number;
+  };
+
+  if (!body.message) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'message field is required' }
+    });
+    return;
+  }
+
+  try {
+    const response = await aiProvider.complete({
+      messages: [{ role: 'user', content: body.message }],
+      system: body.system || 'You are a helpful assistant.',
+      model: body.model,
+      temperature: body.temperature ?? 0.7
+    });
+
+    res.json({
+      response: response.content,
+      model: response.model,
+      finishReason: response.finishReason,
+      usage: response.usage
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: {
+        code: 'AI_ERROR',
+        message: (err as Error).message,
+        tip: 'Make sure your AI provider is running and configured'
+      }
+    });
+  }
+});
+
+/**
+ * POST /api/phase5/chat/conversation
+ * Multi-turn conversation — send full message history
+ *
+ * Body:
+ * {
+ *   "messages": [
+ *     { "role": "user",      "content": "My name is Tariq" },
+ *     { "role": "assistant", "content": "Hello Tariq!" },
+ *     { "role": "user",      "content": "What is my name?" }
+ *   ],
+ *   "system": "You are a helpful assistant. Remember what the user tells you."
+ * }
+ */
+app.post('/api/phase5/chat/conversation', async (req, res) => {
+  const body = req.body as {
+    messages?: Message[];
+    system?: string;
+    model?: string;
+    temperature?: number;
+  };
+
+  if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'messages array is required' }
+    });
+    return;
+  }
+
+  try {
+    const response = await aiProvider.complete({
+      messages: body.messages,
+      system: body.system || 'You are a helpful assistant.',
+      model: body.model,
+      temperature: body.temperature ?? 0.7
+    });
+
+    res.json({
+      response: response.content,
+      model: response.model,
+      finishReason: response.finishReason,
+      usage: response.usage,
+      turns: body.messages.length + 1
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+// ── Streaming Chat ────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/chat/stream
+ * Streaming chat completion using Server-Sent Events.
+ * Tokens arrive one by one in real time.
+ *
+ * Body:
+ * {
+ *   "message": "Explain what REstJS is in detail",
+ *   "system":  "You are a helpful assistant."
+ * }
+ *
+ * In Postman: Send request and watch the response stream in real time.
+ * Each SSE event has type "delta" with the next token.
+ * Final event has type "done" with full metadata.
+ */
+app.post('/api/phase5/chat/stream', async (req, res) => {
+  const body = req.body as {
+    message?: string;
+    system?: string;
+    model?: string;
+    temperature?: number;
+  };
+
+  if (!body.message) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'message field is required' }
+    });
+    return;
+  }
+
+  const sse = createSSE(res);
+
+  try {
+    const stream = aiProvider.stream({
+      messages: [{ role: 'user', content: body.message }],
+      system: body.system || 'You are a helpful assistant.',
+      model: body.model,
+      temperature: body.temperature ?? 0.7
+    });
+
+    let fullContent = '';
+
+    for await (const chunk of stream) {
+      if (!sse.isOpen) break;
+
+      if (chunk.delta) {
+        fullContent += chunk.delta;
+
+        // Send each token as an SSE event
+        sse.send({ delta: chunk.delta }, 'delta');
+      }
+
+      if (chunk.done && chunk.response) {
+        // Send final metadata
+        sse.send({
+          content: chunk.response.content,
+          model: chunk.response.model,
+          finishReason: chunk.response.finishReason,
+          usage: chunk.response.usage
+        }, 'done');
+      }
+    }
+  } catch (err) {
+    if (sse.isOpen) {
+      sse.send({
+        error: (err as Error).message,
+        tip: 'Make sure your AI provider is running'
+      }, 'error');
+    }
+  } finally {
+    sse.close();
+  }
+});
+
+// ── Embeddings ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/embed
+ * Generate vector embeddings for text.
+ * Use these vectors for semantic search, similarity, clustering.
+ *
+ * Body:
+ * {
+ *   "input": "What is JavaScript?"
+ * }
+ *
+ * Or multiple strings:
+ * {
+ *   "input": ["JavaScript is a language", "Python is also a language"]
+ * }
+ */
+app.post('/api/phase5/embed', async (req, res) => {
+  const body = req.body as {
+    input?: string | string[];
+    model?: string;
+  };
+
+  if (!body.input) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'input field is required' }
+    });
+    return;
+  }
+
+  try {
+    const response = await aiProvider.embed({
+      input: body.input,
+      model: body.model
+    });
+
+    const inputs = Array.isArray(body.input) ? body.input : [body.input];
+
+    res.json({
+      embeddings: response.embeddings.map((emb, i) => ({
+        input: inputs[i],
+        dimensions: emb.length,
+        // Show only first 5 values — full vector would be too large
+        preview: emb.slice(0, 5),
+        note: `Full vector has ${emb.length} dimensions`
+      })),
+      model: response.model,
+      usage: response.usage
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+/**
+ * POST /api/phase5/embed/similarity
+ * Compute cosine similarity between two texts.
+ * Returns a score from 0 (unrelated) to 1 (identical meaning).
+ *
+ * Body:
+ * {
+ *   "textA": "JavaScript is a programming language",
+ *   "textB": "Python is used for coding"
+ * }
+ */
+app.post('/api/phase5/embed/similarity', async (req, res) => {
+  const body = req.body as { textA?: string; textB?: string };
+
+  if (!body.textA || !body.textB) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'textA and textB are required' }
+    });
+    return;
+  }
+
+  try {
+    // Embed both texts at once
+    const response = await aiProvider.embed({
+      input: [body.textA, body.textB]
+    });
+
+    const [vecA, vecB] = response.embeddings;
+
+    // Cosine similarity
+    const dotProduct = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
+    const magA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
+    const magB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+    const similarity = dotProduct / (magA * magB);
+
+    // Normalize to 0-1
+    const normalizedScore = (similarity + 1) / 2;
+
+    res.json({
+      textA: body.textA,
+      textB: body.textB,
+      similarity: parseFloat(normalizedScore.toFixed(4)),
+      interpretation:
+        normalizedScore > 0.9 ? 'Very similar' :
+          normalizedScore > 0.7 ? 'Similar' :
+            normalizedScore > 0.5 ? 'Somewhat similar' :
+              normalizedScore > 0.3 ? 'Different' :
+                'Very different',
+      model: response.model
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+// ── RAG Pipeline ──────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/phase5/rag/stats
+ * Show RAG pipeline statistics — how many documents are indexed
+ */
+app.get('/api/phase5/rag/stats', (req, res) => {
+  const stats = ragPipeline.getStats();
+
+  res.json({
+    vectorStoreSize: stats.documentCount,
+    embeddingTokensUsed: stats.embeddingTokensUsed,
+    provider: aiProvider.name,
+    tip: vectorStore.size === 0
+      ? 'Knowledge base is empty. POST /api/phase5/rag/index to add documents.'
+      : `${vectorStore.size} document chunks ready for search`
+  });
+});
+
+/**
+ * POST /api/phase5/rag/index
+ * Add documents to the RAG knowledge base.
+ * Documents are chunked, embedded, and stored in the vector store.
+ *
+ * Body:
+ * {
+ *   "texts": [
+ *     "REstJS supports PostgreSQL MySQL and SQLite databases.",
+ *     "The ORM provides migrations query builder and repository pattern."
+ *   ],
+ *   "source": "database-docs"
+ * }
+ */
+app.post('/api/phase5/rag/index', async (req, res) => {
+  const body = req.body as { texts?: string[]; source?: string };
+
+  if (!body.texts || !Array.isArray(body.texts) || body.texts.length === 0) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'texts array is required' }
+    });
+    return;
+  }
+
+  try {
+    const docs = loadFromText(body.texts, body.source || 'api-upload');
+    const result = await ragPipeline.index(docs);
+
+    res.json({
+      message: 'Documents indexed successfully',
+      documentsIndexed: result.documentsIndexed,
+      chunksCreated: result.chunksCreated,
+      totalVectors: vectorStore.size,
+      source: body.source || 'api-upload'
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+/**
+ * POST /api/phase5/rag/query
+ * Ask a question — answer is generated from indexed documents.
+ * The pipeline embeds the question, finds similar chunks, generates an answer.
+ *
+ * Body:
+ * {
+ *   "question": "What databases does REstJS support?",
+ *   "topK":     3
+ * }
+ */
+app.post('/api/phase5/rag/query', async (req, res) => {
+  const body = req.body as {
+    question?: string;
+    topK?: number;
+  };
+
+  if (!body.question) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'question field is required' }
+    });
+    return;
+  }
+
+  if (vectorStore.size === 0) {
+    res.status(400).json({
+      error: {
+        code: 'NO_DOCUMENTS',
+        message: 'No documents indexed yet.',
+        tip: 'POST /api/phase5/rag/index to add documents first'
+      }
+    });
+    return;
+  }
+
+  try {
+    const result = await ragPipeline.query(body.question);
+
+    res.json({
+      question: body.question,
+      answer: result.response,
+      sources: result.sources.map(s => ({
+        content: s.content.slice(0, 200) + (s.content.length > 200 ? '...' : ''),
+        score: parseFloat(s.score.toFixed(4)),
+        source: s.metadata?.source || 'unknown'
+      })),
+      usage: result.usage
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+/**
+ * POST /api/phase5/rag/stream
+ * Ask a question with streaming answer.
+ * Sources are sent immediately, then the answer streams token by token.
+ *
+ * Body:
+ * {
+ *   "question": "What is Phase 4 of REstJS?"
+ * }
+ */
+app.post('/api/phase5/rag/stream', async (req, res) => {
+  const body = req.body as { question?: string };
+
+  if (!body.question) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'question field is required' }
+    });
+    return;
+  }
+
+  if (vectorStore.size === 0) {
+    res.status(400).json({
+      error: {
+        code: 'NO_DOCUMENTS',
+        message: 'No documents indexed. POST /api/phase5/rag/index first.'
+      }
+    });
+    return;
+  }
+
+  const sse = createSSE(res);
+
+  try {
+    for await (const event of ragPipeline.queryStream(body.question)) {
+      if (!sse.isOpen) break;
+
+      sse.send(event.data, event.type);
+
+      if (event.type === 'done') break;
+    }
+  } catch (err) {
+    if (sse.isOpen) {
+      sse.send({ error: (err as Error).message }, 'error');
+    }
+  } finally {
+    sse.close();
+  }
+});
+
+/**
+ * DELETE /api/phase5/rag/clear
+ * Clear all indexed documents from the vector store
+ */
+app.delete('/api/phase5/rag/clear', async (req, res) => {
+  const before = vectorStore.size;
+  await vectorStore.clear();
+
+  res.json({
+    message: 'Vector store cleared',
+    before,
+    after: vectorStore.size
+  });
+});
+
+// ── Vector Store ──────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/phase5/vector/stats
+ * Show vector store statistics
+ */
+app.get('/api/phase5/vector/stats', (req, res) => {
+  res.json({
+    totalDocuments: vectorStore.size,
+    metric: 'cosine',
+    tip: 'Use POST /api/phase5/rag/index to add documents'
+  });
+});
+
+/**
+ * POST /api/phase5/vector/search
+ * Semantic search — find similar documents for a query text.
+ * Embeds the query then returns most similar stored chunks.
+ *
+ * Body:
+ * {
+ *   "query": "database ORM migrations",
+ *   "topK":  3
+ * }
+ */
+app.post('/api/phase5/vector/search', async (req, res) => {
+  const body = req.body as { query?: string; topK?: number };
+
+  if (!body.query) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'query field is required' }
+    });
+    return;
+  }
+
+  if (vectorStore.size === 0) {
+    res.status(400).json({
+      error: {
+        code: 'NO_DOCUMENTS',
+        message: 'No documents in vector store.',
+        tip: 'POST /api/phase5/rag/index to add documents first'
+      }
+    });
+    return;
+  }
+
+  try {
+    // Embed the query
+    const embResult = await aiProvider.embed({ input: body.query });
+    const queryVec = embResult.embeddings[0];
+
+    // Search vector store
+    const results = await vectorStore.search(queryVec, {
+      topK: body.topK || 5,
+      minScore: 0.2
+    });
+
+    res.json({
+      query: body.query,
+      results: results.map(r => ({
+        score: parseFloat(r.score.toFixed(4)),
+        content: r.document.content.slice(0, 300),
+        source: r.document.metadata?.source || 'unknown',
+        id: r.document.id
+      })),
+      total: results.length
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+// ── Document Chunker ──────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/chunk
+ * Show how the document chunker splits text.
+ * Useful for understanding how RAG indexing works.
+ *
+ * Body:
+ * {
+ *   "text":      "Long document text here...",
+ *   "chunkSize": 200,
+ *   "overlap":   50,
+ *   "strategy":  "recursive"
+ * }
+ */
+app.post('/api/phase5/chunk', (req, res) => {
+  const body = req.body as {
+    text?: string;
+    chunkSize?: number;
+    overlap?: number;
+    strategy?: 'fixed' | 'sentence' | 'paragraph' | 'recursive';
+  };
+
+  if (!body.text) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'text field is required' }
+    });
+    return;
+  }
+
+  const chunker = new DocumentChunker({
+    chunkSize: body.chunkSize || 500,
+    overlap: body.overlap || 100,
+    strategy: body.strategy || 'recursive'
+  });
+
+  const doc = loadFromString(
+    body.text,
+    'chunk-demo',
+    { source: 'postman-test' }
+  );
+
+  const chunks = chunker.chunkDocument(doc);
+
+  res.json({
+    originalLength: body.text.length,
+    chunkSize: body.chunkSize || 500,
+    overlap: body.overlap || 100,
+    strategy: body.strategy || 'recursive',
+    totalChunks: chunks.length,
+    chunks: chunks.map(c => ({
+      index: c.chunkIndex,
+      length: c.content.length,
+      startChar: c.startChar,
+      endChar: c.endChar,
+      content: c.content.slice(0, 150) + (c.content.length > 150 ? '...' : '')
+    }))
+  });
+});
+
+// ── Agent ─────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/agent/run
+ * Run an AI agent with tools.
+ * The agent reasons through the task step by step, calling tools when needed.
+ *
+ * Available tools:
+ *   calculator       — math expressions
+ *   get_current_datetime — current date and time
+ *   json_processor   — parse/format/validate JSON
+ *   get_weather      — weather for a city (demo)
+ *   get_user_count   — users and posts count
+ *
+ * Body:
+ * {
+ *   "task":          "What is 25 * 4 and what is today's date?",
+ *   "maxIterations": 5
+ * }
+ */
+app.post('/api/phase5/agent/run', async (req, res) => {
+  const body = req.body as {
+    task?: string;
+    maxIterations?: number;
+  };
+
+  if (!body.task) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'task field is required' }
+    });
+    return;
+  }
+
+  try {
+    const agent = new Agent({
+      provider: aiProvider,
+      tools: allTools,
+      maxIterations: body.maxIterations || 8,
+      temperature: 0.1,
+      systemPrompt:
+        'You are a helpful assistant with access to tools. ' +
+        'Use tools when needed to answer accurately. ' +
+        'Be concise and direct in your responses.'
+    });
+
+    const result = await agent.run(body.task);
+
+    res.json({
+      task: body.task,
+      response: result.response,
+      success: result.success,
+      iterations: result.iterations,
+      steps: result.steps.map(step => ({
+        iteration: step.iteration,
+        thought: step.thought?.slice(0, 200),
+        toolCalls: step.toolCalls?.map(tc => ({
+          tool: tc.name,
+          arguments: tc.arguments
+        })),
+        toolResults: step.toolResults?.map(tr => ({
+          tool: tr.toolName,
+          result: tr.result
+        })),
+        finalAnswer: step.finalAnswer ? step.finalAnswer.slice(0, 200) : undefined
+      })),
+      usage: result.usage
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'AI_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+/**
+ * POST /api/phase5/agent/stream
+ * Run agent with streaming — each step streams as it happens.
+ * Watch the reasoning process in real time via SSE.
+ *
+ * Body:
+ * {
+ *   "task": "What is the weather in Lahore and what time is it?"
+ * }
+ */
+app.post('/api/phase5/agent/stream', async (req, res) => {
+  const body = req.body as { task?: string; maxIterations?: number };
+
+  if (!body.task) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'task field is required' }
+    });
+    return;
+  }
+
+  const sse = createSSE(res);
+
+  try {
+    const agent = new Agent({
+      provider: aiProvider,
+      tools: allTools,
+      maxIterations: body.maxIterations || 8,
+      temperature: 0.1,
+      systemPrompt:
+        'You are a helpful assistant. Use tools when needed.'
+    });
+
+    for await (const step of agent.runStream(body.task)) {
+      if (!sse.isOpen) break;
+
+      sse.send({
+        iteration: step.iteration,
+        thought: step.thought,
+        toolCalls: step.toolCalls?.map(tc => ({
+          tool: tc.name,
+          arguments: tc.arguments
+        })),
+        toolResults: step.toolResults?.map(tr => ({
+          tool: tr.toolName,
+          result: tr.result
+        })),
+        finalAnswer: step.finalAnswer,
+        done: step.done
+      }, step.done ? 'done' : 'step');
+
+      if (step.done) break;
+    }
+  } catch (err) {
+    if (sse.isOpen) {
+      sse.send({ error: (err as Error).message }, 'error');
+    }
+  } finally {
+    sse.close();
+  }
+});
+
+/**
+ * GET /api/phase5/agent/tools
+ * List all available tools the agent can use
+ */
+app.get('/api/phase5/agent/tools', (req, res) => {
+  res.json({
+    tools: allTools.map(tool => ({
+      name: tool.definition.name,
+      description: tool.definition.description,
+      parameters: Object.keys(tool.definition.parameters.properties || {}),
+      required: tool.definition.parameters.required || []
+    }))
+  });
+});
+
+// ── MCP Client ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/phase5/mcp/connect
+ * Test connection to an MCP server
+ *
+ * Body:
+ * {
+ *   "serverUrl": "http://localhost:8080"
+ * }
+ */
+app.post('/api/phase5/mcp/connect', async (req, res) => {
+  const body = req.body as { serverUrl?: string };
+
+  if (!body.serverUrl) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'serverUrl is required' }
+    });
+    return;
+  }
+
+  try {
+    const client = new MCPClient({
+      serverUrl: body.serverUrl,
+      clientName: 'REstJS-Postman-Test',
+      clientVersion: '0.1.0',
+      timeoutMs: 5000
+    });
+
+    await client.connect();
+    const tools = await client.listTools();
+    const resources = await client.listResources();
+
+    await client.disconnect();
+
+    res.json({
+      connected: true,
+      serverUrl: body.serverUrl,
+      tools: tools.map(t => ({ name: t.name, description: t.description })),
+      resources: resources.map(r => ({ uri: r.uri, name: r.name })),
+      toolCount: tools.length,
+      resourceCount: resources.length
+    });
+  } catch (err) {
+    res.status(503).json({
+      connected: false,
+      serverUrl: body.serverUrl,
+      error: (err as Error).message,
+      tip: 'Make sure your MCP server is running at the specified URL'
+    });
+  }
+});
+
+/**
+ * GET /api/phase5/mcp/info
+ * Information about the MCP protocol
+ */
+app.get('/api/phase5/mcp/info', (req, res) => {
+  res.json({
+    feature: 'Model Context Protocol (MCP)',
+    version: '2024-11-05',
+    protocol: 'JSON-RPC 2.0 over HTTP',
+    usage: {
+      connect: 'POST /api/phase5/mcp/connect with { serverUrl }',
+      callTool: 'POST /api/phase5/mcp/tool with { serverUrl, tool, args }',
+      integrate: 'MCP tools auto-convert to Agent tools via asAgentTools()'
+    },
+    tip: 'Start a local MCP server to test. Many open source MCP servers are available.'
+  });
+});
+
+/**
+ * POST /api/phase5/mcp/tool
+ * Call a specific tool on an MCP server
+ *
+ * Body:
+ * {
+ *   "serverUrl": "http://localhost:8080",
+ *   "tool":      "read_file",
+ *   "args":      { "path": "/etc/hostname" }
+ * }
+ */
+app.post('/api/phase5/mcp/tool', async (req, res) => {
+  const body = req.body as {
+    serverUrl?: string;
+    tool?: string;
+    args?: Record<string, unknown>;
+  };
+
+  if (!body.serverUrl || !body.tool) {
+    res.status(400).json({
+      error: { code: 'BAD_REQUEST', message: 'serverUrl and tool are required' }
+    });
+    return;
+  }
+
+  try {
+    const client = new MCPClient({ serverUrl: body.serverUrl, timeoutMs: 10000 });
+    await client.connect();
+
+    const result = await client.callTool(body.tool, body.args || {});
+    await client.disconnect();
+
+    res.json({
+      tool: body.tool,
+      args: body.args,
+      result: result.content,
+      error: result.isError
+    });
+  } catch (err) {
+    res.status(503).json({
+      error: { code: 'MCP_ERROR', message: (err as Error).message }
+    });
+  }
+});
+
+// ── AI Health ─────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/phase5/health
+ * Check if the AI provider is responding
+ */
+app.get('/api/phase5/health', async (req, res) => {
+  const start = Date.now();
+
+  try {
+    // Send a minimal request to test connectivity
+    const response = await aiProvider.complete({
+      messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
+      maxTokens: 10,
+      temperature: 0
+    });
+
+    const latencyMs = Date.now() - start;
+
+    res.json({
+      status: 'healthy',
+      provider: aiProvider.name,
+      model: response.model,
+      latencyMs,
+      testResponse: response.content.trim(),
+      vectorStore: vectorStore.size,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      status: 'unhealthy',
+      provider: aiProvider.name,
+      error: (err as Error).message,
+      tip: aiProvider.name === 'ollama'
+        ? 'Start Ollama: ollama serve  |  Pull model: ollama pull llama3.2'
+        : 'Check your API key in .env file',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // =============================================================================
@@ -2043,10 +3214,10 @@ app.get('/api/phase4/websocket/stats', (req, res) => {
  */
 app.get('/', (req, res) => {
   res.json({
-    name:    'REstJS Testing Server',
+    name: 'REstJS Testing Server',
     version: '0.1.0',
-    author:  'Tariq Mehmood',
-    tip:     'Visit GET /api for all endpoints'
+    author: 'Tariq Mehmood',
+    tip: 'Visit GET /api for all endpoints'
   });
 });
 
@@ -2056,7 +3227,7 @@ app.get('/', (req, res) => {
  */
 app.get('/api', (req, res) => {
   res.json({
-    name:   'REstJS — Phase 1, 2, 3, 4 API',
+    name: 'REstJS — Phase 1, 2, 3, 4 API',
     server: `http://localhost:${config.PORT}`,
     phases: {
 
@@ -2154,6 +3325,40 @@ app.get('/api', (req, res) => {
           'GET    /api/phase4/websocket/stats',
           'WS     ws://localhost:3000/ws'
         ]
+      },
+
+      phase5: {
+        description: 'AI Platform — Providers, Chat, Streaming, Embeddings, RAG, Agents, Tools, MCP',
+        workflow: [
+          '1. GET  /api/phase5/health         → check AI provider is running',
+          '2. POST /api/phase5/chat           → simple chat',
+          '3. POST /api/phase5/rag/index      → add documents',
+          '4. POST /api/phase5/rag/query      → ask questions',
+          '5. POST /api/phase5/agent/run      → run agent with tools'
+        ],
+        endpoints: [
+          'GET  /api/phase5/provider',
+          'GET  /api/phase5/health',
+          'POST /api/phase5/chat',
+          'POST /api/phase5/chat/conversation',
+          'POST /api/phase5/chat/stream',
+          'POST /api/phase5/embed',
+          'POST /api/phase5/embed/similarity',
+          'GET  /api/phase5/rag/stats',
+          'POST /api/phase5/rag/index',
+          'POST /api/phase5/rag/query',
+          'POST /api/phase5/rag/stream',
+          'DELETE /api/phase5/rag/clear',
+          'GET  /api/phase5/vector/stats',
+          'POST /api/phase5/vector/search',
+          'POST /api/phase5/chunk',
+          'GET  /api/phase5/agent/tools',
+          'POST /api/phase5/agent/run',
+          'POST /api/phase5/agent/stream',
+          'GET  /api/phase5/mcp/info',
+          'POST /api/phase5/mcp/connect',
+          'POST /api/phase5/mcp/tool'
+        ]
       }
     }
   });
@@ -2170,6 +3375,9 @@ async function bootstrap() {
   // This creates and binds the internal Node.js server to port 3000
   await app.listen(config.PORT, config.HOST);
 
+  // Index built-in REstJS knowledge into RAG
+  await indexBuiltinKnowledge();
+
   // ── 2. Get the SAME server that is already listening on port 3000 ────────────
   // WSServer must attach to this server — not a new one
   const httpServer = app.getServer();
@@ -2182,7 +3390,7 @@ async function bootstrap() {
   // ── 3. Attach WSServer to the existing HTTP server ───────────────────────────
   // Now ws://localhost:3000/ws will work correctly
   const wss = new WSServer(httpServer, {
-    path:       '/ws',
+    path: '/ws',
     maxClients: 100
   });
 
@@ -2190,15 +3398,15 @@ async function bootstrap() {
 
   wss.on('connection', (client) => {
     logger.info('WS connected', {
-      id:    client.id,
+      id: client.id,
       total: wss.clientCount
     });
 
     // Send welcome
     client.sendJSON({
-      type:      'welcome',
-      clientId:  client.id,
-      message:   'Connected to REstJS WebSocket server',
+      type: 'welcome',
+      clientId: client.id,
+      message: 'Connected to REstJS WebSocket server',
       timestamp: Date.now()
     });
 
@@ -2206,16 +3414,16 @@ async function bootstrap() {
     wss.join(client, 'general');
 
     client.sendJSON({
-      type:    'joined',
-      room:    'general',
+      type: 'joined',
+      room: 'general',
       members: wss.getRoomClients('general').length
     });
 
     // Tell others someone joined
     wss.toRoomJSON('general', {
-      type:      'user-joined',
-      clientId:  client.id,
-      total:     wss.clientCount,
+      type: 'user-joined',
+      clientId: client.id,
+      total: wss.clientCount,
       timestamp: Date.now()
     }, [client.id]);
 
@@ -2233,17 +3441,17 @@ async function bootstrap() {
 
         case 'ping':
           client.sendJSON({
-            type:      'pong',
+            type: 'pong',
             timestamp: Date.now()
           });
           break;
 
         case 'stats':
           client.sendJSON({
-            type:    'stats',
+            type: 'stats',
             clients: wss.clientCount,
-            rooms:   wss.getRooms().map(r => ({
-              name:    r,
+            rooms: wss.getRooms().map(r => ({
+              name: r,
               members: wss.getRoomClients(r).length
             }))
           });
@@ -2253,8 +3461,8 @@ async function bootstrap() {
           if (parsed.room) {
             wss.join(client, parsed.room);
             client.sendJSON({
-              type:    'joined',
-              room:    parsed.room,
+              type: 'joined',
+              room: parsed.room,
               members: wss.getRoomClients(parsed.room).length
             });
           }
@@ -2272,27 +3480,27 @@ async function bootstrap() {
 
         case 'message':
           wss.toRoomJSON(parsed.room || 'general', {
-            type:      'message',
-            from:      client.id,
-            content:   parsed.content,
-            room:      parsed.room || 'general',
+            type: 'message',
+            from: client.id,
+            content: parsed.content,
+            room: parsed.room || 'general',
             timestamp: Date.now()
           });
           break;
 
         case 'broadcast':
           wss.broadcastJSON({
-            type:      'broadcast',
-            from:      client.id,
-            content:   parsed.content,
+            type: 'broadcast',
+            from: client.id,
+            content: parsed.content,
             timestamp: Date.now()
           }, [client.id]);
           break;
 
         default:
           client.sendJSON({
-            type:      'echo',
-            received:  parsed,
+            type: 'echo',
+            received: parsed,
             timestamp: Date.now()
           });
       }
@@ -2300,21 +3508,21 @@ async function bootstrap() {
 
     client.on('close', () => {
       logger.info('WS disconnected', {
-        id:    client.id,
+        id: client.id,
         total: wss.clientCount
       });
 
       wss.broadcastJSON({
-        type:      'user-left',
-        clientId:  client.id,
-        total:     wss.clientCount,
+        type: 'user-left',
+        clientId: client.id,
+        total: wss.clientCount,
         timestamp: Date.now()
       });
     });
 
     client.on('error', (err) => {
       logger.error('WS error', {
-        id:    client.id,
+        id: client.id,
         error: err.message
       });
     });
@@ -2336,7 +3544,7 @@ async function bootstrap() {
     process.exit(0);
   };
 
-  process.on('SIGINT',  shutdown);
+  process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }
 

@@ -1,0 +1,19 @@
+{
+  "name": "@restjs/queue",
+  "version": "0.1.0",
+  "description": "REstJS message queue - jobs, workers, scheduling, retry",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@restjs/common": "0.1.0",
+    "@restjs/events": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

@@ -1,0 +1,73 @@
+/**
+ * HTTP test client.
+ * Makes requests to a running REstJS application in tests.
+ * No need to start an actual server - tests against the app directly.
+ *
+ * Usage:
+ *   const client = createTestClient(app)
+ *
+ *   const res = await client.get('/users')
+ *   expect(res.status).toBe(200)
+ *   expect(res.body.data).toHaveLength(1)
+ */
+import { Application } from '@restjs/core';
+export interface TestResponse {
+    status: number;
+    headers: Record<string, string | string[]>;
+    body: any;
+    text: string;
+}
+declare class TestRequest {
+    private method;
+    private path;
+    private _headers;
+    private _body;
+    private _app;
+    constructor(method: string, path: string, app: Application);
+    /**
+     * Set a request header.
+     */
+    set(name: string, value: string): this;
+    /**
+     * Set Authorization header with a Bearer token.
+     */
+    auth(token: string): this;
+    /**
+     * Set the request body.
+     */
+    send(body: unknown): this;
+    /**
+     * Make the request awaitable.
+     * Allows: const res = await client.get('/users')
+     */
+    then(resolve: (res: TestResponse) => void, reject: (err: Error) => void): void;
+    /**
+     * Execute the request against the app.
+     * Spins up a temporary server on a random port, makes the request, closes it.
+     */
+    private execute;
+    /**
+     * Make an HTTP request to the test server.
+     */
+    private makeRequest;
+}
+export declare class TestClient {
+    private app;
+    constructor(app: Application);
+    get(path: string): TestRequest;
+    post(path: string): TestRequest;
+    put(path: string): TestRequest;
+    patch(path: string): TestRequest;
+    delete(path: string): TestRequest;
+}
+/**
+ * Create a test client for an application.
+ *
+ * Usage:
+ *   const client = createTestClient(app)
+ *   const res = await client.get('/health')
+ *   expect(res.status).toBe(200)
+ */
+export declare function createTestClient(app: Application): TestClient;
+export {};
+//# sourceMappingURL=test-client.d.ts.map

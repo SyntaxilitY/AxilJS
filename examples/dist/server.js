@@ -1,9 +1,4 @@
 "use strict";
-/**
- * REstJS — Phase 1, 2, 3, 4 Testing Server
- * Run:  npx ts-node src/server.ts
- * Test: Postman → http://localhost:3000
- */
 Object.defineProperty(exports, "__esModule", { value: true });
 const core_1 = require("@restjs/core");
 const config_1 = require("@restjs/config");
@@ -18,6 +13,16 @@ const queue_1 = require("@restjs/queue");
 const queue_2 = require("@restjs/queue");
 const circuit_1 = require("@restjs/circuit");
 const observability_1 = require("@restjs/observability");
+const ai_1 = require("@restjs/ai");
+// ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
+process.on('uncaughtException', (err) => {
+    console.error('\x1b[31m[REstJS] Uncaught Exception:\x1b[0m', err.message);
+    // Do NOT exit — keep the server running
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('\x1b[31m[REstJS] Unhandled Promise Rejection:\x1b[0m', reason);
+    // Do NOT exit — keep the server running
+});
 // ─── Load .env ────────────────────────────────────────────────────────────────
 (0, config_1.loadEnv)();
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -25,7 +30,13 @@ const config = (0, config_1.defineConfig)({
     PORT: { type: 'number', default: 3000 },
     HOST: { type: 'string', default: '127.0.0.1' },
     NODE_ENV: { type: 'string', default: 'development' },
-    JWT_SECRET: { type: 'string', default: 'restjs-dev-secret-minimum-32-chars!!' }
+    JWT_SECRET: { type: 'string', default: 'restjs-dev-secret-minimum-32-chars!!' },
+    AI_PROVIDER: { type: 'string', default: 'ollama' },
+    OPENAI_API_KEY: { type: 'string', required: false },
+    ANTHROPIC_API_KEY: { type: 'string', required: false },
+    GOOGLE_API_KEY: { type: 'string', required: false },
+    OLLAMA_MODEL: { type: 'string', default: 'llama3.2' },
+    OLLAMA_URL: { type: 'string', default: 'http://127.0.0.1:11434' }
 });
 // ─── JWT ──────────────────────────────────────────────────────────────────────
 const jwt = new auth_1.JWT(config.JWT_SECRET);
@@ -1652,6 +1663,991 @@ app.get('/api/phase4/websocket/stats', (req, res) => {
         }
     });
 });
+// ─── Phase 5 Infrastructure ───────────────────────────────────────────────────
+// ── AI Provider Factory ───────────────────────────────────────────────────────
+function buildAIProvider() {
+    const providerName = config.AI_PROVIDER.toLowerCase();
+    switch (providerName) {
+        case 'openai':
+            if (!config.OPENAI_API_KEY) {
+                logger.warn('OPENAI_API_KEY not set — falling back to Ollama');
+                return new ai_1.OllamaProvider({
+                    baseUrl: config.OLLAMA_URL,
+                    model: config.OLLAMA_MODEL
+                });
+            }
+            logger.info('AI Provider: OpenAI');
+            return new ai_1.OpenAIProvider({ apiKey: config.OPENAI_API_KEY });
+        case 'anthropic':
+            if (!config.ANTHROPIC_API_KEY) {
+                logger.warn('ANTHROPIC_API_KEY not set — falling back to Ollama');
+                return new ai_1.OllamaProvider({
+                    baseUrl: config.OLLAMA_URL,
+                    model: config.OLLAMA_MODEL
+                });
+            }
+            logger.info('AI Provider: Anthropic');
+            return new ai_1.AnthropicProvider({ apiKey: config.ANTHROPIC_API_KEY });
+        case 'gemini':
+            if (!config.GOOGLE_API_KEY) {
+                logger.warn('GOOGLE_API_KEY not set — falling back to Ollama');
+                return new ai_1.OllamaProvider({
+                    baseUrl: config.OLLAMA_URL,
+                    model: config.OLLAMA_MODEL
+                });
+            }
+            logger.info('AI Provider: Google Gemini');
+            return new ai_1.GeminiProvider({ apiKey: config.GOOGLE_API_KEY });
+        case 'ollama':
+        default:
+            logger.info('AI Provider: Ollama (local)', {
+                url: config.OLLAMA_URL,
+                model: config.OLLAMA_MODEL
+            });
+            return new ai_1.OllamaProvider({
+                baseUrl: config.OLLAMA_URL,
+                model: config.OLLAMA_MODEL
+            });
+    }
+}
+// Build the provider once — reused across all AI routes
+const aiProvider = buildAIProvider();
+// ── Vector Store ──────────────────────────────────────────────────────────────
+const vectorStore = new ai_1.VectorStore({ metric: 'cosine' });
+// ── RAG Pipeline ──────────────────────────────────────────────────────────────
+const ragPipeline = new ai_1.RAGPipeline({
+    provider: aiProvider,
+    vectorStore,
+    topK: 5,
+    minScore: 0.3,
+    chunker: {
+        chunkSize: 800,
+        overlap: 150
+    }
+});
+// ── Index built-in REstJS knowledge ──────────────────────────────────────────
+async function indexBuiltinKnowledge() {
+    const docs = (0, ai_1.loadFromText)([
+        `REstJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
+     It provides a complete platform including runtime, framework, ORM, authentication,
+     validation, testing, events, WebSockets, queues, observability, AI, and cloud deployment.
+     Unlike Express or NestJS, REstJS is batteries-included — everything works out of the box.`,
+        `REstJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
+     body parser, CORS, request logger, and the CLI with rest create and rest run commands.
+     The router supports static routes, dynamic parameters like :id, and wildcard routes.`,
+        `REstJS Phase 2 adds configuration management with loadEnv and defineConfig, security
+     middleware including helmet, rate limiting, CSRF protection and sanitization, static file
+     serving with ETag caching, Server-Sent Events streaming, and the package manager with
+     SHA-256 checksum verification and a rest.lock file for deterministic installs.`,
+        `REstJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
+     builder, base repository with CRUD and pagination, database migrations, JWT authentication
+     with HMAC-SHA256, password hashing with scrypt, role-based access control, and a
+     schema-based validation library with v.string().email() and similar chainable APIs.`,
+        `REstJS Phase 4 implements distributed systems including an in-process event bus with
+     wildcard subscriptions, a full RFC 6455 WebSocket server with rooms and broadcasting,
+     message queue with priority and retry, cron scheduler, circuit breaker with three states,
+     retry with exponential backoff, structured logging, Prometheus metrics, and distributed
+     tracing with W3C Trace Context.`,
+        `REstJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
+     and local LLMs via Ollama. It provides a RAG pipeline for retrieval-augmented generation,
+     a vector store for semantic similarity search, an agent framework with tool calling using
+     the ReAct reasoning pattern, built-in tools like calculator and datetime, and an MCP
+     client for the Model Context Protocol.`,
+        `REstJS CLI commands: rest create <name> creates a new project, rest run starts the
+     development server with hot reload using incremental TypeScript compilation, rest build
+     compiles for production, rest test discovers and runs test files, rest deploy generates
+     Docker and Kubernetes manifests, rest install manages packages, rest doctor diagnoses issues.`,
+        `REstJS is different from Node.js Express NestJS Deno and Bun because it provides every
+     layer in one unified ecosystem. No need to assemble 40 packages from different teams.
+     One install gives you HTTP server, ORM, auth, validation, testing, events, WebSockets,
+     queue, observability, AI platform, and cloud deployment tools.`
+    ], 'restjs-docs');
+    try {
+        await ragPipeline.index(docs);
+        logger.info('AI knowledge base indexed', {
+            documents: docs.length,
+            vectors: vectorStore.size
+        });
+    }
+    catch (err) {
+        logger.warn('AI knowledge indexing skipped', {
+            reason: err.message,
+            tip: 'Start Ollama with: ollama serve'
+        });
+    }
+}
+// ── Custom Tools ──────────────────────────────────────────────────────────────
+// Weather tool (demo — returns mock data)
+const weatherTool = (0, ai_1.createTool)({
+    name: 'get_weather',
+    description: 'Get current weather information for any city',
+    parameters: {
+        type: 'object',
+        properties: {
+            city: {
+                type: 'string',
+                description: 'The city name to get weather for'
+            },
+            unit: {
+                type: 'string',
+                description: 'Temperature unit: celsius or fahrenheit',
+                enum: ['celsius', 'fahrenheit']
+            }
+        },
+        required: ['city']
+    },
+    handler: async ({ city, unit }) => {
+        // Mock weather data — connect a real API in production
+        const temp = unit === 'fahrenheit' ? '72°F' : '22°C';
+        return {
+            city,
+            temperature: temp,
+            condition: 'Partly cloudy',
+            humidity: '65%',
+            wind: '12 km/h',
+            unit: unit || 'celsius',
+            note: 'Demo data — connect OpenWeatherMap API for real data'
+        };
+    }
+});
+// User data tool — queries the in-memory users store
+const userDataTool = (0, ai_1.createTool)({
+    name: 'get_user_count',
+    description: 'Get the current number of registered users in the system',
+    parameters: {
+        type: 'object',
+        properties: {}
+    },
+    handler: async () => ({
+        totalUsers: users.length,
+        totalPosts: posts.length,
+        note: 'Data from REstJS in-memory store'
+    })
+});
+// All tools available to agents
+const allTools = [
+    ai_1.calculatorTool,
+    ai_1.currentDateTimeTool,
+    ai_1.jsonTool,
+    weatherTool,
+    userDataTool
+];
+// =============================================================================
+//  PHASE 5 — AI Platform
+//  Providers, Chat, Streaming, Embeddings, RAG, Agents, Tools, MCP
+// =============================================================================
+// ── Provider Info ─────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase5/provider
+ * Show which AI provider is currently active
+ */
+app.get('/api/phase5/provider', (req, res) => {
+    res.json({
+        provider: aiProvider.name,
+        defaultModel: aiProvider.defaultModel,
+        config: {
+            AI_PROVIDER: config.AI_PROVIDER,
+            OLLAMA_MODEL: config.OLLAMA_MODEL,
+            OLLAMA_URL: config.OLLAMA_URL
+        },
+        tip: 'Change AI_PROVIDER in .env to switch: openai | anthropic | gemini | ollama'
+    });
+});
+// ── Chat Completion ───────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/chat
+ * Simple chat completion — single turn
+ *
+ * Body:
+ * {
+ *   "message": "What is REstJS?",
+ *   "system":  "You are a helpful assistant."
+ * }
+ */
+app.post('/api/phase5/chat', async (req, res) => {
+    const body = req.body;
+    if (!body.message) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'message field is required' }
+        });
+        return;
+    }
+    try {
+        const response = await aiProvider.complete({
+            messages: [{ role: 'user', content: body.message }],
+            system: body.system || 'You are a helpful assistant.',
+            model: body.model,
+            temperature: body.temperature ?? 0.7
+        });
+        res.json({
+            response: response.content,
+            model: response.model,
+            finishReason: response.finishReason,
+            usage: response.usage
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: {
+                code: 'AI_ERROR',
+                message: err.message,
+                tip: 'Make sure your AI provider is running and configured'
+            }
+        });
+    }
+});
+/**
+ * POST /api/phase5/chat/conversation
+ * Multi-turn conversation — send full message history
+ *
+ * Body:
+ * {
+ *   "messages": [
+ *     { "role": "user",      "content": "My name is Tariq" },
+ *     { "role": "assistant", "content": "Hello Tariq!" },
+ *     { "role": "user",      "content": "What is my name?" }
+ *   ],
+ *   "system": "You are a helpful assistant. Remember what the user tells you."
+ * }
+ */
+app.post('/api/phase5/chat/conversation', async (req, res) => {
+    const body = req.body;
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'messages array is required' }
+        });
+        return;
+    }
+    try {
+        const response = await aiProvider.complete({
+            messages: body.messages,
+            system: body.system || 'You are a helpful assistant.',
+            model: body.model,
+            temperature: body.temperature ?? 0.7
+        });
+        res.json({
+            response: response.content,
+            model: response.model,
+            finishReason: response.finishReason,
+            usage: response.usage,
+            turns: body.messages.length + 1
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+// ── Streaming Chat ────────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/chat/stream
+ * Streaming chat completion using Server-Sent Events.
+ * Tokens arrive one by one in real time.
+ *
+ * Body:
+ * {
+ *   "message": "Explain what REstJS is in detail",
+ *   "system":  "You are a helpful assistant."
+ * }
+ *
+ * In Postman: Send request and watch the response stream in real time.
+ * Each SSE event has type "delta" with the next token.
+ * Final event has type "done" with full metadata.
+ */
+app.post('/api/phase5/chat/stream', async (req, res) => {
+    const body = req.body;
+    if (!body.message) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'message field is required' }
+        });
+        return;
+    }
+    const sse = (0, core_1.createSSE)(res);
+    try {
+        const stream = aiProvider.stream({
+            messages: [{ role: 'user', content: body.message }],
+            system: body.system || 'You are a helpful assistant.',
+            model: body.model,
+            temperature: body.temperature ?? 0.7
+        });
+        let fullContent = '';
+        for await (const chunk of stream) {
+            if (!sse.isOpen)
+                break;
+            if (chunk.delta) {
+                fullContent += chunk.delta;
+                // Send each token as an SSE event
+                sse.send({ delta: chunk.delta }, 'delta');
+            }
+            if (chunk.done && chunk.response) {
+                // Send final metadata
+                sse.send({
+                    content: chunk.response.content,
+                    model: chunk.response.model,
+                    finishReason: chunk.response.finishReason,
+                    usage: chunk.response.usage
+                }, 'done');
+            }
+        }
+    }
+    catch (err) {
+        if (sse.isOpen) {
+            sse.send({
+                error: err.message,
+                tip: 'Make sure your AI provider is running'
+            }, 'error');
+        }
+    }
+    finally {
+        sse.close();
+    }
+});
+// ── Embeddings ────────────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/embed
+ * Generate vector embeddings for text.
+ * Use these vectors for semantic search, similarity, clustering.
+ *
+ * Body:
+ * {
+ *   "input": "What is JavaScript?"
+ * }
+ *
+ * Or multiple strings:
+ * {
+ *   "input": ["JavaScript is a language", "Python is also a language"]
+ * }
+ */
+app.post('/api/phase5/embed', async (req, res) => {
+    const body = req.body;
+    if (!body.input) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'input field is required' }
+        });
+        return;
+    }
+    try {
+        const response = await aiProvider.embed({
+            input: body.input,
+            model: body.model
+        });
+        const inputs = Array.isArray(body.input) ? body.input : [body.input];
+        res.json({
+            embeddings: response.embeddings.map((emb, i) => ({
+                input: inputs[i],
+                dimensions: emb.length,
+                // Show only first 5 values — full vector would be too large
+                preview: emb.slice(0, 5),
+                note: `Full vector has ${emb.length} dimensions`
+            })),
+            model: response.model,
+            usage: response.usage
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+/**
+ * POST /api/phase5/embed/similarity
+ * Compute cosine similarity between two texts.
+ * Returns a score from 0 (unrelated) to 1 (identical meaning).
+ *
+ * Body:
+ * {
+ *   "textA": "JavaScript is a programming language",
+ *   "textB": "Python is used for coding"
+ * }
+ */
+app.post('/api/phase5/embed/similarity', async (req, res) => {
+    const body = req.body;
+    if (!body.textA || !body.textB) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'textA and textB are required' }
+        });
+        return;
+    }
+    try {
+        // Embed both texts at once
+        const response = await aiProvider.embed({
+            input: [body.textA, body.textB]
+        });
+        const [vecA, vecB] = response.embeddings;
+        // Cosine similarity
+        const dotProduct = vecA.reduce((sum, val, i) => sum + val * vecB[i], 0);
+        const magA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
+        const magB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+        const similarity = dotProduct / (magA * magB);
+        // Normalize to 0-1
+        const normalizedScore = (similarity + 1) / 2;
+        res.json({
+            textA: body.textA,
+            textB: body.textB,
+            similarity: parseFloat(normalizedScore.toFixed(4)),
+            interpretation: normalizedScore > 0.9 ? 'Very similar' :
+                normalizedScore > 0.7 ? 'Similar' :
+                    normalizedScore > 0.5 ? 'Somewhat similar' :
+                        normalizedScore > 0.3 ? 'Different' :
+                            'Very different',
+            model: response.model
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+// ── RAG Pipeline ──────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase5/rag/stats
+ * Show RAG pipeline statistics — how many documents are indexed
+ */
+app.get('/api/phase5/rag/stats', (req, res) => {
+    const stats = ragPipeline.getStats();
+    res.json({
+        vectorStoreSize: stats.documentCount,
+        embeddingTokensUsed: stats.embeddingTokensUsed,
+        provider: aiProvider.name,
+        tip: vectorStore.size === 0
+            ? 'Knowledge base is empty. POST /api/phase5/rag/index to add documents.'
+            : `${vectorStore.size} document chunks ready for search`
+    });
+});
+/**
+ * POST /api/phase5/rag/index
+ * Add documents to the RAG knowledge base.
+ * Documents are chunked, embedded, and stored in the vector store.
+ *
+ * Body:
+ * {
+ *   "texts": [
+ *     "REstJS supports PostgreSQL MySQL and SQLite databases.",
+ *     "The ORM provides migrations query builder and repository pattern."
+ *   ],
+ *   "source": "database-docs"
+ * }
+ */
+app.post('/api/phase5/rag/index', async (req, res) => {
+    const body = req.body;
+    if (!body.texts || !Array.isArray(body.texts) || body.texts.length === 0) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'texts array is required' }
+        });
+        return;
+    }
+    try {
+        const docs = (0, ai_1.loadFromText)(body.texts, body.source || 'api-upload');
+        const result = await ragPipeline.index(docs);
+        res.json({
+            message: 'Documents indexed successfully',
+            documentsIndexed: result.documentsIndexed,
+            chunksCreated: result.chunksCreated,
+            totalVectors: vectorStore.size,
+            source: body.source || 'api-upload'
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+/**
+ * POST /api/phase5/rag/query
+ * Ask a question — answer is generated from indexed documents.
+ * The pipeline embeds the question, finds similar chunks, generates an answer.
+ *
+ * Body:
+ * {
+ *   "question": "What databases does REstJS support?",
+ *   "topK":     3
+ * }
+ */
+app.post('/api/phase5/rag/query', async (req, res) => {
+    const body = req.body;
+    if (!body.question) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'question field is required' }
+        });
+        return;
+    }
+    if (vectorStore.size === 0) {
+        res.status(400).json({
+            error: {
+                code: 'NO_DOCUMENTS',
+                message: 'No documents indexed yet.',
+                tip: 'POST /api/phase5/rag/index to add documents first'
+            }
+        });
+        return;
+    }
+    try {
+        const result = await ragPipeline.query(body.question);
+        res.json({
+            question: body.question,
+            answer: result.response,
+            sources: result.sources.map(s => ({
+                content: s.content.slice(0, 200) + (s.content.length > 200 ? '...' : ''),
+                score: parseFloat(s.score.toFixed(4)),
+                source: s.metadata?.source || 'unknown'
+            })),
+            usage: result.usage
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+/**
+ * POST /api/phase5/rag/stream
+ * Ask a question with streaming answer.
+ * Sources are sent immediately, then the answer streams token by token.
+ *
+ * Body:
+ * {
+ *   "question": "What is Phase 4 of REstJS?"
+ * }
+ */
+app.post('/api/phase5/rag/stream', async (req, res) => {
+    const body = req.body;
+    if (!body.question) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'question field is required' }
+        });
+        return;
+    }
+    if (vectorStore.size === 0) {
+        res.status(400).json({
+            error: {
+                code: 'NO_DOCUMENTS',
+                message: 'No documents indexed. POST /api/phase5/rag/index first.'
+            }
+        });
+        return;
+    }
+    const sse = (0, core_1.createSSE)(res);
+    try {
+        for await (const event of ragPipeline.queryStream(body.question)) {
+            if (!sse.isOpen)
+                break;
+            sse.send(event.data, event.type);
+            if (event.type === 'done')
+                break;
+        }
+    }
+    catch (err) {
+        if (sse.isOpen) {
+            sse.send({ error: err.message }, 'error');
+        }
+    }
+    finally {
+        sse.close();
+    }
+});
+/**
+ * DELETE /api/phase5/rag/clear
+ * Clear all indexed documents from the vector store
+ */
+app.delete('/api/phase5/rag/clear', async (req, res) => {
+    const before = vectorStore.size;
+    await vectorStore.clear();
+    res.json({
+        message: 'Vector store cleared',
+        before,
+        after: vectorStore.size
+    });
+});
+// ── Vector Store ──────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase5/vector/stats
+ * Show vector store statistics
+ */
+app.get('/api/phase5/vector/stats', (req, res) => {
+    res.json({
+        totalDocuments: vectorStore.size,
+        metric: 'cosine',
+        tip: 'Use POST /api/phase5/rag/index to add documents'
+    });
+});
+/**
+ * POST /api/phase5/vector/search
+ * Semantic search — find similar documents for a query text.
+ * Embeds the query then returns most similar stored chunks.
+ *
+ * Body:
+ * {
+ *   "query": "database ORM migrations",
+ *   "topK":  3
+ * }
+ */
+app.post('/api/phase5/vector/search', async (req, res) => {
+    const body = req.body;
+    if (!body.query) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'query field is required' }
+        });
+        return;
+    }
+    if (vectorStore.size === 0) {
+        res.status(400).json({
+            error: {
+                code: 'NO_DOCUMENTS',
+                message: 'No documents in vector store.',
+                tip: 'POST /api/phase5/rag/index to add documents first'
+            }
+        });
+        return;
+    }
+    try {
+        // Embed the query
+        const embResult = await aiProvider.embed({ input: body.query });
+        const queryVec = embResult.embeddings[0];
+        // Search vector store
+        const results = await vectorStore.search(queryVec, {
+            topK: body.topK || 5,
+            minScore: 0.2
+        });
+        res.json({
+            query: body.query,
+            results: results.map(r => ({
+                score: parseFloat(r.score.toFixed(4)),
+                content: r.document.content.slice(0, 300),
+                source: r.document.metadata?.source || 'unknown',
+                id: r.document.id
+            })),
+            total: results.length
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+// ── Document Chunker ──────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/chunk
+ * Show how the document chunker splits text.
+ * Useful for understanding how RAG indexing works.
+ *
+ * Body:
+ * {
+ *   "text":      "Long document text here...",
+ *   "chunkSize": 200,
+ *   "overlap":   50,
+ *   "strategy":  "recursive"
+ * }
+ */
+app.post('/api/phase5/chunk', (req, res) => {
+    const body = req.body;
+    if (!body.text) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'text field is required' }
+        });
+        return;
+    }
+    const chunker = new ai_1.DocumentChunker({
+        chunkSize: body.chunkSize || 500,
+        overlap: body.overlap || 100,
+        strategy: body.strategy || 'recursive'
+    });
+    const doc = (0, ai_1.loadFromString)(body.text, 'chunk-demo', { source: 'postman-test' });
+    const chunks = chunker.chunkDocument(doc);
+    res.json({
+        originalLength: body.text.length,
+        chunkSize: body.chunkSize || 500,
+        overlap: body.overlap || 100,
+        strategy: body.strategy || 'recursive',
+        totalChunks: chunks.length,
+        chunks: chunks.map(c => ({
+            index: c.chunkIndex,
+            length: c.content.length,
+            startChar: c.startChar,
+            endChar: c.endChar,
+            content: c.content.slice(0, 150) + (c.content.length > 150 ? '...' : '')
+        }))
+    });
+});
+// ── Agent ─────────────────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/agent/run
+ * Run an AI agent with tools.
+ * The agent reasons through the task step by step, calling tools when needed.
+ *
+ * Available tools:
+ *   calculator       — math expressions
+ *   get_current_datetime — current date and time
+ *   json_processor   — parse/format/validate JSON
+ *   get_weather      — weather for a city (demo)
+ *   get_user_count   — users and posts count
+ *
+ * Body:
+ * {
+ *   "task":          "What is 25 * 4 and what is today's date?",
+ *   "maxIterations": 5
+ * }
+ */
+app.post('/api/phase5/agent/run', async (req, res) => {
+    const body = req.body;
+    if (!body.task) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'task field is required' }
+        });
+        return;
+    }
+    try {
+        const agent = new ai_1.Agent({
+            provider: aiProvider,
+            tools: allTools,
+            maxIterations: body.maxIterations || 8,
+            temperature: 0.1,
+            systemPrompt: 'You are a helpful assistant with access to tools. ' +
+                'Use tools when needed to answer accurately. ' +
+                'Be concise and direct in your responses.'
+        });
+        const result = await agent.run(body.task);
+        res.json({
+            task: body.task,
+            response: result.response,
+            success: result.success,
+            iterations: result.iterations,
+            steps: result.steps.map(step => ({
+                iteration: step.iteration,
+                thought: step.thought?.slice(0, 200),
+                toolCalls: step.toolCalls?.map(tc => ({
+                    tool: tc.name,
+                    arguments: tc.arguments
+                })),
+                toolResults: step.toolResults?.map(tr => ({
+                    tool: tr.toolName,
+                    result: tr.result
+                })),
+                finalAnswer: step.finalAnswer ? step.finalAnswer.slice(0, 200) : undefined
+            })),
+            usage: result.usage
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'AI_ERROR', message: err.message }
+        });
+    }
+});
+/**
+ * POST /api/phase5/agent/stream
+ * Run agent with streaming — each step streams as it happens.
+ * Watch the reasoning process in real time via SSE.
+ *
+ * Body:
+ * {
+ *   "task": "What is the weather in Lahore and what time is it?"
+ * }
+ */
+app.post('/api/phase5/agent/stream', async (req, res) => {
+    const body = req.body;
+    if (!body.task) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'task field is required' }
+        });
+        return;
+    }
+    const sse = (0, core_1.createSSE)(res);
+    try {
+        const agent = new ai_1.Agent({
+            provider: aiProvider,
+            tools: allTools,
+            maxIterations: body.maxIterations || 8,
+            temperature: 0.1,
+            systemPrompt: 'You are a helpful assistant. Use tools when needed.'
+        });
+        for await (const step of agent.runStream(body.task)) {
+            if (!sse.isOpen)
+                break;
+            sse.send({
+                iteration: step.iteration,
+                thought: step.thought,
+                toolCalls: step.toolCalls?.map(tc => ({
+                    tool: tc.name,
+                    arguments: tc.arguments
+                })),
+                toolResults: step.toolResults?.map(tr => ({
+                    tool: tr.toolName,
+                    result: tr.result
+                })),
+                finalAnswer: step.finalAnswer,
+                done: step.done
+            }, step.done ? 'done' : 'step');
+            if (step.done)
+                break;
+        }
+    }
+    catch (err) {
+        if (sse.isOpen) {
+            sse.send({ error: err.message }, 'error');
+        }
+    }
+    finally {
+        sse.close();
+    }
+});
+/**
+ * GET /api/phase5/agent/tools
+ * List all available tools the agent can use
+ */
+app.get('/api/phase5/agent/tools', (req, res) => {
+    res.json({
+        tools: allTools.map(tool => ({
+            name: tool.definition.name,
+            description: tool.definition.description,
+            parameters: Object.keys(tool.definition.parameters.properties || {}),
+            required: tool.definition.parameters.required || []
+        }))
+    });
+});
+// ── MCP Client ────────────────────────────────────────────────────────────────
+/**
+ * POST /api/phase5/mcp/connect
+ * Test connection to an MCP server
+ *
+ * Body:
+ * {
+ *   "serverUrl": "http://localhost:8080"
+ * }
+ */
+app.post('/api/phase5/mcp/connect', async (req, res) => {
+    const body = req.body;
+    if (!body.serverUrl) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'serverUrl is required' }
+        });
+        return;
+    }
+    try {
+        const client = new ai_1.MCPClient({
+            serverUrl: body.serverUrl,
+            clientName: 'REstJS-Postman-Test',
+            clientVersion: '0.1.0',
+            timeoutMs: 5000
+        });
+        await client.connect();
+        const tools = await client.listTools();
+        const resources = await client.listResources();
+        await client.disconnect();
+        res.json({
+            connected: true,
+            serverUrl: body.serverUrl,
+            tools: tools.map(t => ({ name: t.name, description: t.description })),
+            resources: resources.map(r => ({ uri: r.uri, name: r.name })),
+            toolCount: tools.length,
+            resourceCount: resources.length
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            connected: false,
+            serverUrl: body.serverUrl,
+            error: err.message,
+            tip: 'Make sure your MCP server is running at the specified URL'
+        });
+    }
+});
+/**
+ * GET /api/phase5/mcp/info
+ * Information about the MCP protocol
+ */
+app.get('/api/phase5/mcp/info', (req, res) => {
+    res.json({
+        feature: 'Model Context Protocol (MCP)',
+        version: '2024-11-05',
+        protocol: 'JSON-RPC 2.0 over HTTP',
+        usage: {
+            connect: 'POST /api/phase5/mcp/connect with { serverUrl }',
+            callTool: 'POST /api/phase5/mcp/tool with { serverUrl, tool, args }',
+            integrate: 'MCP tools auto-convert to Agent tools via asAgentTools()'
+        },
+        tip: 'Start a local MCP server to test. Many open source MCP servers are available.'
+    });
+});
+/**
+ * POST /api/phase5/mcp/tool
+ * Call a specific tool on an MCP server
+ *
+ * Body:
+ * {
+ *   "serverUrl": "http://localhost:8080",
+ *   "tool":      "read_file",
+ *   "args":      { "path": "/etc/hostname" }
+ * }
+ */
+app.post('/api/phase5/mcp/tool', async (req, res) => {
+    const body = req.body;
+    if (!body.serverUrl || !body.tool) {
+        res.status(400).json({
+            error: { code: 'BAD_REQUEST', message: 'serverUrl and tool are required' }
+        });
+        return;
+    }
+    try {
+        const client = new ai_1.MCPClient({ serverUrl: body.serverUrl, timeoutMs: 10000 });
+        await client.connect();
+        const result = await client.callTool(body.tool, body.args || {});
+        await client.disconnect();
+        res.json({
+            tool: body.tool,
+            args: body.args,
+            result: result.content,
+            error: result.isError
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            error: { code: 'MCP_ERROR', message: err.message }
+        });
+    }
+});
+// ── AI Health ─────────────────────────────────────────────────────────────────
+/**
+ * GET /api/phase5/health
+ * Check if the AI provider is responding
+ */
+app.get('/api/phase5/health', async (req, res) => {
+    const start = Date.now();
+    try {
+        // Send a minimal request to test connectivity
+        const response = await aiProvider.complete({
+            messages: [{ role: 'user', content: 'Reply with the single word: OK' }],
+            maxTokens: 10,
+            temperature: 0
+        });
+        const latencyMs = Date.now() - start;
+        res.json({
+            status: 'healthy',
+            provider: aiProvider.name,
+            model: response.model,
+            latencyMs,
+            testResponse: response.content.trim(),
+            vectorStore: vectorStore.size,
+            timestamp: new Date().toISOString()
+        });
+    }
+    catch (err) {
+        res.status(503).json({
+            status: 'unhealthy',
+            provider: aiProvider.name,
+            error: err.message,
+            tip: aiProvider.name === 'ollama'
+                ? 'Start Ollama: ollama serve  |  Pull model: ollama pull llama3.2'
+                : 'Check your API key in .env file',
+            timestamp: new Date().toISOString()
+        });
+    }
+});
 // =============================================================================
 //  ROOT — API index listing all endpoints
 // =============================================================================
@@ -1767,6 +2763,39 @@ app.get('/api', (req, res) => {
                     'GET    /api/phase4/websocket/stats',
                     'WS     ws://localhost:3000/ws'
                 ]
+            },
+            phase5: {
+                description: 'AI Platform — Providers, Chat, Streaming, Embeddings, RAG, Agents, Tools, MCP',
+                workflow: [
+                    '1. GET  /api/phase5/health         → check AI provider is running',
+                    '2. POST /api/phase5/chat           → simple chat',
+                    '3. POST /api/phase5/rag/index      → add documents',
+                    '4. POST /api/phase5/rag/query      → ask questions',
+                    '5. POST /api/phase5/agent/run      → run agent with tools'
+                ],
+                endpoints: [
+                    'GET  /api/phase5/provider',
+                    'GET  /api/phase5/health',
+                    'POST /api/phase5/chat',
+                    'POST /api/phase5/chat/conversation',
+                    'POST /api/phase5/chat/stream',
+                    'POST /api/phase5/embed',
+                    'POST /api/phase5/embed/similarity',
+                    'GET  /api/phase5/rag/stats',
+                    'POST /api/phase5/rag/index',
+                    'POST /api/phase5/rag/query',
+                    'POST /api/phase5/rag/stream',
+                    'DELETE /api/phase5/rag/clear',
+                    'GET  /api/phase5/vector/stats',
+                    'POST /api/phase5/vector/search',
+                    'POST /api/phase5/chunk',
+                    'GET  /api/phase5/agent/tools',
+                    'POST /api/phase5/agent/run',
+                    'POST /api/phase5/agent/stream',
+                    'GET  /api/phase5/mcp/info',
+                    'POST /api/phase5/mcp/connect',
+                    'POST /api/phase5/mcp/tool'
+                ]
             }
         }
     });
@@ -1778,6 +2807,8 @@ async function bootstrap() {
     // ── 1. Start the HTTP server first ───────────────────────────────────────────
     // This creates and binds the internal Node.js server to port 3000
     await app.listen(config.PORT, config.HOST);
+    // Index built-in REstJS knowledge into RAG
+    await indexBuiltinKnowledge();
     // ── 2. Get the SAME server that is already listening on port 3000 ────────────
     // WSServer must attach to this server — not a new one
     const httpServer = app.getServer();

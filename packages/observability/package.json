@@ -1,0 +1,18 @@
+{
+  "name": "@restjs/observability",
+  "version": "0.1.0",
+  "description": "REstJS observability - structured logging, metrics, tracing, health",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@restjs/common": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

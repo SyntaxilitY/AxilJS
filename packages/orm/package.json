@@ -1,0 +1,30 @@
+{
+  "name": "@restjs/orm",
+  "version": "0.1.0",
+  "description": "REstJS ORM - entities, migrations, query builder, multi-db",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@restjs/common": "0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  },
+  "peerDependencies": {
+    "pg": ">=8.0.0",
+    "mysql2": ">=3.0.0",
+    "better-sqlite3": ">=9.0.0",
+    "mongodb": ">=6.0.0"
+  },
+  "peerDependenciesOptional": {
+    "pg": true,
+    "mysql2": true,
+    "better-sqlite3": true,
+    "mongodb": true
+  }
+}
