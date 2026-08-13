@@ -1,4 +1,3 @@
-
 ```bash []
 ██████╗ ███████╗███████╗████████╗     ██╗███████╗
 ██╔══██╗██╔════╝██╔════╝╚══██╔══╝     ██║██╔════╝
@@ -18,284 +17,73 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green.svg)](https://nodejs.org/)
 [![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)]()
-[![Status](https://img.shields.io/badge/status-R%26D%20Phase-yellow.svg)]()
 [![Author](https://img.shields.io/badge/author-Tariq%20Mehmood-blueviolet.svg)]()
-
-[Getting Started](#-getting-started) •
-[Why REstJS](#-why-restjs) •
-[Packages](#-packages) •
-[Examples](#-examples) •
-[CLI](#-cli) •
-[Roadmap](#-roadmap) •
-[Contributing](#-contributing)
-
-</div>
 
 ---
 
 ## What is REstJS?
 
-REstJS is a **unified, batteries-included backend JavaScript ecosystem**.
+REstJS is a **complete backend JavaScript ecosystem** — not another framework.
 
-It is not another framework bolted on top of Node.js.
-It is not a thin wrapper around Express.
-It is a **complete backend platform** — runtime, framework, ORM, auth,
-validation, testing, events, WebSockets, queues, observability, AI, and
-cloud deployment — all built by one team, all working together, all
-available with one install.
+Every other tool gives you one layer. REstJS gives you everything:
+
+```
+One install → HTTP server + ORM + Auth + Validation + Testing
+           + Events + WebSockets + Queue + Observability
+           + AI Platform + Cloud Deploy + Memory Management
+```
+
+No assembling 40 packages from 40 different teams.
+No configuration fatigue.
+No dependency hell.
+
+---
+
+## Prerequisites
+
+| Requirement | Version |
+|---|---|
+| Node.js | 18.0.0 or higher |
+| npm | 8.0.0 or higher |
+| TypeScript | 5.0.0 or higher |
+
+---
+
+## Quick Start
 
 ```bash
-# Every other option
-npm install express
-npm install mongoose
-npm install jsonwebtoken
-npm install bcrypt
-npm install joi
-npm install winston
-npm install helmet
-npm install socket.io
-npm install bull
-npm install jest
-# ... 40 more packages, 40 different teams, 40 sets of conventions
-
-# REstJS
-rest create my-api
-```
-
----
-
-## The Name
-
-```
-R  →  Runtime        — not just a framework, a full runtime
-E  →  Enterprise     — built for real production systems
-st →  REST + rest    — the REST architecture + you finally get to rest
-JS →  JavaScript     — the language we love
-```
-
-Hidden inside **REstJS** is the word **rest** —
-the promise that you will never have to assemble a backend ecosystem from
-scratch again.
-
----
-
-## Why REstJS?
-
-| Problem | Every Other Tool | REstJS |
-|---|---|---|
-| HTTP Server | ✓ | ✓ |
-| Routing | Some | ✓ |
-| ORM | ✗ Install separately | ✓ Built in |
-| Auth + JWT | ✗ Install separately | ✓ Built in |
-| Validation | ✗ Install separately | ✓ Built in |
-| Testing | ✗ Install separately | ✓ Built in |
-| WebSockets | ✗ Install separately | ✓ Built in |
-| Queue + Scheduler | ✗ Install separately | ✓ Built in |
-| Circuit Breaker | ✗ Install separately | ✓ Built in |
-| Observability | ✗ Install separately | ✓ Built in |
-| AI Platform | ✗ Does not exist | ✓ Built in |
-| Cloud Deployment | ✗ Does not exist | ✓ Built in |
-| Multi-Tenancy | ✗ Does not exist | ✓ Built in |
-
-> **Node.js** gives you a runtime.
-> **Express** gives you routing.
-> **NestJS** gives you structure but you still assemble packages.
-> **Deno** gives you security.
-> **Bun** gives you speed.
-> **REstJS** gives you all of it — complete, integrated, done.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18 or higher
-- npm 8 or higher
-- TypeScript 5.0 or higher
-
-### Install the CLI
-
-```bash
+# Install CLI globally
 npm install -g @restjs/cli
-```
 
-### Create Your First Project
-
-```bash
-rest create my-api
-cd my-api
-npm install
-rest run
-```
-
-Your API is now running at `http://localhost:3000`.
-
-That is it. No configuration. No boilerplate. No decisions.
-
----
-
-## Quick Example
-
-```typescript
-import { Application, cors }        from '@restjs/core'
-import { loadEnv, defineConfig }    from '@restjs/config'
-import { helmet, rateLimit }        from '@restjs/security'
-import { JWT }                      from '@restjs/auth'
-import { authenticate, requireRole } from '@restjs/auth'
-import { v, validate }              from '@restjs/validation'
-
-// Load environment variables
-loadEnv()
-
-// Typed, validated configuration
-const config = defineConfig({
-  PORT:       { type: 'number', default: 3000 },
-  JWT_SECRET: { type: 'string', required: true }
-})
-
-// Create application
-const app = new Application({ server: { port: config.PORT } })
-const jwt = new JWT(config.JWT_SECRET)
-
-// Global middleware
-app.use(helmet())
-app.use(cors())
-app.use(rateLimit({ max: 100, windowMs: 60000 }))
-
-// Validation schema
-const createUserSchema = v.object({
-  name:  v.string().min(2).max(100),
-  email: v.string().email(),
-  role:  v.enum(['admin', 'user']).optional()
-})
-
-// Routes
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() })
-})
-
-app.post(
-  '/users',
-  authenticate(jwt),
-  requireRole('admin'),
-  validate({ body: createUserSchema }),
-  async (req, res) => {
-    res.status(201).json({ data: req.body })
-  }
-)
-
-// Start
-app.listen()
-```
-
----
-
-## Packages
-
-REstJS is organized as a monorepo. Every package is published under
-the `@restjs` scope.
-
-### Core Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/common`](./packages/common) | Shared types, interfaces, error classes | 1 |
-| [`@restjs/core`](./packages/core) | HTTP server, router, middleware, SSE, static files | 1–2 |
-| [`@restjs/cli`](./packages/cli) | CLI — `rest create`, `run`, `build`, `test`, `deploy` | 1–6 |
-
-### Infrastructure Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/config`](./packages/config) | `.env` loading, typed configuration validation | 2 |
-| [`@restjs/security`](./packages/security) | Helmet, rate limiting, CSRF, sanitization | 2 |
-| [`@restjs/pm`](./packages/pm) | Package manager, lock file, checksum verification | 2 |
-
-### Data & Auth Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/orm`](./packages/orm) | ORM — PostgreSQL, MySQL, SQLite, migrations, query builder | 3 |
-| [`@restjs/auth`](./packages/auth) | JWT, password hashing, RBAC, auth middleware | 3 |
-| [`@restjs/validation`](./packages/validation) | Schema-based request validation | 3 |
-| [`@restjs/testing`](./packages/testing) | Test runner, assertions, HTTP test client | 3 |
-
-### Distributed Systems Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/events`](./packages/events) | In-process event bus, pub/sub, wildcard, decorators | 4 |
-| [`@restjs/websocket`](./packages/websocket) | RFC 6455 WebSocket server, rooms, broadcasting | 4 |
-| [`@restjs/queue`](./packages/queue) | Message queue, priority, retry, cron scheduler | 4 |
-| [`@restjs/circuit`](./packages/circuit) | Circuit breaker, retry, timeout | 4 |
-| [`@restjs/observability`](./packages/observability) | Logging, Prometheus metrics, tracing, health checks | 4 |
-
-### AI Platform Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/ai`](./packages/ai) | OpenAI, Anthropic, Gemini, Ollama, RAG, Agents, MCP | 5 |
-
-### Enterprise Packages
-
-| Package | Description | Phase |
-|---|---|---|
-| [`@restjs/cloud`](./packages/cloud) | Multi-tenancy, audit logs, feature flags, deployment | 6 |
-
----
-
-## CLI
-
-The `rest` CLI is your single entry point for everything.
-
-```bash
 # Create a new project
 rest create my-api
 
+# Move into project
+cd my-api
+
+# Install dependencies
+npm install
+
 # Start development server with hot reload
 rest run
-
-# Build for production
-rest build
-
-# Run tests
-rest test
-
-# Run specific test file
-rest test users
-
-# Install packages
-rest install
-
-# Install a specific package
-rest install @restjs/ai
-
-# Install as dev dependency
-rest install -D nodemon
-
-# Generate Docker + Kubernetes deployment files
-rest deploy
-
-# Diagnose project issues
-rest doctor
-
-# Show version
-rest --version
 ```
+
+Your API is running at `http://localhost:3000`.
+
+That is it. No configuration files to create. No boilerplate to write.
 
 ---
 
 ## Project Structure
 
-Every REstJS project follows this standard structure:
+Every REstJS project follows this standard layout:
 
 ```
 my-api/
 ├── src/
-│   ├── main.ts                        # Entry point
+│   ├── main.ts                    # Entry point
 │   ├── config/
-│   │   └── app.config.ts              # Application configuration
+│   │   └── app.config.ts          # App configuration
 │   ├── modules/
 │   │   └── users/
 │   │       ├── controllers/
@@ -304,34 +92,184 @@ my-api/
 │   │       │   └── users.service.ts
 │   │       ├── entities/
 │   │       │   └── user.entity.ts
-│   │       ├── repositories/
-│   │       │   └── users.repository.ts
 │   │       └── users.test.ts
-│   ├── migrations/
-│   │   └── 001_create_users.ts
-│   └── jobs/
+│   └── migrations/
+│       └── 001_create_users.ts
 ├── package.json
 ├── tsconfig.json
-├── rest.lock                          # Deterministic lock file
+├── rest.lock
 ├── .env
-├── .env.example
-├── .gitignore
-└── deploy/
-    ├── Dockerfile
-    ├── deployment.yaml
-    └── deploy.sh
+└── .env.example
 ```
 
 ---
 
-## Feature Examples
+## CLI Commands
 
-### Database — ORM
+```bash
+rest create <name>        # Create a new project
+rest run                  # Start dev server with hot reload
+rest build                # Compile TypeScript for production
+rest test [pattern]       # Run test files
+rest deploy               # Generate Docker + Kubernetes files
+rest install [package]    # Install a package
+rest install -D [package] # Install as devDependency
+rest doctor               # Diagnose project issues
+rest --version            # Show version
+```
+
+---
+
+## Environment Variables
+
+Create `.env` in your project root:
+
+```env
+# Server
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=development
+
+# Authentication
+JWT_SECRET=your-secret-minimum-32-characters-long
+
+# Database
+DATABASE_URL=postgres://user:password@localhost:5432/mydb
+
+# AI Providers (add only what you use)
+AI_PROVIDER=ollama
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_API_KEY=
+OLLAMA_MODEL=llama3.2
+OLLAMA_URL=http://localhost:11434
+```
+
+---
+
+## Packages
+
+All packages live under the `@restjs` scope and work together out of the box.
+
+| Package | Purpose |
+|---|---|
+| `@restjs/core` | HTTP server, router, middleware, SSE, static files |
+| `@restjs/config` | Environment loading, typed config validation |
+| `@restjs/security` | Helmet, rate limiting, CSRF, sanitization |
+| `@restjs/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
+| `@restjs/auth` | JWT, password hashing, RBAC |
+| `@restjs/validation` | Schema-based request validation |
+| `@restjs/testing` | Test runner, assertions, HTTP test client |
+| `@restjs/events` | In-process event bus, pub/sub |
+| `@restjs/websocket` | RFC 6455 WebSocket server, rooms |
+| `@restjs/queue` | Message queue, scheduler, retry |
+| `@restjs/circuit` | Circuit breaker, retry, timeout |
+| `@restjs/observability` | Logging, metrics, tracing, health checks |
+| `@restjs/ai` | AI providers, RAG, agents, vector store, MCP |
+| `@restjs/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
+| `@restjs/memory` | Memory leak detection, GC, optimization |
+| `@restjs/pm` | Package manager with lock file and checksums |
+| `@restjs/cli` | CLI — all `rest` commands |
+
+---
+
+## Core HTTP Server
+
+```typescript
+import { Application, cors } from '@restjs/core'
+import { loadEnv, defineConfig } from '@restjs/config'
+import { helmet, rateLimit } from '@restjs/security'
+
+loadEnv()
+
+const config = defineConfig({
+  PORT: { type: 'number', default: 3000 },
+  NODE_ENV: { type: 'string', default: 'development' }
+})
+
+const app = new Application({
+  server: { port: config.PORT }
+})
+
+app.use(helmet())
+app.use(cors({ origin: '*' }))
+app.use(rateLimit({ max: 100, windowMs: 60000 }))
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime() })
+})
+
+app.get('/users/:id', (req, res) => {
+  res.json({ id: req.params.id })
+})
+
+app.post('/users', (req, res) => {
+  res.status(201).json({ data: req.body })
+})
+
+app.listen()
+```
+
+---
+
+## Configuration
+
+```typescript
+import { loadEnv, defineConfig } from '@restjs/config'
+
+loadEnv() // loads .env file
+
+const config = defineConfig({
+  PORT:         { type: 'number',  default: 3000 },
+  DATABASE_URL: { type: 'string',  required: true },
+  DEBUG:        { type: 'boolean', default: false },
+  RATE_LIMIT:   { type: 'number',  default: 100,
+                  min: 1, max: 1000 },
+  NODE_ENV:     { type: 'string',
+                  enum: ['development', 'production', 'test'],
+                  default: 'development' }
+})
+
+// config.PORT is typed as number
+// config.DATABASE_URL is typed as string
+// Throws ValidationError on startup if required fields missing
+```
+
+---
+
+## Security
+
+```typescript
+import { helmet, rateLimit, csrf, sanitize } from '@restjs/security'
+
+// Security headers on every response
+app.use(helmet())
+
+// Rate limiting — 100 requests per minute per IP
+app.use(rateLimit({ max: 100, windowMs: 60000 }))
+
+// Stricter limit on auth routes
+app.post('/auth/login',
+  rateLimit({ max: 5, windowMs: 900000 }),
+  loginHandler
+)
+
+// CSRF protection
+app.use(csrf())
+
+// HTML sanitization — prevents XSS
+app.use(sanitize())
+```
+
+---
+
+## Database ORM
 
 ```typescript
 import { createConnection, Entity, Column,
          PrimaryKey, BaseRepository } from '@restjs/orm'
 
+// Define entity
 @Entity('users')
 class User {
   @PrimaryKey()
@@ -342,20 +280,25 @@ class User {
 
   @Column({ type: 'string', unique: true })
   email: string
+
+  @Column({ type: 'boolean', default: false })
+  active: boolean
 }
 
 // Connect
 const db = await createConnection({
   driver:   'postgres',
   url:      process.env.DATABASE_URL
+  // or sqlite: driver: 'sqlite', filename: './dev.db'
+  // or mysql:  driver: 'mysql', host, port, database, username, password
 })
 
 // Repository
 class UserRepository extends BaseRepository<User> {
   constructor() { super(User, db) }
 
-  async findByEmail(email: string) {
-    return this.findOne({ email })
+  async findActive() {
+    return this.find({ active: true })
   }
 }
 
@@ -366,83 +309,231 @@ const user    = await users.create({ name: 'Tariq', email: 'tariq@restjs.dev' })
 const found   = await users.findById(1)
 const updated = await users.update(1, { name: 'Tariq Mehmood' })
 const page    = await users.paginate({ page: 1, perPage: 20 })
+await users.delete(1)
 ```
 
 ---
 
-### Authentication — JWT + RBAC
+## Migrations
 
 ```typescript
-import { JWT, hashPassword, verifyPassword } from '@restjs/auth'
+// src/migrations/001_create_users.ts
+import { Migration } from '@restjs/orm'
+
+const migration: Migration = {
+  async up(db) {
+    await db.query(`
+      CREATE TABLE users (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       VARCHAR(255) NOT NULL,
+        email      VARCHAR(255) UNIQUE NOT NULL,
+        password   VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+  },
+
+  async down(db) {
+    await db.query(`DROP TABLE IF EXISTS users`)
+  }
+}
+
+module.exports = migration
+```
+
+```typescript
+// Run migrations
+import { MigrationRunner } from '@restjs/orm'
+
+const runner = new MigrationRunner(db.getDriver())
+await runner.up()       // run pending migrations
+await runner.down()     // rollback last batch
+await runner.status()   // show migration status
+```
+
+---
+
+## Authentication
+
+```typescript
+import { JWT, hashPassword, verifyPassword }    from '@restjs/auth'
 import { authenticate, requireRole,
-         requirePermission }                 from '@restjs/auth'
+         requirePermission }                     from '@restjs/auth'
 
 const jwt = new JWT(process.env.JWT_SECRET)
 
-// Sign a token
+// Register
+const hashed = await hashPassword('userPassword123')
+
+// Login
+const valid = await verifyPassword('userPassword123', hashed)
 const token = jwt.sign(
-  { sub: user.id, role: 'admin' },
+  { sub: String(user.id), role: 'admin' },
   { expiresIn: '7d' }
 )
 
-// Verify a token
+// Verify
 const payload = jwt.verify(token)
 
-// Hash a password
-const hashed = await hashPassword('myPassword123')
-const valid  = await verifyPassword('myPassword123', hashed)
-
 // Protect routes
-app.get('/admin',
+app.get('/profile',
   authenticate(jwt),
-  requireRole('admin'),
-  handler
+  (req, res) => res.json(req.locals.user)
 )
 
-app.delete('/posts/:id',
+// Role-based access
+app.delete('/users/:id',
   authenticate(jwt),
-  requirePermission('posts:delete'),
-  handler
+  requireRole('admin'),
+  deleteUser
+)
+
+// Permission-based (supports wildcards: admin:*)
+app.post('/posts',
+  authenticate(jwt),
+  requirePermission('posts:create'),
+  createPost
+)
+
+// Optional authentication
+app.get('/feed',
+  authenticate(jwt, { required: false }),
+  getFeed
 )
 ```
 
 ---
 
-### Validation
+## Validation
 
 ```typescript
 import { v, validate } from '@restjs/validation'
 
-const schema = v.object({
+// Define schema
+const createUserSchema = v.object({
   name:     v.string().min(2).max(100),
   email:    v.string().email(),
-  age:      v.number().min(0).max(150).optional(),
+  age:      v.number().min(0).max(150).integer().optional(),
   role:     v.enum(['admin', 'user', 'guest']),
   tags:     v.array(v.string()).max(10).optional(),
   settings: v.object({
-    newsletter: v.boolean().default(false),
-    theme:      v.enum(['light', 'dark']).default('light')
+    theme: v.enum(['light', 'dark']).default('light')
   }).optional()
 })
 
-app.post('/users', validate({ body: schema }), (req, res) => {
-  // req.body is fully typed and validated here
-  res.status(201).json({ data: req.body })
-})
+// Use as middleware — auto returns 422 on failure
+app.post('/users',
+  validate({ body: createUserSchema }),
+  (req, res) => {
+    // req.body is fully typed and validated here
+    res.status(201).json({ data: req.body })
+  }
+)
+
+// Or use manually
+const result = createUserSchema.parse(data)
+if (!result.success) {
+  console.log(result.errors) // [{ path, message, code }]
+}
 ```
 
 ---
 
-### Real-Time — WebSockets
+## Testing
 
 ```typescript
-import { createServer }  from 'http'
-import { Application }   from '@restjs/core'
-import { WSServer }      from '@restjs/websocket'
+import {
+  describe, it, expect,
+  beforeAll, createTestClient
+} from '@restjs/testing'
 
-const app    = new Application()
-const server = createServer()
-const wss    = new WSServer(server, { path: '/ws' })
+describe('Users API', () => {
+  let client: any
+
+  beforeAll(() => {
+    client = createTestClient(app) // no real server needed
+  })
+
+  it('returns 401 without token', async () => {
+    const res = await client.get('/users')
+    expect(res.status).toBe(401)
+  })
+
+  it('creates a user', async () => {
+    const res = await client
+      .post('/users')
+      .auth(token)
+      .send({ name: 'Tariq', email: 'tariq@restjs.dev', role: 'admin' })
+
+    expect(res.status).toBe(201)
+    expect(res.body.data.name).toBe('Tariq')
+  })
+
+  it('validates request body', async () => {
+    const res = await client
+      .post('/users')
+      .auth(token)
+      .send({ name: 'T' }) // too short
+
+    expect(res.status).toBe(422)
+    expect(res.body.error.code).toBe('VALIDATION_ERROR')
+  })
+})
+```
+
+```bash
+rest test              # run all tests
+rest test users        # run tests matching 'users'
+```
+
+---
+
+## Event Bus
+
+```typescript
+import { EventBus, OnEvent, registerEventHandlers } from '@restjs/events'
+
+const bus = new EventBus()
+
+// Decorator style
+class NotificationService {
+  @OnEvent('user.created')
+  async onUserCreated(event: any) {
+    await sendWelcomeEmail(event.payload.email)
+  }
+
+  @OnEvent('order.*') // wildcard — matches any order event
+  async onAnyOrder(event: any) {
+    console.log('Order event:', event.type)
+  }
+}
+
+registerEventHandlers(new NotificationService(), bus)
+
+// Publish
+await bus.emit('user.created', { id: 1, email: 'tariq@restjs.dev' })
+
+// Subscribe manually
+const sub = bus.on('payment.received', async (event) => {
+  await processPayment(event.payload)
+})
+
+// Wait for next event
+const event = await bus.waitFor('payment.confirmed', 5000)
+
+// Unsubscribe
+sub.unsubscribe()
+```
+
+---
+
+## WebSockets
+
+```typescript
+import { WSServer } from '@restjs/websocket'
+
+// Attach to your existing HTTP server
+const wss = new WSServer(app.getServer(), { path: '/ws' })
 
 wss.on('connection', (client) => {
   console.log('Connected:', client.id)
@@ -450,16 +541,21 @@ wss.on('connection', (client) => {
   // Send to this client
   client.sendJSON({ type: 'welcome', id: client.id })
 
-  // Join a room
+  // Join rooms
   wss.join(client, 'general')
 
   client.on('message', (data) => {
-    // Broadcast to the room
+    const msg = JSON.parse(data.toString())
+
+    // Send to specific room
     wss.toRoomJSON('general', {
-      type: 'message',
-      from: client.id,
-      text: data.toString()
+      type:    'message',
+      from:    client.id,
+      content: msg.content
     })
+
+    // Broadcast to everyone
+    wss.broadcastJSON({ type: 'announcement', content: msg.content })
   })
 
   client.on('close', () => {
@@ -470,83 +566,73 @@ wss.on('connection', (client) => {
 
 ---
 
-### Events — Pub/Sub
+## Message Queue
 
 ```typescript
-import { EventBus, OnEvent,
-         registerEventHandlers } from '@restjs/events'
+import { Queue } from '@restjs/queue'
 
-const bus = new EventBus()
-
-// Subscribe with decorator
-class NotificationService {
-  @OnEvent('user.created')
-  async onUserCreated(event) {
-    await sendWelcomeEmail(event.payload.email)
-  }
-
-  @OnEvent('order.*')
-  async onAnyOrder(event) {
-    console.log('Order event:', event.type)
-  }
-}
-
-registerEventHandlers(new NotificationService(), bus)
-
-// Publish
-await bus.emit('user.created', {
-  id:    1,
-  email: 'tariq@restjs.dev'
-})
-
-// Wait for an event (with timeout)
-const event = await bus.waitFor('payment.confirmed', 5000)
-```
-
----
-
-### Queue + Scheduler
-
-```typescript
-import { Queue }     from '@restjs/queue'
-import { Scheduler } from '@restjs/queue'
-
-// Queue
 const emailQueue = new Queue('emails', { concurrency: 5 })
 
+// Register handlers
 emailQueue.process('send-welcome', async (job) => {
-  await sendEmail(job.data.to, job.data.subject)
+  await sendEmail(job.data.to, 'Welcome!')
+  return { sent: true }
 })
 
-await emailQueue.add('send-welcome', {
-  to:      'tariq@restjs.dev',
-  subject: 'Welcome to REstJS!'
-}, { delay: 1000, maxAttempts: 3 })
+emailQueue.on('completed', (job) => console.log('Done:', job.id))
+emailQueue.on('failed',    (job, err) => console.error('Failed:', err))
 
 emailQueue.start()
 
-// Scheduler
-const scheduler = new Scheduler()
+// Add jobs
+await emailQueue.add('send-welcome', { to: 'tariq@restjs.dev' })
 
-scheduler.schedule('daily-report',   '0 9 * * *',    generateDailyReport)
-scheduler.schedule('cleanup',        '0 2 * * *',    cleanupOldSessions)
-scheduler.schedule('health-ping',    '*/5 * * * *',  checkExternalServices)
+// Delayed job
+await emailQueue.add('send-reminder', { to: 'user@example.com' }, {
+  delay:       3600000,  // 1 hour
+  maxAttempts: 3
+})
 
-scheduler.start()
+// Priority job — processed first
+await emailQueue.add('send-alert', { to: 'admin@example.com' }, {
+  priority: 10
+})
 ```
 
 ---
 
-### Circuit Breaker + Retry
+## Task Scheduler
 
 ```typescript
-import { CircuitBreaker } from '@restjs/circuit'
-import { retry, withTimeout } from '@restjs/circuit'
+import { Scheduler } from '@restjs/queue'
 
-// Circuit breaker
+const scheduler = new Scheduler()
+
+scheduler.schedule('daily-report',  '0 9 * * *',    sendDailyReport)
+scheduler.schedule('cleanup',       '0 2 * * *',    cleanupOldData)
+scheduler.schedule('health-check',  '*/5 * * * *',  pingExternalAPIs)
+scheduler.schedule('weekly-backup', '0 0 * * 0',    backupDatabase)
+
+scheduler.start()
+
+// Run immediately for testing
+await scheduler.runNow('daily-report')
+
+// Disable a task
+scheduler.setEnabled('cleanup', false)
+```
+
+---
+
+## Circuit Breaker
+
+```typescript
+import { CircuitBreaker, retry, withTimeout } from '@restjs/circuit'
+
+// Circuit breaker — stops calling failing services
 const paymentCB = new CircuitBreaker('payment-api', {
-  failureThreshold: 5,
-  resetTimeoutMs:   30000,
+  failureThreshold: 5,       // open after 5 failures
+  resetTimeoutMs:   30000,   // try again after 30s
   fallback: () => ({ error: 'Payment service unavailable' })
 })
 
@@ -554,40 +640,39 @@ const result = await paymentCB.execute(async () => {
   return await paymentService.charge(amount)
 })
 
-// Retry with exponential backoff
+// Retry with backoff
 const data = await retry(
-  () => fetchExternalData(),
+  () => fetchFromExternalAPI(),
   { attempts: 3, delay: 1000, backoff: 'exponential' }
 )
 
-// Timeout
+// Timeout wrapper
 const response = await withTimeout(
-  fetch('https://api.example.com/data'),
-  5000,
-  'External API timed out'
+  fetch('https://slow-api.example.com'),
+  5000  // fail after 5 seconds
 )
 ```
 
 ---
 
-### Observability
+## Observability
 
 ```typescript
 import { Logger, MetricsRegistry,
          HealthChecker, Tracer,
          observabilityMiddleware,
-         metricsHandler }        from '@restjs/observability'
+         metricsHandler } from '@restjs/observability'
 
-// Logger
+// Structured logging
 const logger = new Logger({ name: 'UserService' })
-logger.info('User created', { userId: 123, email: 'tariq@restjs.dev' })
-logger.error('DB error', { error: err.message, query })
+logger.info('User created', { userId: 123 })
+logger.error('DB error', { error: err.message })
 
-// Child logger (inherits context)
+// Child logger inherits context
 const reqLogger = logger.child({ requestId: 'abc-123' })
 
-// Metrics
-const metrics = new MetricsRegistry()
+// Prometheus metrics
+const metrics  = new MetricsRegistry()
 const requests = metrics.counter('http_requests_total', 'Total requests')
 const duration = metrics.histogram('request_duration_ms', 'Duration')
 requests.inc({ method: 'GET', status: '200' })
@@ -599,23 +684,28 @@ health.addCheck('database', async () => {
   return { message: 'Connected' }
 })
 
+// Distributed tracing
+const tracer = new Tracer({ serviceName: 'my-api' })
+await tracer.trace('user.create', async (span) => {
+  span.setAttribute('user.email', email)
+  return await createUser(data)
+})
+
+// Register endpoints
+app.use(observabilityMiddleware({ metrics, tracer }))
 app.get('/health',       health.handler())
 app.get('/health/live',  health.livenessHandler())
 app.get('/health/ready', health.readinessHandler())
 app.get('/metrics',      metricsHandler(metrics))
-
-// Auto-observability on all routes
-app.use(observabilityMiddleware({ metrics, tracer }))
 ```
 
 ---
 
-### AI Platform
+## AI Platform
 
 ```typescript
 import {
   OpenAIProvider,
-  AnthropicProvider,
   OllamaProvider,
   RAGPipeline,
   VectorStore,
@@ -623,37 +713,44 @@ import {
   createTool,
   calculatorTool,
   currentDateTimeTool,
-  aiChat,
-  aiChatStream,
-  aiAgent,
   loadFromText
 } from '@restjs/ai'
 
-// Choose your provider
+// Choose provider — swap without changing app code
 const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
+// or: new OllamaProvider({ model: 'llama3.2' })  — local, no API key
 // or: new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY })
-// or: new OllamaProvider({ model: 'llama3.2' })  // local, no API key
+// or: new GeminiProvider({ apiKey: process.env.GOOGLE_API_KEY })
 
-// Simple chat route
-app.post('/chat', aiChat({ provider }))
+// Simple chat
+const response = await provider.complete({
+  messages: [{ role: 'user', content: 'What is REstJS?' }],
+  system:   'You are a helpful assistant.'
+})
 
-// Streaming chat route
-app.post('/chat/stream', aiChatStream({ provider }))
+// Streaming chat
+const stream = provider.stream({ messages, system })
+for await (const chunk of stream) {
+  process.stdout.write(chunk.delta)
+}
 
-// RAG — index documents and answer questions from them
+// Embeddings
+const result = await provider.embed({ input: 'Hello world' })
+// result.embeddings[0] → number[]
+
+// RAG — index documents then answer questions from them
 const rag = new RAGPipeline({ provider, vectorStore: new VectorStore() })
 
 await rag.index(loadFromText([
-  'REstJS is a complete JavaScript backend ecosystem...',
-  'It supports OpenAI, Anthropic, Gemini, and Ollama...'
+  'REstJS supports PostgreSQL MySQL and SQLite.',
+  'The ORM provides migrations and a query builder.'
 ]))
 
-app.post('/ask', async (req, res) => {
-  const result = await rag.query((req.body as any).question)
-  res.json({ answer: result.response, sources: result.sources })
-})
+const answer = await rag.query('What databases does REstJS support?')
+console.log(answer.response)   // answer generated from your documents
+console.log(answer.sources)    // which documents were used
 
-// Agent with tools
+// AI Agent with tools
 const weatherTool = createTool({
   name:        'get_weather',
   description: 'Get weather for a city',
@@ -667,185 +764,222 @@ const weatherTool = createTool({
   handler: async ({ city }) => ({ city, temperature: '22°C' })
 })
 
-app.post('/agent', aiAgent({
+const agent = new Agent({
   provider,
-  tools: [calculatorTool, currentDateTimeTool, weatherTool],
+  tools:         [calculatorTool, currentDateTimeTool, weatherTool],
   maxIterations: 10
-}))
+})
+
+const agentResult = await agent.run(
+  'What is 25 * 4 and what is the weather in Lahore?'
+)
+console.log(agentResult.response)
+console.log(agentResult.steps)   // full reasoning trace
 ```
 
 ---
 
-### Testing
+## Multi-Tenancy
 
 ```typescript
-import {
-  describe, it, expect,
-  beforeAll, afterAll,
-  createTestClient
-} from '@restjs/testing'
+import { multiTenancy, getTenant, auditLog } from '@restjs/cloud'
 
-describe('Users API', () => {
-  let client
+// Identify tenant from request header
+app.use(multiTenancy({
+  strategy:   'header',
+  headerName: 'x-tenant-id',
+  resolveTenant: async (id) => {
+    return await db.findTenant(id)
+  }
+}))
 
-  beforeAll(() => {
-    client = createTestClient(app)
-  })
+// Access tenant in any handler
+app.get('/dashboard', (req, res) => {
+  const tenant = getTenant(req)
+  res.json({ tenant: tenant.id, plan: tenant.plan })
+})
 
-  it('should return 401 without auth', async () => {
-    const res = await client.get('/users')
-    expect(res.status).toBe(401)
-  })
-
-  it('should return users with valid token', async () => {
-    const res = await client
-      .get('/users')
-      .auth(validToken)
-
-    expect(res.status).toBe(200)
-    expect(res.body.data).toHaveLength(1)
-    expect(res.body.data[0].name).toBe('Tariq')
-  })
-
-  it('should validate request body', async () => {
-    const res = await client
-      .post('/users')
-      .auth(validToken)
-      .send({ name: 'T' }) // too short
-
-    expect(res.status).toBe(422)
-    expect(res.body.error.code).toBe('VALIDATION_ERROR')
-  })
+// Audit logging — who did what when
+auditLog({
+  action:   'user.login',
+  actor:    { id: user.id, type: 'user' },
+  tenantId: tenant.id,
+  metadata: { ip: req.ip },
+  success:  true
 })
 ```
 
 ---
 
-### Deploy
+## Feature Flags
+
+```typescript
+import { FeatureFlagManager } from '@restjs/cloud'
+
+const flags = new FeatureFlagManager()
+
+flags.define({
+  name:              'new-checkout',
+  enabled:           true,
+  description:       'New checkout flow',
+  rolloutPercentage: 50,            // 50% of users
+  allowedTenants:    ['tenant-beta']
+})
+
+flags.define({
+  name:      'maintenance-mode',
+  enabled:   false,
+  expiresAt: '2025-12-31T00:00:00Z'
+})
+
+// Check a flag
+const isEnabled = flags.isEnabled('new-checkout', {
+  tenantId:   'tenant-beta',
+  userId:     123,
+  percentage: 45
+})
+
+if (isEnabled) {
+  // show new checkout
+}
+```
+
+---
+
+## Memory Management
+
+```typescript
+import { MemoryMonitor, optimizer,
+         memoryMiddleware, trackCache } from '@restjs/memory'
+
+// Start automatic memory monitoring
+const monitor = new MemoryMonitor({
+  intervalMs:               30000,  // scan every 30s
+  warnThresholdPercent:     70,     // warn at 70% heap
+  criticalThresholdPercent: 85,     // critical at 85%
+  autoFix:                  true,   // auto-fix detected leaks
+
+  onLeak:     (leaks) => logger.warn('Leaks detected', { count: leaks.length }),
+  onCritical: (snap)  => logger.error('Critical memory', { mb: snap.heapUsedMb })
+})
+
+monitor.start()
+
+// Per-request memory tracking
+app.use(memoryMiddleware({
+  leakThresholdMb: 50,    // flag requests using > 50MB
+  exposeHeader:    true   // add X-Memory-Usage response header
+}))
+
+// Track a cache for auto-pruning
+const sessionCache = trackCache('sessions', new Map(), 10000)
+
+// Manual optimization
+const result = await optimizer.optimize()
+console.log(`Freed: ${result.freedMb}MB`)
+
+// Manual scan
+const report = await monitor.scan()
+console.log(report.status)   // clean | leaks-fixed | leaks-detected | critical
+console.log(report.leaks)    // what was found
+```
+
+---
+
+## Server-Sent Events
+
+```typescript
+import { createSSE, sseHeartbeat } from '@restjs/core'
+
+app.get('/events', (req, res) => {
+  const sse      = createSSE(res)
+  const stopBeat = sseHeartbeat(sse, 15000)  // keep alive
+
+  sse.send({ message: 'Connected' }, 'connect')
+
+  const interval = setInterval(() => {
+    if (!sse.isOpen) {
+      clearInterval(interval)
+      stopBeat()
+      return
+    }
+
+    sse.send({ data: 'live update', timestamp: Date.now() }, 'update')
+  }, 1000)
+})
+```
+
+---
+
+## Deployment
 
 ```bash
-# Generate Dockerfile + Kubernetes manifests
+# Generate Docker + Kubernetes files
 rest deploy
 
-# Output: deploy/
-#   ├── Dockerfile
-#   ├── deployment.yaml
-#   └── deploy.sh
-
-# Build and push
-cd deploy
-./deploy.sh
-
-# Apply to Kubernetes
-kubectl apply -f deployment.yaml
+# Generated files:
+# deploy/Dockerfile
+# deploy/deployment.yaml   (Deployment + Service + HPA)
+# deploy/deploy.sh
 ```
-
----
-
-## Environment Variables
-
-Create a `.env` file in your project root:
-
-```env
-# Server
-PORT=3000
-HOST=0.0.0.0
-NODE_ENV=development
-
-# Database
-DATABASE_URL=postgres://user:password@localhost:5432/mydb
-
-# Authentication
-JWT_SECRET=your-secret-minimum-32-characters-long
-
-# AI Providers (add what you use)
-OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=sk-ant-...
-GOOGLE_API_KEY=AIza...
-
-# Logging
-LOG_LEVEL=debug
-```
-
----
-
-## Performance
-
-| Metric | Target | Status |
-|---|---|---|
-| Cold Start | < 100 ms | ✅ |
-| Memory (hello world) | < 30 MB | ✅ |
-| HTTP Throughput | > 10,000 req/s | ✅ |
-| Route Matching (10k routes) | < 1 ms | ✅ |
-| JWT Sign + Verify | < 1 ms | ✅ |
-| WebSocket Latency | < 5 ms | ✅ |
-| Vector Search (100k docs) | < 500 ms | ✅ |
-
----
-
-## Roadmap
-
-```
-Phase 1  ✅  Core HTTP server, router, middleware, CLI
-Phase 2  ✅  Config, security, package manager, SSE, static files
-Phase 3  ✅  ORM, authentication, validation, testing
-Phase 4  ✅  Events, WebSockets, queue, circuit breaker, observability
-Phase 5  ✅  AI platform — providers, RAG, agents, MCP
-Phase 6  ✅  Enterprise — multi-tenancy, audit, feature flags, cloud deploy
-
-Upcoming
-────────
-Phase 7     gRPC and native RPC support
-Phase 8     Official REstJS package registry
-Phase 9     REstJS Cloud (managed hosting)
-Phase 10    REstJS Studio (visual admin panel)
-```
-
----
-
-## Comparison
-
-| | Node.js | Express | NestJS | Deno | Bun | **REstJS** |
-|---|---|---|---|---|---|---|
-| Runtime | ✓ | ✗ | ✗ | ✓ | ✓ | ✓ |
-| Framework | ✗ | ✓ | ✓ | Partial | Partial | ✓ |
-| ORM | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Auth | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Validation | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Testing | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ |
-| WebSockets | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Queue | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Observability | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| AI Platform | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Cloud Deploy | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Zero Config | ✗ | ✗ | ✗ | Partial | Partial | ✓ |
-
----
-
-## Contributing
-
-REstJS is in active R&D. Contributions are welcome.
-
-### Setup
 
 ```bash
-# Clone the repository
+# Build for production
+npm run build
+
+# Run production server
+node dist/main.js
+
+# With manual GC support (recommended)
+node --expose-gc dist/main.js
+
+# Docker
+docker build -t my-api .
+docker run -p 3000:3000 --env-file .env my-api
+
+# Kubernetes
+kubectl apply -f deploy/deployment.yaml
+```
+
+---
+
+## Hot Reload Development
+
+`rest run` compiles TypeScript incrementally and restarts automatically on every file save. No nodemon needed. No ts-node overhead at runtime.
+
+```bash
+rest run
+```
+
+```
+ REstJS development server
+ ──────────────────────────
+
+01:30:00 [rest run] Initial compilation...
+01:30:02 [rest run] Compiled project in 1842ms
+         ✓ Server running at http://0.0.0.0:3000
+01:30:02 [rest run] Watching src/ for changes...
+
+# Save a file →
+01:31:15 [rest run] Changed: server.ts
+01:31:15 [rest run] Compiled 1 file(s) in 287ms
+01:31:15 [rest run] Restarting (restart #1)
+         ✓ Server running at http://0.0.0.0:3000
+```
+
+---
+
+## Build From Source
+
+```bash
+# Clone
 git clone https://github.com/tariqmehmood/restjs.git
 cd restjs
 
-# Install dependencies
+# Install all workspace dependencies
 npm install
 
-# Build all packages in order
-npm run build:all
-
-# Run tests
-npm test
-```
-
-### Build Order
-
-```bash
+# Build all packages in correct order
 cd packages/common        && npm run build
 cd ../config              && npm run build
 cd ../security            && npm run build
@@ -862,79 +996,49 @@ cd ../circuit             && npm run build
 cd ../observability       && npm run build
 cd ../ai                  && npm run build
 cd ../cloud               && npm run build
+cd ../memory              && npm run build
 cd ../cli                 && npm run build
 ```
 
-### Package Structure
+---
 
-```
-packages/
-├── common/         Shared types and errors
-├── core/           HTTP server and router
-├── cli/            Command line interface
-├── config/         Configuration management
-├── security/       Security middleware
-├── pm/             Package manager
-├── orm/            Database ORM
-├── auth/           Authentication
-├── validation/     Request validation
-├── testing/        Test framework
-├── events/         Event bus
-├── websocket/      WebSocket server
-├── queue/          Message queue
-├── circuit/        Circuit breaker
-├── observability/  Logging and metrics
-├── ai/             AI platform
-└── cloud/          Enterprise and cloud
-```
+## What Gets Fixed Automatically
 
-### Contribution Guidelines
+REstJS monitors and fixes memory issues on its own:
 
-- All code must be TypeScript with strict mode
-- Every file must have a top-level comment explaining its purpose
-- Every public function must have a JSDoc comment
-- Every new feature must have tests
-- No circular dependencies between packages
-- All PRs must build without errors
+| Issue | Detected | Auto Fixed |
+|---|---|---|
+| Event listener accumulation | ✅ | ✅ |
+| Cache overflow | ✅ | ✅ prunes oldest |
+| Unused module cache | ✅ | ✅ clears |
+| Timer accumulation | ✅ | ✅ warns |
+| Global scope pollution | ✅ | ⚠ warns |
+| High heap usage | ✅ | ✅ triggers GC |
+
+---
+
+## vs Other Tools
+
+| | Node.js | Express | NestJS | Bun | **REstJS** |
+|---|---|---|---|---|---|
+| HTTP Framework | ✗ | ✓ | ✓ | Partial | ✓ |
+| ORM | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Auth | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Validation | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Testing | ✗ | ✗ | ✗ | ✓ | ✓ |
+| WebSockets | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Queue | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Observability | ✗ | ✗ | ✗ | ✗ | ✓ |
+| AI Platform | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Memory Mgmt | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Cloud Deploy | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Zero Config | ✗ | ✗ | ✗ | Partial | ✓ |
 
 ---
 
 ## License
 
-```
-MIT License
-
-Copyright (c) 2026 Tariq Mehmood
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
-
----
-
-## Author
-
-**Tariq Mehmood**
-Creator and Lead Architect of REstJS
-
-> *"JavaScript developers have never had rest.*
-> *Constant churn. New tools every month. Dependency hell.*
-> *REstJS is the last tool you need."*
+MIT License — Copyright © 2025 Tariq Mehmood
 
 ---
 
@@ -942,21 +1046,8 @@ Creator and Lead Architect of REstJS
 
 **REstJS** — *The JavaScript Backend That Finally Rests.*
 
-Built with passion by [Tariq Mehmood](https://github.com/tariqmehmood)
+Built by [Tariq Mehmood](https://github.com/TariqMehmood1004)
 
 ⭐ Star this repo if REstJS saves you from assembling another ecosystem from scratch.
 
 </div>
-
----
-
-## Recommended GitHub Repository Settings
-
-| Setting | Value |
-|---|---|
-| **Name** | `restjs` |
-| **Description** | The JavaScript Backend That Finally Rests. |
-| **Website** | `https://restjs.dev` (when ready) |
-| **Topics** | `javascript`, `typescript`, `nodejs`, `backend`, `framework`, `orm`, `auth`, `ai`, `websocket`, `rest-api` |
-| **License** | MIT |
-| **Default branch** | `main` |
