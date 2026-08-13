@@ -25,6 +25,7 @@
     "build:ai":           "cd packages/ai           && npm run build",
     "build:cloud":        "cd packages/cloud        && npm run build",
     "build:cli":          "cd packages/cli          && npm run build",
+    "build:memory":       "cd packages/memory       && npm run build",
 
     "build:all":
       "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli",

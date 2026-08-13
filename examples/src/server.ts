@@ -51,6 +51,16 @@ import {
 
 import type { Tenant, FeatureFlag } from '@restjs/cloud';
 
+import {
+  MemoryMonitor,
+  optimizer,
+  memoryMiddleware,
+  trackCache,
+  takeSnapshot,
+  formatBytes,
+  gcTip
+} from '@restjs/memory';
+
 
 
 // ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
@@ -4288,6 +4298,133 @@ app.get('/api/phase6/dashboard/html', (req, res) => {
   res.html(html);
 });
 
+
+
+// ─── Memory Management ────────────────────────────────────────────────────────
+
+// Start memory monitor — scans every 30 seconds automatically
+const memoryMonitor = new MemoryMonitor({
+  intervalMs:               30000,   // Scan every 30 seconds
+  warnThresholdPercent:     70,      // Warn at 70% heap usage
+  criticalThresholdPercent: 85,      // Critical at 85%
+  maxHeapMb:                512,     // Max heap before emergency optimize
+  autoFix:                  true,    // Auto-fix detected leaks
+  verbose:                  false,   // Only log issues, not clean scans
+
+  onLeak: (leaks) => {
+    logger.warn('Memory leaks detected', {
+      count: leaks.length,
+      types: leaks.map(l => l.type)
+    });
+  },
+
+  onCritical: (snapshot) => {
+    logger.error('CRITICAL memory usage', {
+      heapUsedMb:  snapshot.heapUsedMb,
+      usagePercent: snapshot.usagePercent
+    });
+  }
+});
+
+memoryMonitor.start();
+
+// Add memory middleware to track per-request memory usage
+app.use(memoryMiddleware({
+  leakThresholdMb: 50,      // Flag requests using > 50MB
+  exposeHeader:    true,    // Add X-Memory-Usage header
+  logFlagged:      true
+}));
+
+// Track the audit logs array as a cache
+// REstJS will auto-prune if it grows beyond 1000 entries
+trackCache('audit-logs-cache', new Map(), 1000);
+
+
+// =============================================================================
+//  MEMORY MANAGEMENT — Live monitoring and leak prevention
+// =============================================================================
+
+/**
+ * GET /api/memory/snapshot
+ * Current memory usage snapshot
+ */
+app.get('/api/memory/snapshot', (req, res) => {
+  const snapshot = takeSnapshot();
+
+  res.json({
+    heapUsedMb:   snapshot.heapUsedMb,
+    heapTotalMb:  snapshot.heapTotalMb,
+    rssMb:        snapshot.rssMb,
+    usagePercent: snapshot.usagePercent,
+    external:     formatBytes(snapshot.external),
+    arrayBuffers: formatBytes(snapshot.arrayBuffers),
+    timestamp:    snapshot.timestamp,
+    status:
+      snapshot.usagePercent > 85 ? 'critical' :
+      snapshot.usagePercent > 70 ? 'warning'  : 'healthy',
+    gcInfo: gcTip()
+  });
+});
+
+/**
+ * POST /api/memory/optimize
+ * Run full memory optimization — GC, cache prune, module cleanup
+ */
+app.post('/api/memory/optimize', async (req, res) => {
+  const result = await optimizer.optimize();
+
+  res.json({
+    message:     'Memory optimization complete',
+    before:      `${result.before.heapUsedMb}MB`,
+    after:       `${result.after.heapUsedMb}MB`,
+    freed:       `${result.freedMb}MB`,
+    gcTriggered: result.gcTriggered,
+    actions:     result.actions
+  });
+});
+
+/**
+ * POST /api/memory/scan
+ * Run a manual leak detection scan
+ */
+app.post('/api/memory/scan', async (req, res) => {
+  const report = await memoryMonitor.scan();
+
+  res.json({
+    status:     report.status,
+    heapBefore: `${report.before.heapUsedMb}MB`,
+    heapAfter:  `${report.after.heapUsedMb}MB`,
+    freed:      `${report.freedMb}MB`,
+    scanMs:     report.scanMs,
+    leaks:      report.leaks,
+    leakCount:  report.leakCount,
+    fixedCount: report.fixedCount
+  });
+});
+
+/**
+ * GET /api/memory/reports
+ * View historical scan reports
+ */
+app.get('/api/memory/reports', (req, res) => {
+  const reports = memoryMonitor.getReports();
+  const limit   = Math.min(Number(req.query.limit) || 10, 50);
+
+  res.json({
+    total:   reports.length,
+    reports: reports.slice(-limit).reverse().map(r => ({
+      status:     r.status,
+      heapUsedMb: r.after.heapUsedMb,
+      usagePercent: r.after.usagePercent,
+      freedMb:    r.freedMb,
+      leakCount:  r.leakCount,
+      fixedCount: r.fixedCount,
+      scanMs:     r.scanMs,
+      timestamp:  r.after.timestamp
+    }))
+  });
+});
+
 // =============================================================================
 //  ROOT — API index listing all endpoints
 // =============================================================================
@@ -4646,6 +4783,7 @@ async function bootstrap() {
 
   const shutdown = async () => {
     logger.info('Shutting down gracefully...');
+    memoryMonitor.stop();
     await emailQueue.stop();
     scheduler.stop();
     await app.close();
