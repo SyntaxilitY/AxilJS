@@ -4,7 +4,7 @@
  * Tables: users, products, orders, order_items
  */
 
-import { Migration } from '@axil/orm'
+import { Migration } from '@axiljs/orm'
 
 const migration: Migration = {
   async up(db) {

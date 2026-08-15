@@ -1,5 +1,5 @@
 /**
- * @axil/testing - Public API
+ * @axiljs/testing - Public API
  */
 export { describe, it, test, xit, fit, beforeAll, afterAll, beforeEach, afterEach, runTests } from './runner/test-runner';
 export { expect, AssertionError } from './assertions/expect';

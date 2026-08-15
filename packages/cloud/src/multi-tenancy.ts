@@ -8,7 +8,7 @@
  *   // req.locals.tenant = { id: 'acme-corp', name: 'Acme Corp' }
  */
 
-import { MiddlewareFn, UnauthorizedError } from '@axil/common';
+import { MiddlewareFn, UnauthorizedError } from '@axiljs/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

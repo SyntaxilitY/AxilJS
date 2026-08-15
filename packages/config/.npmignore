@@ -1,0 +1,19 @@
+# Source files — only dist/ is published
+src/
+*.ts
+!*.d.ts
+
+# Config files
+tsconfig.json
+tsconfig.tsbuildinfo
+
+# Development
+node_modules/
+*.log
+.env
+.env.*
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+tests/

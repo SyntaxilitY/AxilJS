@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/queue - Public API
+ * @axiljs/queue - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createJob = exports.Scheduler = exports.Queue = void 0;

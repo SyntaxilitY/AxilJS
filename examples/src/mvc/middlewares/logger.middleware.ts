@@ -2,7 +2,7 @@
  * Request logger middleware specific to the MVC example
  */
 
-import { MiddlewareFn } from '@axil/common'
+import { MiddlewareFn } from '@axiljs/common'
 
 export function mvcLogger(): MiddlewareFn {
   return (req, res, next) => {

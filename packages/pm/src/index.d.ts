@@ -1,5 +1,5 @@
 /**
- * @axil/pm - Public API
+ * @axiljs/pm - Public API
  */
 export { Installer } from './installer';
 export type { InstallOptions } from './installer';

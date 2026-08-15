@@ -4,7 +4,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
-const auth_1 = require("@axil/auth");
+const auth_1 = require("@axiljs/auth");
 const db_1 = require("../db");
 class AuthService {
     jwt;

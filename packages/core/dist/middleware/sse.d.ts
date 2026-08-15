@@ -14,7 +14,7 @@
  *     sse.close()
  *   })
  */
-import { axilResponse } from '@axil/common';
+import { axilResponse } from '@axiljs/common';
 export interface SSEEvent {
     data: unknown;
     event?: string;

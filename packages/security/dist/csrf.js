@@ -15,7 +15,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.csrf = csrf;
 const crypto_1 = require("crypto");
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 // ─── Token Generation ─────────────────────────────────────────────────────────
 /**
  * Generate a cryptographically secure random token.

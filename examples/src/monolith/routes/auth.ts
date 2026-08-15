@@ -2,10 +2,10 @@
  * Auth Routes
  */
 
-import type { axilRequest as Req, axilResponse as Res, RouteHandler } from '@axil/core'
-import { Application } from '@axil/core'
-import { JWT, authenticate } from '@axil/auth'
-import { v, validate } from '@axil/validation'
+import type { axilRequest as Req, axilResponse as Res, RouteHandler } from '@axiljs/core'
+import { Application } from '@axiljs/core'
+import { JWT, authenticate } from '@axiljs/auth'
+import { v, validate } from '@axiljs/validation'
 import { AuthService } from '../services/AuthService'
 
 export function registerAuthRoutes(app: Application, jwt: JWT) {

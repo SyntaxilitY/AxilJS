@@ -1,5 +1,5 @@
 /**
- * @axilJS Router.
+ * @axiljsJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
@@ -16,7 +16,7 @@ import {
   HttpMethod,
   axilRequest,
   axilResponse
-} from '@axil/common';
+} from '@axiljs/common';
 
 import { Trie } from './trie';
 

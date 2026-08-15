@@ -1,4 +1,4 @@
-# @axil/memory — Memory Management & Leak Prevention
+# @axiljs/memory — Memory Management & Leak Prevention
 
 ```bash
 On startup → scans the runtime
@@ -33,10 +33,10 @@ npm run build:all
 ---
 
 ## Delivered
-### New Package: @axil/cloud
+### New Package: @axiljs/cloud
 
 Key Features Added:
-* Deployment Toolkit (`@axil deploy`)
+* Deployment Toolkit (`@axiljs deploy`)
 * Automatic Dockerfile generation
 * Kubernetes manifests (Deployment, Service, Ingress, ConfigMap, HPA)
 * Multi-cloud support (AWS, Azure, GCP, self-hosted K8s)
@@ -45,4 +45,4 @@ Key Features Added:
 * Feature Flags (runtime toggles, user/tenant scoped)
 * Monitoring Dashboard (/dashboard + Prometheus metrics)
 * Serverless & Edge Runtime compatibility layer
-* CLI Commands: `@axil deploy`, `@axil monitor`, `@axil publish`
+* CLI Commands: `@axiljs deploy`, `@axiljs monitor`, `@axiljs publish`

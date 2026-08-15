@@ -30,7 +30,7 @@ class MySQLDriver extends base_driver_1.BaseDriver {
             const conn = await this.pool.getConnection();
             conn.release();
             this.connected = true;
-            console.log(`\x1b[32m[@axilJS ORM]\x1b[0m MySQL connected: ` +
+            console.log(`\x1b[32m[@axiljsJS ORM]\x1b[0m MySQL connected: ` +
                 `${this.config.host}:${this.config.port}/${this.config.database}`);
         }
         catch (error) {

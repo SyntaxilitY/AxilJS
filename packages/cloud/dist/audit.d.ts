@@ -10,7 +10,7 @@
  *   - Where (tenant, IP, user agent)
  *   - Result (success/failure)
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface AuditEvent {
     action: string;
     actor: {

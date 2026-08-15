@@ -12,7 +12,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.JWT = void 0;
 const crypto_1 = require("crypto");
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 // ─── Time Parser ─────────────────────────────────────────────────────────────
 /**
  * Parse a time string or number into seconds.

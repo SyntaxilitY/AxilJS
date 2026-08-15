@@ -2,9 +2,9 @@
  * AxilJS Monolith Example — E-Commerce API
  *
  * Architecture: Monolith with Service Layer
- * Database:     PostgreSQL via @axil/orm
- * Auth:         JWT via @axil/auth
- * Validation:   Schema via @axil/validation
+ * Database:     PostgreSQL via @axiljs/orm
+ * Auth:         JWT via @axiljs/auth
+ * Validation:   Schema via @axiljs/validation
  * Response:     SyntaxilitY built-in manager
  *
  * Run:
@@ -12,11 +12,11 @@
  *   2. npx ts-node src/monolith/main.ts
  */
 
-import { Application, cors }     from '@axil/core'
-import { helmet, rateLimit }     from '@axil/security'
-import { JWT }                   from '@axil/auth'
-import { MigrationRunner }       from '@axil/orm'
-import { Logger }                from '@axil/observability'
+import { Application, cors }     from '@axiljs/core'
+import { helmet, rateLimit }     from '@axiljs/security'
+import { JWT }                   from '@axiljs/auth'
+import { MigrationRunner }       from '@axiljs/orm'
+import { Logger }                from '@axiljs/observability'
 import { config }                from './config'
 import { connectDB }             from './db'
 import { registerAuthRoutes }    from './routes/auth'

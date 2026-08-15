@@ -64,7 +64,7 @@ export class MemoryMonitor extends EventEmitter {
     this.running = true;
 
     console.log(
-      `${C.cyan}[@axilJS Memory]${C.reset} Monitor started ` +
+      `${C.cyan}[@axiljsJS Memory]${C.reset} Monitor started ` +
       `${C.gray}(scan every ${this.options.intervalMs / 1000}s)${C.reset}`
     );
 
@@ -92,7 +92,7 @@ export class MemoryMonitor extends EventEmitter {
       this.timer = undefined;
     }
 
-    console.log(`${C.cyan}[@axilJS Memory]${C.reset} Monitor stopped`);
+    console.log(`${C.cyan}[@axiljsJS Memory]${C.reset} Monitor stopped`);
   }
 
   // ─── Scan ─────────────────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ export class MemoryMonitor extends EventEmitter {
       '✗ Critical';
 
     console.log(
-      `${C.cyan}[@axilJS Memory]${C.reset} ` +
+      `${C.cyan}[@axiljsJS Memory]${C.reset} ` +
       `${statusColor}${statusLabel}${C.reset} ` +
       `${C.gray}heap: ${after.heapUsedMb}MB/${after.heapTotalMb}MB ` +
       `(${after.usagePercent}%)${C.reset}` +
@@ -210,7 +210,7 @@ export class MemoryMonitor extends EventEmitter {
     // Critical warning
     if (status === 'critical') {
       console.log(
-        `${C.red}${C.bold}[@axilJS Memory] CRITICAL: ` +
+        `${C.red}${C.bold}[@axiljsJS Memory] CRITICAL: ` +
         `${after.heapUsedMb}MB used — running emergency optimization${C.reset}`
       );
     }

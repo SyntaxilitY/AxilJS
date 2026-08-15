@@ -1,5 +1,5 @@
 /**
- * @axil/validation - Public API
+ * @axiljs/validation - Public API
  */
 
 export { v } from './schema';

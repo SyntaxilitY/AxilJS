@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axilJS Response implementation.
+ * @axiljsJS Response implementation.
  * Wraps Node.js ServerResponse with a fluent, developer-friendly API.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

@@ -14,7 +14,7 @@
  *   app.get('/feed', authenticate(jwt, { required: false }), getFeed)
  */
 
-import { MiddlewareFn, UnauthorizedError } from '@axil/common';
+import { MiddlewareFn, UnauthorizedError } from '@axiljs/common';
 import { JWT, JWTPayload } from '../jwt/jwt';
 
 // ─── Options ─────────────────────────────────────────────────────────────────

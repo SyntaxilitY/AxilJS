@@ -1,9 +1,9 @@
 /**
- * Database connection using @axil/orm
+ * Database connection using @axiljs/orm
  * Configured for NeonDB (PostgreSQL with SSL)
  */
 
-import { createConnection, ConnectionManager } from '@axil/orm'
+import { createConnection, ConnectionManager } from '@axiljs/orm'
 import { config } from './config'
 
 let db: ConnectionManager

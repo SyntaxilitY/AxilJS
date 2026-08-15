@@ -1,7 +1,7 @@
 /**
  * Package registry client.
  * Fetches package metadata and downloads from the npm registry.
- * (Phase 2 uses npm registry; Phase 6 will have the official @axilJS registry)
+ * (Phase 2 uses npm registry; Phase 6 will have the official @axiljsJS registry)
  *
  * All network operations use Node's built-in https module.
  * Zero external dependencies.

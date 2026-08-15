@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/auth - Public API
+ * @axiljs/auth - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isHashed = exports.verifyPassword = exports.hashPassword = exports.requireOwnership = exports.requirePermission = exports.requireRole = exports.getUser = exports.authenticate = exports.JWT = void 0;

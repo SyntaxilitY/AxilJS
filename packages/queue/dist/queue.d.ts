@@ -17,7 +17,7 @@
  *   })
  *
  *   await emailQueue.add('send-welcome', {
- *     to: 'tariq@@axil.dev',
+ *     to: 'tariq@@axiljs.dev',
  *     subject: 'Welcome!'
  *   })
  */

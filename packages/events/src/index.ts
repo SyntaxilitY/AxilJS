@@ -1,5 +1,5 @@
 /**
- * @axil/events - Public API
+ * @axiljs/events - Public API
  */
 
 export { EventBus, getGlobalEventBus, setGlobalEventBus } from './event-bus';

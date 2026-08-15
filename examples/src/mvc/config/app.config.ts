@@ -2,7 +2,7 @@
  * AxilJS MVC Example — App Configuration
  */
 
-import { loadEnv, defineConfig } from '@axil/config'
+import { loadEnv, defineConfig } from '@axiljs/config'
 
 loadEnv()
 

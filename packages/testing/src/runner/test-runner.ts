@@ -1,10 +1,10 @@
 /**
- * @axilJS Test Runner.
+ * @axiljsJS Test Runner.
  * Minimal, fast test runner with built-in assertions.
  * Zero dependencies - pure Node.js.
  *
  * Usage:
- *   import { describe, it, expect } from '@axil/testing'
+ *   import { describe, it, expect } from '@axiljs/testing'
  *
  *   describe('UserService', () => {
  *     it('should create a user', async () => {
@@ -137,7 +137,7 @@ export async function runTests(): Promise<boolean> {
   // Check if any tests use 'only' mode
   const hasOnly = suites.some(s => s.tests.some(t => t.only));
 
-  console.log('\n\x1b[36m[@axilJS Test]\x1b[0m Running tests...\n');
+  console.log('\n\x1b[36m[@axiljsJS Test]\x1b[0m Running tests...\n');
 
   for (const suite of suites) {
     console.log(`\x1b[1m${suite.name}\x1b[0m`);

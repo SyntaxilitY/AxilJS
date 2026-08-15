@@ -4,7 +4,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.postRoutes = postRoutes;
-const core_1 = require("@axil/core");
+const core_1 = require("@axiljs/core");
 const PostController_1 = require("../controllers/PostController");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 function postRoutes(jwt) {

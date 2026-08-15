@@ -2,7 +2,7 @@
 
 What we're building:
 * Project structure
-* CLI tool (@axil command)
+* CLI tool (@axiljs command)
 * HTTP Server (built-in, no Express)
 * Router
 * Basic middleware system
@@ -10,10 +10,10 @@ What we're building:
 
 ## Structure
 ```bash
-@axiljs/
+@axiljsjs/
 ├── packages/
 │   ├── core/          # Runtime core, HTTP server, Router
-│   ├── cli/           # @axil CLI tool
+│   ├── cli/           # @axiljs CLI tool
 │   └── common/        # Shared types, interfaces
 ├── package.json       # Workspace root
 └── tsconfig.json      # Root TypeScript config

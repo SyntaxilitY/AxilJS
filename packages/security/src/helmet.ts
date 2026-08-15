@@ -6,7 +6,7 @@
  * No external dependencies - pure header setting.
  */
 
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ export function helmet(options: HelmetOptions = {}): MiddlewareFn {
       res.header('Referrer-Policy', referrerPolicy);
     }
 
-    // Permissions-Policy (@axilrict browser APIs)
+    // Permissions-Policy (@axiljsrict browser APIs)
     if (permissionsPolicy) {
       res.header(
         'Permissions-Policy',

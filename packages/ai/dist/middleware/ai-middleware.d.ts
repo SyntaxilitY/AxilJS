@@ -1,5 +1,5 @@
 /**
- * AI middleware for @axilJS applications.
+ * AI middleware for @axiljsJS applications.
  * Provides AI-powered HTTP endpoints out of the box.
  *
  * Usage:
@@ -7,7 +7,7 @@
  *   app.post('/chat/stream', aiChatStream({ provider }))
  *   app.post('/embed', aiEmbed({ provider }))
  */
-import { RouteHandler } from '@axil/common';
+import { RouteHandler } from '@axiljs/common';
 import { AIProvider } from '../types';
 import { Tool } from '../agents/tool';
 export interface AIChatOptions {

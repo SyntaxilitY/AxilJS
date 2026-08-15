@@ -1,6 +1,6 @@
 /**
- * @axil/ai - Public API
- * The complete @axilJS AI platform.
+ * @axiljs/ai - Public API
+ * The complete @axiljsJS AI platform.
  */
 export * from './types';
 export { OpenAIProvider } from './providers/openai';

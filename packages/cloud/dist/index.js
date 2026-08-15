@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/cloud - Public API
+ * @axiljs/cloud - Public API
  * Enterprise cloud platform — deployment, multi-tenancy, audit, feature flags, dashboard.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

@@ -8,7 +8,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MiddlewareChain = void 0;
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 class MiddlewareChain {
     /**
      * Execute a list of middleware functions followed by a route handler.

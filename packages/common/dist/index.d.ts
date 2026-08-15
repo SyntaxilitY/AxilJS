@@ -1,5 +1,5 @@
 /**
- * @axil/common - Public API
+ * @axiljs/common - Public API
  * Export everything that other packages and user applications need.
  */
 export * from './types/http.types';

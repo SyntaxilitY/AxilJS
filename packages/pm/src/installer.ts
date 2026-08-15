@@ -53,10 +53,10 @@ export class Installer {
     this.lockManager = new LockFileManager(this.cwd);
     this.registry = new RegistryClient();
 
-    // Local cache directory: ~/.@axiljs/cache
+    // Local cache directory: ~/.@axiljsjs/cache
     this.cacheDir = join(
       process.env.HOME || process.env.USERPROFILE || this.cwd,
-      '.@axiljs',
+      '.@axiljsjs',
       'cache'
     );
 
@@ -75,7 +75,7 @@ export class Installer {
     if (!existsSync(pkgPath)) {
       throw new Error(
         `No package.json found in ${this.cwd}.\n` +
-          `Run '@axil create <name>' to create a new project.`
+          `Run '@axiljs create <name>' to create a new project.`
       );
     }
 
@@ -91,12 +91,12 @@ export class Installer {
     };
 
     if (Object.keys(toInstall).length === 0) {
-      console.log('[@axilJS PM] No dependencies to install.');
+      console.log('[@axiljsJS PM] No dependencies to install.');
       return;
     }
 
     console.log(
-      `\n\x1b[36m[@axilJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`
+      `\n\x1b[36m[@axiljsJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`
     );
 
     const nodeModulesDir = join(this.cwd, 'node_modules');
@@ -136,7 +136,7 @@ export class Installer {
     // Print summary
     console.log('');
     console.log(
-      `\x1b[36m[@axilJS PM]\x1b[0m Done. ` +
+      `\x1b[36m[@axiljsJS PM]\x1b[0m Done. ` +
         `${installed} installed, ${cached} from cache` +
         (failed > 0 ? `, \x1b[31m${failed} failed\x1b[0m` : '') +
         '.'
@@ -223,7 +223,7 @@ export class Installer {
     packageName: string,
     nodeModulesDir: string
   ): Promise<void> {
-    // For scoped packages: @axil/core → @axil/core directory structure
+    // For scoped packages: @axiljs/core → @axiljs/core directory structure
     const packageDir = join(nodeModulesDir, packageName);
     mkdirSync(packageDir, { recursive: true });
 
@@ -240,7 +240,7 @@ export class Installer {
         JSON.stringify({
           name: packageName,
           _axiljs_installed: true,
-          _axiljs_note: 'Installed by @axilJS PM'
+          _axiljs_note: 'Installed by @axiljsJS PM'
         }, null, 2)
       );
     }

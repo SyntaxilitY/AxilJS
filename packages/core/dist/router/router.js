@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axilJS Router.
+ * @axiljsJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *

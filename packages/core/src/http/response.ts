@@ -23,7 +23,7 @@
  */
 
 import { ServerResponse } from 'http';
-import { axilResponse }   from '@axil/common';
+import { axilResponse }   from '@axiljs/common';
 
 export class Response implements axilResponse {
   public raw: ServerResponse;

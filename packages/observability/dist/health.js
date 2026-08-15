@@ -87,7 +87,7 @@ class HealthChecker {
     /**
      * Liveness probe - is the application running?
      * Returns 200 always (if the server is running, it's alive).
-     * Used by Kubernetes to decide if the pod should be @axilarted.
+     * Used by Kubernetes to decide if the pod should be @axiljsarted.
      */
     livenessHandler() {
         return (req, res) => {

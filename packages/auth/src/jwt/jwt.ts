@@ -10,7 +10,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
-import { UnauthorizedError } from '@axil/common';
+import { UnauthorizedError } from '@axiljs/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

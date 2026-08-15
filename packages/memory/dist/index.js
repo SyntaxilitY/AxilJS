@@ -1,7 +1,7 @@
 "use strict";
 /**
- * @axil/memory — Public API
- * Memory management, leak detection, and optimization for @axilJS.
+ * @axiljs/memory — Public API
+ * Memory management, leak detection, and optimization for @axiljsJS.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.memoryMiddleware = exports.gcTip = exports.isGCAvailable = exports.triggerGCAsync = exports.triggerGC = exports.formatBytes = exports.diffSnapshots = exports.takeSnapshot = exports.trackEmitter = exports.trackCache = exports.untrackInterval = exports.untrackTimer = exports.trackInterval = exports.trackTimer = exports.detectAndFix = exports.optimizer = exports.MemoryOptimizer = exports.MemoryMonitor = void 0;

@@ -5,7 +5,7 @@
  *
  * No external dependencies - pure header setting.
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface HelmetOptions {
     contentSecurityPolicy?: boolean | string;
     frameOptions?: 'DENY' | 'SAMEORIGIN' | false;

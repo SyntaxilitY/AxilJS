@@ -22,11 +22,11 @@ npm run build:all
 
 Phase 4 Complete ✅
 Component	Status	Details
-@axil/events	✅	Event bus, pub/sub, wildcards, @OnEvent decorator
-@axil/websocket	✅	Full RFC 6455 implementation, rooms, broadcast
-@axil/queue	✅	Job queue, priority, retry, exponential backoff
+@axiljs/events	✅	Event bus, pub/sub, wildcards, @OnEvent decorator
+@axiljs/websocket	✅	Full RFC 6455 implementation, rooms, broadcast
+@axiljs/queue	✅	Job queue, priority, retry, exponential backoff
 Scheduler	✅	Cron-based task scheduler, zero dependencies
-@axil/circuit	✅	Circuit breaker, retry with backoff, timeout
-@axil/observability	✅	Structured logging, Prometheus metrics, health checks
+@axiljs/circuit	✅	Circuit breaker, retry with backoff, timeout
+@axiljs/observability	✅	Structured logging, Prometheus metrics, health checks
 Tracer	✅	Distributed tracing, W3C traceparent, span management
 Observability middleware	✅	Auto request metrics + tracing on every route

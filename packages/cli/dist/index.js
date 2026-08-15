@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/cli — Public API
+ * @axiljs/cli — Public API
  * Exports CLI utilities for programmatic use.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

@@ -20,7 +20,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseRepository = void 0;
 const query_builder_1 = require("../query-builder/query-builder");
 const entity_1 = require("../decorators/entity");
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 class BaseRepository {
     EntityClass;
     tableName;

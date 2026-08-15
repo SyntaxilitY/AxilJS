@@ -8,7 +8,7 @@
  *   - Sets Retry-After header
  */
 
-import { MiddlewareFn, axilError } from '@axil/common';
+import { MiddlewareFn, axilError } from '@axiljs/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 

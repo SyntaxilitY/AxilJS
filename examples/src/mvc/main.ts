@@ -11,10 +11,10 @@
  * Or:  npx ts-node src/mvc/main.ts
  */
 
-import { Application, cors } from '@axil/core'
-import { helmet, rateLimit } from '@axil/security'
-import { JWT }               from '@axil/auth'
-import { Logger }            from '@axil/observability'
+import { Application, cors } from '@axiljs/core'
+import { helmet, rateLimit } from '@axiljs/security'
+import { JWT }               from '@axiljs/auth'
+import { Logger }            from '@axiljs/observability'
 import { config }            from './config/app.config'
 import { authRoutes }        from './routes/auth.routes'
 import { postRoutes }        from './routes/post.routes'

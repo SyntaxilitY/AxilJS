@@ -2,9 +2,9 @@
  * Comment Routes — nested under posts
  */
 
-import { Router } from '@axil/core'
-import type { MiddlewareFn, RouteHandler } from '@axil/core'
-import { JWT } from '@axil/auth'
+import { Router } from '@axiljs/core'
+import type { MiddlewareFn, RouteHandler } from '@axiljs/core'
+import { JWT } from '@axiljs/auth'
 import { CommentController } from '../controllers/CommentController'
 import { createAuthMiddleware } from '../middlewares/auth.middleware'
 

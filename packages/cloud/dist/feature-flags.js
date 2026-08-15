@@ -33,12 +33,12 @@ class FeatureFlagManager {
         if (flag.expiresAt && new Date(flag.expiresAt) < new Date()) {
             return false;
         }
-        // Tenant @axilriction
+        // Tenant @axiljsriction
         if (flag.allowedTenants && context.tenantId) {
             if (!flag.allowedTenants.includes(context.tenantId))
                 return false;
         }
-        // User @axilriction
+        // User @axiljsriction
         if (flag.allowedUsers && context.userId) {
             if (!flag.allowedUsers.includes(context.userId))
                 return false;

@@ -3,13 +3,13 @@
  * Lock file management.
  * Ensures deterministic, reproducible installs.
  *
- * The lock file (@axil.lock) records:
+ * The lock file (@axiljs.lock) records:
  *   - Exact resolved version of every package
  *   - SHA-256 checksum for integrity verification
  *   - Dependency tree for each package
  *
- * If @axil.lock exists → use exact versions from it
- * If @axil.lock missing → resolve versions, create lock file
+ * If @axiljs.lock exists → use exact versions from it
+ * If @axiljs.lock missing → resolve versions, create lock file
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LockFileManager = void 0;
@@ -19,7 +19,7 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const crypto_1 = require("crypto");
 // ─── Lock File Manager ────────────────────────────────────────────────────────
-const LOCKFILE_NAME = '@axil.lock';
+const LOCKFILE_NAME = '@axiljs.lock';
 const LOCKFILE_VERSION = 1;
 class LockFileManager {
     lockfilePath;
@@ -45,7 +45,7 @@ class LockFileManager {
             return JSON.parse(content);
         }
         catch {
-            console.warn('[@axilJS PM] Warning: Could not parse @axil.lock - creating new one');
+            console.warn('[@axiljsJS PM] Warning: Could not parse @axiljs.lock - creating new one');
             return {
                 lockfileVersion: LOCKFILE_VERSION,
                 updatedAt: new Date().toISOString(),

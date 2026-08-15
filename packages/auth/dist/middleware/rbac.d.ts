@@ -12,7 +12,7 @@
  *   // Permission-based
  *   app.post('/posts', authenticate(jwt), requirePermission('posts:create'), createPost)
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 /**
  * Require the authenticated user to have one of the specified roles.
  * Must be used AFTER authenticate() middleware.

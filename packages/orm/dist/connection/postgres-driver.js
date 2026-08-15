@@ -43,7 +43,7 @@ class PostgresDriver extends base_driver_1.BaseDriver {
             const host = this.config.url
                 ? this.config.url.replace(/:[^@]+@/, ':***@') // Hide password in log
                 : `${this.config.host}:${this.config.port}/${this.config.database}`;
-            console.log(`\x1b[32m[@axilJS ORM]\x1b[0m PostgreSQL connected: ${host}`);
+            console.log(`\x1b[32m[@axiljsJS ORM]\x1b[0m PostgreSQL connected: ${host}`);
         }
         catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {

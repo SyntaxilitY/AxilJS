@@ -4,7 +4,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.config = void 0;
-const config_1 = require("@axil/config");
+const config_1 = require("@axiljs/config");
 (0, config_1.loadEnv)();
 exports.config = (0, config_1.defineConfig)({
     PORT: { type: 'number', default: 3002 },

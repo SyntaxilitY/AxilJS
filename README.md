@@ -87,7 +87,9 @@ Synt  +  axil  +  itY  +  JS
 
 ```bash
 # Install CLI globally
-npm install -g @axil/cli
+npm install @axiljs/core @axiljs/config @axiljs/security @axiljs/auth @axiljs/validation @axiljs/orm @axiljs/events @axiljs/websocket @axiljs/queue @axiljs/circuit @axiljs/observability @axiljs/ai @axiljs/cloud @axiljs/memory @axiljs/common
+
+npm install -D typescript @types/node ts-node
 
 # Create a new project
 axil create my-api
@@ -184,27 +186,27 @@ OLLAMA_URL=http://localhost:11434
 
 ## Packages
 
-All packages live under the `@axil` scope and work together out of the box.
+All packages live under the `@axiljs` scope and work together out of the box.
 
 | Package | Purpose |
 |---|---|
-| `@axil/core` | HTTP server, router, middleware, SSE, static files, **built-in response manager** |
-| `@axil/config` | Environment loading, typed config validation |
-| `@axil/security` | Helmet, rate limiting, CSRF, sanitization |
-| `@axil/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
-| `@axil/auth` | JWT, password hashing, RBAC |
-| `@axil/validation` | Schema-based request validation |
-| `@axil/testing` | Test runner, assertions, HTTP test client |
-| `@axil/events` | In-process event bus, pub/sub |
-| `@axil/websocket` | RFC 6455 WebSocket server, rooms |
-| `@axil/queue` | Message queue, scheduler, retry |
-| `@axil/circuit` | Circuit breaker, retry, timeout |
-| `@axil/observability` | Logging, metrics, tracing, health checks |
-| `@axil/ai` | AI providers, RAG, agents, vector store, MCP |
-| `@axil/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
-| `@axil/memory` | Memory leak detection, GC, optimization |
-| `@axil/pm` | Package manager with lock file and checksums |
-| `@axil/cli` | CLI — all `axil` commands |
+| `@axiljs/core` | HTTP server, router, middleware, SSE, static files, **built-in response manager** |
+| `@axiljs/config` | Environment loading, typed config validation |
+| `@axiljs/security` | Helmet, rate limiting, CSRF, sanitization |
+| `@axiljs/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
+| `@axiljs/auth` | JWT, password hashing, RBAC |
+| `@axiljs/validation` | Schema-based request validation |
+| `@axiljs/testing` | Test runner, assertions, HTTP test client |
+| `@axiljs/events` | In-process event bus, pub/sub |
+| `@axiljs/websocket` | RFC 6455 WebSocket server, rooms |
+| `@axiljs/queue` | Message queue, scheduler, retry |
+| `@axiljs/circuit` | Circuit breaker, retry, timeout |
+| `@axiljs/observability` | Logging, metrics, tracing, health checks |
+| `@axiljs/ai` | AI providers, RAG, agents, vector store, MCP |
+| `@axiljs/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
+| `@axiljs/memory` | Memory leak detection, GC, optimization |
+| `@axiljs/pm` | Package manager with lock file and checksums |
+| `@axiljs/cli` | CLI — all `axil` commands |
 
 ---
 
@@ -264,7 +266,7 @@ Paginated responses include full metadata:
 Extract pagination params from request:
 
 ```typescript
-import { Response } from '@axil/core'
+import { Response } from '@axiljs/core'
 
 const { page, limit, skip } = Response.getPaginationParams(req)
 ```
@@ -276,9 +278,9 @@ const { page, limit, skip } = Response.getPaginationParams(req)
 ### Core HTTP Server
 
 ```typescript
-import { Application, cors } from '@axil/core'
-import { loadEnv, defineConfig } from '@axil/config'
-import { helmet, rateLimit } from '@axil/security'
+import { Application, cors } from '@axiljs/core'
+import { loadEnv, defineConfig } from '@axiljs/config'
+import { helmet, rateLimit } from '@axiljs/security'
 
 loadEnv()
 
@@ -311,7 +313,7 @@ app.listen()
 ### Configuration
 
 ```typescript
-import { loadEnv, defineConfig } from '@axil/config'
+import { loadEnv, defineConfig } from '@axiljs/config'
 
 loadEnv()
 
@@ -329,7 +331,7 @@ const config = defineConfig({
 ### Security
 
 ```typescript
-import { helmet, rateLimit, csrf, sanitize } from '@axil/security'
+import { helmet, rateLimit, csrf, sanitize } from '@axiljs/security'
 
 app.use(helmet())
 app.use(rateLimit({ max: 100, windowMs: 60000 }))
@@ -342,7 +344,7 @@ app.use(sanitize())
 
 ```typescript
 import { createConnection, Entity, Column,
-         PrimaryKey, BaseRepository } from '@axil/orm'
+         PrimaryKey, BaseRepository } from '@axiljs/orm'
 
 @Entity('users')
 class User {
@@ -378,7 +380,7 @@ Migrations automatically use the correct SQL syntax per database driver:
 
 ```typescript
 // src/migrations/001_create_users.ts
-import { Migration } from '@axil/orm'
+import { Migration } from '@axiljs/orm'
 
 const migration: Migration = {
   async up(db) {
@@ -400,7 +402,7 @@ module.exports = migration
 ```
 
 ```typescript
-import { MigrationRunner } from '@axil/orm'
+import { MigrationRunner } from '@axiljs/orm'
 import path from 'path'
 
 const runner = new MigrationRunner(
@@ -417,7 +419,7 @@ await runner.status() // Show migration status
 
 ```typescript
 import { JWT, hashPassword, verifyPassword,
-         authenticate, requireRole } from '@axil/auth'
+         authenticate, requireRole } from '@axiljs/auth'
 
 const jwt = new JWT(process.env.JWT_SECRET)
 
@@ -437,7 +439,7 @@ app.delete('/users/:id', authenticate(jwt), requireRole('admin'), (req, res) => 
 ### Validation
 
 ```typescript
-import { v, validate } from '@axil/validation'
+import { v, validate } from '@axiljs/validation'
 
 app.post('/users',
   validate({
@@ -458,7 +460,7 @@ app.post('/users',
 
 ```typescript
 import { describe, it, expect,
-         beforeAll, createTestClient } from '@axil/testing'
+         beforeAll, createTestClient } from '@axiljs/testing'
 
 describe('Users API', () => {
   let client: any
@@ -489,7 +491,7 @@ axil test users
 ### Event Bus
 
 ```typescript
-import { EventBus, OnEvent, registerEventHandlers } from '@axil/events'
+import { EventBus, OnEvent, registerEventHandlers } from '@axiljs/events'
 
 const bus = new EventBus()
 
@@ -514,7 +516,7 @@ const event = await bus.waitFor('payment.confirmed', 5000)
 ### WebSockets
 
 ```typescript
-import { WSServer } from '@axil/websocket'
+import { WSServer } from '@axiljs/websocket'
 
 const wss = new WSServer(app.getServer(), { path: '/ws' })
 
@@ -534,7 +536,7 @@ wss.on('connection', (client) => {
 ### Message Queue
 
 ```typescript
-import { Queue } from '@axil/queue'
+import { Queue } from '@axiljs/queue'
 
 const emailQueue = new Queue('emails', { concurrency: 5 })
 
@@ -554,7 +556,7 @@ await emailQueue.add('send-reminder', { to: 'user@example.com' }, {
 ### Task Scheduler
 
 ```typescript
-import { Scheduler } from '@axil/queue'
+import { Scheduler } from '@axiljs/queue'
 
 const scheduler = new Scheduler()
 
@@ -569,7 +571,7 @@ await scheduler.runNow('daily-report')
 ### Circuit Breaker
 
 ```typescript
-import { CircuitBreaker, retry, withTimeout } from '@axil/circuit'
+import { CircuitBreaker, retry, withTimeout } from '@axiljs/circuit'
 
 const paymentCB = new CircuitBreaker('payment-api', {
   failureThreshold: 5,
@@ -587,7 +589,7 @@ const response = await withTimeout(fetch('https://api.example.com'), 5000)
 ```typescript
 import { Logger, MetricsRegistry, HealthChecker,
          Tracer, observabilityMiddleware,
-         metricsHandler } from '@axil/observability'
+         metricsHandler } from '@axiljs/observability'
 
 const logger  = new Logger({ name: 'UserService' })
 const metrics = new MetricsRegistry()
@@ -612,7 +614,7 @@ app.get('/metrics',      metricsHandler(metrics))
 import { OpenAIProvider, OllamaProvider, RAGPipeline,
          VectorStore, Agent, createTool,
          calculatorTool, currentDateTimeTool,
-         loadFromText } from '@axil/ai'
+         loadFromText } from '@axiljs/ai'
 
 const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
 // or: new OllamaProvider({ model: 'llama3.2' })       — local, no API key
@@ -646,7 +648,7 @@ const result = await agent.run('What is 25 * 4 and what time is it?')
 
 ```typescript
 import { MemoryMonitor, optimizer,
-         memoryMiddleware, trackCache } from '@axil/memory'
+         memoryMiddleware, trackCache } from '@axiljs/memory'
 
 const monitor = new MemoryMonitor({
   intervalMs:               30000,

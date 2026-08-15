@@ -1,9 +1,9 @@
 /**
- * Memory Middleware for @axilJS HTTP requests.
+ * Memory Middleware for @axiljsJS HTTP requests.
  * Attaches memory info to requests for debugging.
  * Flags requests that trigger significant memory increases.
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface MemoryMiddlewareOptions {
     leakThresholdMb?: number;
     exposeHeader?: boolean;

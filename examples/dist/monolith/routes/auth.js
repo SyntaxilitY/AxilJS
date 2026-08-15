@@ -4,8 +4,8 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerAuthRoutes = registerAuthRoutes;
-const auth_1 = require("@axil/auth");
-const validation_1 = require("@axil/validation");
+const auth_1 = require("@axiljs/auth");
+const validation_1 = require("@axiljs/validation");
 const AuthService_1 = require("../services/AuthService");
 function registerAuthRoutes(app, jwt) {
     const auth = new AuthService_1.AuthService(jwt);

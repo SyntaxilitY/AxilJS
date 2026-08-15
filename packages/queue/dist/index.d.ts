@@ -1,5 +1,5 @@
 /**
- * @axil/queue - Public API
+ * @axiljs/queue - Public API
  */
 export { Queue } from './queue';
 export type { QueueOptions } from './queue';

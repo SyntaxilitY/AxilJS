@@ -7,7 +7,7 @@
  *   - Returns 429 Too Many Requests
  *   - Sets Retry-After header
  */
-import { MiddlewareFn, axilError } from '@axil/common';
+import { MiddlewareFn, axilError } from '@axiljs/common';
 export interface RateLimitOptions {
     windowMs?: number;
     max?: number;

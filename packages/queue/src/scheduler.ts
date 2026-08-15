@@ -214,7 +214,7 @@ export class Scheduler extends EventEmitter {
       this.timer = setInterval(() => this.tick(), 60000);
     }, msUntilNextMinute);
 
-    console.log('\x1b[36m[@axilJS Scheduler]\x1b[0m Started');
+    console.log('\x1b[36m[@axiljsJS Scheduler]\x1b[0m Started');
     this.listTasks();
   }
 
@@ -230,7 +230,7 @@ export class Scheduler extends EventEmitter {
       this.timer = undefined;
     }
 
-    console.log('\x1b[36m[@axilJS Scheduler]\x1b[0m Stopped');
+    console.log('\x1b[36m[@axiljsJS Scheduler]\x1b[0m Stopped');
   }
 
   /**
@@ -287,7 +287,7 @@ export class Scheduler extends EventEmitter {
         // Run in background — don't await so other tasks aren't blocked
         this.runTask(task).catch(err => {
           console.error(
-            `\x1b[31m[@axilJS Scheduler]\x1b[0m Tick error in '${task.name}':`,
+            `\x1b[31m[@axiljsJS Scheduler]\x1b[0m Tick error in '${task.name}':`,
             err.message
           );
         });
@@ -315,7 +315,7 @@ export class Scheduler extends EventEmitter {
       this.emit('failed', task.name, err);
 
       console.error(
-        `\x1b[31m[@axilJS Scheduler]\x1b[0m Task '${task.name}' failed:`,
+        `\x1b[31m[@axiljsJS Scheduler]\x1b[0m Task '${task.name}' failed:`,
         err.message
       );
     }
@@ -326,12 +326,12 @@ export class Scheduler extends EventEmitter {
    */
   private listTasks(): void {
     if (this.tasks.size === 0) {
-      console.log('\x1b[90m[@axilJS Scheduler]\x1b[0m No tasks registered');
+      console.log('\x1b[90m[@axiljsJS Scheduler]\x1b[0m No tasks registered');
       return;
     }
 
     console.log(
-      `\x1b[90m[@axilJS Scheduler]\x1b[0m ` +
+      `\x1b[90m[@axiljsJS Scheduler]\x1b[0m ` +
       `${this.tasks.size} task(s) registered:`
     );
 

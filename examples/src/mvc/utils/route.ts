@@ -3,7 +3,7 @@
  * Preserves the tuple type: [...MiddlewareFn[], RouteHandler]
  */
 
-import type { MiddlewareFn, RouteHandler } from '@axil/core'
+import type { MiddlewareFn, RouteHandler } from '@axiljs/core'
 
 export function route(
   ...handlers: [...MiddlewareFn[], RouteHandler]

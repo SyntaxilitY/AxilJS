@@ -1,6 +1,6 @@
 /**
- * @axil/memory — Public API
- * Memory management, leak detection, and optimization for @axilJS.
+ * @axiljs/memory — Public API
+ * Memory management, leak detection, and optimization for @axiljsJS.
  */
 export { MemoryMonitor } from './monitor';
 export type { MemoryMonitorOptions } from './types';

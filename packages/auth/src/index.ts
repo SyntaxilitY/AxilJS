@@ -1,5 +1,5 @@
 /**
- * @axil/auth - Public API
+ * @axiljs/auth - Public API
  */
 
 // JWT

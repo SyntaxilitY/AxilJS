@@ -1,7 +1,7 @@
-import { Router, MiddlewareFn, RouteHandler } from '@axil/core' // Import types
+import { Router, MiddlewareFn, RouteHandler } from '@axiljs/core' // Import types
 import { AuthController } from '../controllers/AuthController'
 import { createAuthMiddleware } from '../middlewares/auth.middleware'
-import { JWT } from '@axil/auth'
+import { JWT } from '@axiljs/auth'
 
 export function authRoutes(jwt: JWT): Router {
   const router = new Router('/api/auth')

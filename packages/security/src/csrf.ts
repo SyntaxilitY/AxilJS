@@ -13,7 +13,7 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'crypto';
-import { MiddlewareFn, ForbiddenError } from '@axil/common';
+import { MiddlewareFn, ForbiddenError } from '@axiljs/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 

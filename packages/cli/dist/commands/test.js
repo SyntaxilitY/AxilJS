@@ -42,7 +42,7 @@ async function runTests(pattern) {
             console.error(`\x1b[31m[AxilJS Test]\x1b[0m Error loading ${file}:`, error.message);
         }
     }
-    const { runTests: run } = require('@axil/testing');
+    const { runTests: run } = require('@axiljs/testing');
     const passed = await run();
     process.exit(passed ? 0 : 1);
 }

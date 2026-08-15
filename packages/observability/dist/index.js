@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/observability - Public API
+ * @axiljs/observability - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.metricsHandler = exports.observabilityMiddleware = exports.Span = exports.Tracer = exports.HealthChecker = exports.Histogram = exports.Gauge = exports.Counter = exports.MetricsRegistry = exports.FileTransport = exports.ConsoleTransport = exports.Logger = void 0;

@@ -1,6 +1,6 @@
 /**
  * Application configuration types.
- * Used when creating a new @axilJS application.
+ * Used when creating a new @axiljsJS application.
  */
 
 // ─── Server Config ────────────────────────────────────────────────────────────

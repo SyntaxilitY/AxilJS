@@ -2,7 +2,7 @@
  * Monolith Config — E-Commerce API
  */
 
-import { loadEnv, defineConfig } from '@axil/config'
+import { loadEnv, defineConfig } from '@axiljs/config'
 
 loadEnv()
 

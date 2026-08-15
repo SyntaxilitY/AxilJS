@@ -11,7 +11,7 @@
  *
  * Usage:
  *   const logger = new Logger({ name: 'UserService' })
- *   logger.info('User created', { userId: 123, email: 'tariq@@axil.dev' })
+ *   logger.info('User created', { userId: 123, email: 'tariq@@axiljs.dev' })
  *   logger.error('Database error', { error: err.message, query })
  *
  *   const requestLogger = logger.child({ requestId: req.id })

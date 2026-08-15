@@ -1,7 +1,7 @@
 {
-  "name": "@axil/orm",
+  "name": "@axiljs/orm",
   "version": "0.1.0",
-  "description": "@axilJS ORM - entities, migrations, query builder, multi-db",
+  "description": "AxilJS ORM — PostgreSQL, MySQL, SQLite with migrations and query builder",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axil/common": "0.1.0"
+    "@axiljs/common": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",
@@ -26,5 +26,29 @@
     "mysql2": true,
     "better-sqlite3": true,
     "mongodb": true
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "keywords": [
+    "axiljs",
+    "backend",
+    "javascript",
+    "typescript",
+    "nodejs"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

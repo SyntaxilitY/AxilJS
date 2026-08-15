@@ -2,9 +2,9 @@
  * Auth Service — register, login, profile
  */
 
-import { JWT, hashPassword, verifyPassword } from '@axil/auth'
+import { JWT, hashPassword, verifyPassword } from '@axiljs/auth'
 import { getDB } from '../db'
-import { QueryBuilder } from '@axil/orm'
+import { QueryBuilder } from '@axiljs/orm'
 
 export class AuthService {
   constructor(private jwt: JWT) {}

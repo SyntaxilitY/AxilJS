@@ -10,7 +10,7 @@
  *   app.get('/metrics', metricsHandler(metrics))
  */
 
-import { MiddlewareFn, RouteHandler } from '@axil/common';
+import { MiddlewareFn, RouteHandler } from '@axiljs/common';
 import { MetricsRegistry } from './metrics';
 import { Tracer } from './tracing';
 

@@ -3,9 +3,9 @@
  * AxilJS Monolith Example — E-Commerce API
  *
  * Architecture: Monolith with Service Layer
- * Database:     PostgreSQL via @axil/orm
- * Auth:         JWT via @axil/auth
- * Validation:   Schema via @axil/validation
+ * Database:     PostgreSQL via @axiljs/orm
+ * Auth:         JWT via @axiljs/auth
+ * Validation:   Schema via @axiljs/validation
  * Response:     SyntaxilitY built-in manager
  *
  * Run:
@@ -16,11 +16,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const core_1 = require("@axil/core");
-const security_1 = require("@axil/security");
-const auth_1 = require("@axil/auth");
-const orm_1 = require("@axil/orm");
-const observability_1 = require("@axil/observability");
+const core_1 = require("@axiljs/core");
+const security_1 = require("@axiljs/security");
+const auth_1 = require("@axiljs/auth");
+const orm_1 = require("@axiljs/orm");
+const observability_1 = require("@axiljs/observability");
 const config_1 = require("./config");
 const db_1 = require("./db");
 const auth_2 = require("./routes/auth");

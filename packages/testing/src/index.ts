@@ -1,5 +1,5 @@
 /**
- * @axil/testing - Public API
+ * @axiljs/testing - Public API
  */
 
 // Test runner

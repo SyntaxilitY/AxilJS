@@ -39,17 +39,17 @@ async function runDoctor() {
         const exists = (0, fs_1.existsSync)((0, path_1.join)(cwd, file));
         checks.push({ name, pass: exists, message: exists ? 'Found' : 'Missing' });
     }
-    // Check for @axil/core
+    // Check for @axiljs/core
     const pkgPath = (0, path_1.join)(cwd, 'package.json');
     if ((0, fs_1.existsSync)(pkgPath)) {
         const pkg = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8'));
-        const hasCore = pkg.dependencies?.['@axil/core'] !== undefined ||
-            pkg.devDependencies?.['@axil/core'] !== undefined;
+        const hasCore = pkg.dependencies?.['@axiljs/core'] !== undefined ||
+            pkg.devDependencies?.['@axiljs/core'] !== undefined;
         checks.push({
-            name: '@axil/core dependency',
+            name: '@axiljs/core dependency',
             pass: hasCore,
             message: hasCore
-                ? pkg.dependencies?.['@axil/core'] || pkg.devDependencies?.['@axil/core']
+                ? pkg.dependencies?.['@axiljs/core'] || pkg.devDependencies?.['@axiljs/core']
                 : 'Not found in dependencies'
         });
         // Lock file

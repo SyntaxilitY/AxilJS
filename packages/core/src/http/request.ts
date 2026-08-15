@@ -1,5 +1,5 @@
 /**
- * @axilJS Request implementation.
+ * @axiljsJS Request implementation.
  * Wraps Node.js IncomingMessage and provides a clean API.
  */
 
@@ -9,7 +9,7 @@ import {
   HttpMethod,
   RouteParams,
   QueryParams
-} from '@axil/common';
+} from '@axiljs/common';
 
 export class Request implements axilRequest {
   public raw: IncomingMessage;

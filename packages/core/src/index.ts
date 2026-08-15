@@ -1,6 +1,6 @@
 /**
- * @axil/core - Public API
- * Everything a developer needs to build with @axilJS.
+ * @axiljs/core - Public API
+ * Everything a developer needs to build with @axiljsJS.
  */
 
 // Main application class
@@ -25,4 +25,4 @@ export type { StaticOptions } from './middleware/static';
 export { createSSE, sseHeartbeat } from './middleware/sse';
 export type { SSEEvent, SSEConnection } from './middleware/sse';
 
-export * from '@axil/common';
+export * from '@axiljs/common';

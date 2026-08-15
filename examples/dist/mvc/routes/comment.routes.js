@@ -4,7 +4,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.commentRoutes = commentRoutes;
-const core_1 = require("@axil/core");
+const core_1 = require("@axiljs/core");
 const CommentController_1 = require("../controllers/CommentController");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 function commentRoutes(jwt) {

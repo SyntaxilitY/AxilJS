@@ -15,7 +15,7 @@
  *   })
  */
 
-import { axilResponse } from '@axil/common';
+import { axilResponse } from '@axiljs/common';
 
 // ─── SSE Event ────────────────────────────────────────────────────────────────
 

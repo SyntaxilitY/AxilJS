@@ -1,28 +1,28 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const core_1 = require("@axil/core");
-const config_1 = require("@axil/config");
-const security_1 = require("@axil/security");
-const auth_1 = require("@axil/auth");
-const auth_2 = require("@axil/auth");
-const auth_3 = require("@axil/auth");
-const validation_1 = require("@axil/validation");
-const events_1 = require("@axil/events");
-const websocket_1 = require("@axil/websocket");
-const queue_1 = require("@axil/queue");
-const queue_2 = require("@axil/queue");
-const circuit_1 = require("@axil/circuit");
-const observability_1 = require("@axil/observability");
-const ai_1 = require("@axil/ai");
-const cloud_1 = require("@axil/cloud");
-const memory_1 = require("@axil/memory");
+const core_1 = require("@axiljs/core");
+const config_1 = require("@axiljs/config");
+const security_1 = require("@axiljs/security");
+const auth_1 = require("@axiljs/auth");
+const auth_2 = require("@axiljs/auth");
+const auth_3 = require("@axiljs/auth");
+const validation_1 = require("@axiljs/validation");
+const events_1 = require("@axiljs/events");
+const websocket_1 = require("@axiljs/websocket");
+const queue_1 = require("@axiljs/queue");
+const queue_2 = require("@axiljs/queue");
+const circuit_1 = require("@axiljs/circuit");
+const observability_1 = require("@axiljs/observability");
+const ai_1 = require("@axiljs/ai");
+const cloud_1 = require("@axiljs/cloud");
+const memory_1 = require("@axiljs/memory");
 // ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
 process.on('uncaughtException', (err) => {
-    console.error('\x1b[31m[@axilJS] Uncaught Exception:\x1b[0m', err.message);
+    console.error('\x1b[31m[@axiljsJS] Uncaught Exception:\x1b[0m', err.message);
     // Do NOT exit — keep the server running
 });
 process.on('unhandledRejection', (reason) => {
-    console.error('\x1b[31m[@axilJS] Unhandled Promise Rejection:\x1b[0m', reason);
+    console.error('\x1b[31m[@axiljsJS] Unhandled Promise Rejection:\x1b[0m', reason);
     // Do NOT exit — keep the server running
 });
 // ─── Load .env ────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ const config = (0, config_1.defineConfig)({
     PORT: { type: 'number', default: 3000 },
     HOST: { type: 'string', default: '127.0.0.1' },
     NODE_ENV: { type: 'string', default: 'development' },
-    JWT_SECRET: { type: 'string', default: '@axiljs-dev-secret-minimum-32-chars!!' },
+    JWT_SECRET: { type: 'string', default: '@axiljsjs-dev-secret-minimum-32-chars!!' },
     AI_PROVIDER: { type: 'string', default: 'ollama' },
     OPENAI_API_KEY: { type: 'string', required: false },
     ANTHROPIC_API_KEY: { type: 'string', required: false },
@@ -44,11 +44,11 @@ const config = (0, config_1.defineConfig)({
 const jwt = new auth_1.JWT(config.JWT_SECRET);
 // ─── Phase 4 Infrastructure ───────────────────────────────────────────────────
 // Structured logger
-const logger = new observability_1.Logger({ name: '@axilJS' });
+const logger = new observability_1.Logger({ name: '@axiljsJS' });
 // Prometheus metrics registry
 const metrics = new observability_1.MetricsRegistry();
 // Distributed tracer
-const tracer = new observability_1.Tracer({ serviceName: '@axiljs-example' });
+const tracer = new observability_1.Tracer({ serviceName: '@axiljsjs-example' });
 // In-process event bus
 const eventBus = new events_1.EventBus();
 // Email job queue
@@ -162,7 +162,7 @@ app.use((0, observability_1.observabilityMiddleware)({ metrics, tracer }));
  */
 app.get('/api/phase1/hello', (req, res) => {
     res.json({
-        message: 'Hello from @axilJS!',
+        message: 'Hello from @axiljsJS!',
         phase: 1,
         feature: 'Core HTTP Server'
     });
@@ -473,7 +473,7 @@ app.get('/api/phase2/sse', (req, res) => {
  * Body:
  * {
  *   "name":     "Tariq Mehmood",
- *   "email":    "tariq@@axil.dev",
+ *   "email":    "tariq@@axiljs.dev",
  *   "password": "secret123",
  *   "role":     "admin"         ← optional: admin | user | guest
  * }
@@ -512,7 +512,7 @@ app.post('/api/phase3/auth/register', (0, validation_1.validate)({ body: registe
  *
  * Body:
  * {
- *   "email":    "tariq@@axil.dev",
+ *   "email":    "tariq@@axiljs.dev",
  *   "password": "secret123"
  * }
  *
@@ -854,7 +854,7 @@ app.delete('/api/phase3/posts/:id', (0, auth_2.authenticate)(jwt), (req, res) =>
  * Body:
  * {
  *   "name":  "Tariq",
- *   "email": "tariq@@axil.dev",
+ *   "email": "tariq@@axiljs.dev",
  *   "role":  "admin",
  *   "age":   30,
  *   "tags":  ["js", "ts"]
@@ -893,7 +893,7 @@ app.post('/api/phase3/validate/fail', (0, validation_1.validate)({ body: validat
  * Body: any data — see what passes and what fails
  * {
  *   "username":   "tariq",
- *   "website":    "https://@axiljs.dev",
+ *   "website":    "https://@axiljsjs.dev",
  *   "score":      95,
  *   "active":     true,
  *   "tags":       ["js", "ts", "ai"],
@@ -1503,7 +1503,7 @@ app.get('/api/phase4/health', health.handler());
 /**
  * GET /api/phase4/health/live
  * Liveness probe — is the process alive?
- * Kubernetes uses this to decide if the pod should be @axilarted.
+ * Kubernetes uses this to decide if the pod should be @axiljsarted.
  * Always returns 200 if the event loop is responsive.
  */
 app.get('/api/phase4/health/live', health.livenessHandler());
@@ -1727,43 +1727,43 @@ const ragPipeline = new ai_1.RAGPipeline({
         overlap: 150
     }
 });
-// ── Index built-in @axilJS knowledge ──────────────────────────────────────────
+// ── Index built-in @axiljsJS knowledge ──────────────────────────────────────────
 async function indexBuiltinKnowledge() {
     const docs = (0, ai_1.loadFromText)([
-        `@axilJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
+        `@axiljsJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
      It provides a complete platform including runtime, framework, ORM, authentication,
      validation, testing, events, WebSockets, queues, observability, AI, and cloud deployment.
-     Unlike Express or NestJS, @axilJS is batteries-included — everything works out of the box.`,
-        `@axilJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
-     body parser, CORS, request logger, and the CLI with @axil create and @axil run commands.
+     Unlike Express or NestJS, @axiljsJS is batteries-included — everything works out of the box.`,
+        `@axiljsJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
+     body parser, CORS, request logger, and the CLI with @axiljs create and @axiljs run commands.
      The router supports static routes, dynamic parameters like :id, and wildcard routes.`,
-        `@axilJS Phase 2 adds configuration management with loadEnv and defineConfig, security
+        `@axiljsJS Phase 2 adds configuration management with loadEnv and defineConfig, security
      middleware including helmet, rate limiting, CSRF protection and sanitization, static file
      serving with ETag caching, Server-Sent Events streaming, and the package manager with
-     SHA-256 checksum verification and a @axil.lock file for deterministic installs.`,
-        `@axilJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
+     SHA-256 checksum verification and a @axiljs.lock file for deterministic installs.`,
+        `@axiljsJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
      builder, base repository with CRUD and pagination, database migrations, JWT authentication
      with HMAC-SHA256, password hashing with scrypt, role-based access control, and a
      schema-based validation library with v.string().email() and similar chainable APIs.`,
-        `@axilJS Phase 4 implements distributed systems including an in-process event bus with
+        `@axiljsJS Phase 4 implements distributed systems including an in-process event bus with
      wildcard subscriptions, a full RFC 6455 WebSocket server with rooms and broadcasting,
      message queue with priority and retry, cron scheduler, circuit breaker with three states,
      retry with exponential backoff, structured logging, Prometheus metrics, and distributed
      tracing with W3C Trace Context.`,
-        `@axilJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
+        `@axiljsJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
      and local LLMs via Ollama. It provides a RAG pipeline for retrieval-augmented generation,
      a vector store for semantic similarity search, an agent framework with tool calling using
      the ReAct reasoning pattern, built-in tools like calculator and datetime, and an MCP
      client for the Model Context Protocol.`,
-        `@axilJS CLI commands: @axil create <name> creates a new project, @axil run starts the
-     development server with hot reload using incremental TypeScript compilation, @axil build
-     compiles for production, @axil test discovers and runs test files, @axil deploy generates
-     Docker and Kubernetes manifests, @axil install manages packages, @axil doctor diagnoses issues.`,
-        `@axilJS is different from Node.js Express NestJS Deno and Bun because it provides every
+        `@axiljsJS CLI commands: @axiljs create <name> creates a new project, @axiljs run starts the
+     development server with hot reload using incremental TypeScript compilation, @axiljs build
+     compiles for production, @axiljs test discovers and runs test files, @axiljs deploy generates
+     Docker and Kubernetes manifests, @axiljs install manages packages, @axiljs doctor diagnoses issues.`,
+        `@axiljsJS is different from Node.js Express NestJS Deno and Bun because it provides every
      layer in one unified ecosystem. No need to assemble 40 packages from different teams.
      One install gives you HTTP server, ORM, auth, validation, testing, events, WebSockets,
      queue, observability, AI platform, and cloud deployment tools.`
-    ], '@axiljs-docs');
+    ], '@axiljsjs-docs');
     try {
         await ragPipeline.index(docs);
         logger.info('AI knowledge base indexed', {
@@ -1823,7 +1823,7 @@ const userDataTool = (0, ai_1.createTool)({
     handler: async () => ({
         totalUsers: users.length,
         totalPosts: posts.length,
-        note: 'Data from @axilJS in-memory store'
+        note: 'Data from @axiljsJS in-memory store'
     })
 });
 // All tools available to agents
@@ -1862,7 +1862,7 @@ app.get('/api/phase5/provider', (req, res) => {
  *
  * Body:
  * {
- *   "message": "What is @axilJS?",
+ *   "message": "What is @axiljsJS?",
  *   "system":  "You are a helpful assistant."
  * }
  */
@@ -1949,7 +1949,7 @@ app.post('/api/phase5/chat/conversation', async (req, res) => {
  *
  * Body:
  * {
- *   "message": "Explain what @axilJS is in detail",
+ *   "message": "Explain what @axiljsJS is in detail",
  *   "system":  "You are a helpful assistant."
  * }
  *
@@ -2127,7 +2127,7 @@ app.get('/api/phase5/rag/stats', (req, res) => {
  * Body:
  * {
  *   "texts": [
- *     "@axilJS supports PostgreSQL MySQL and SQLite databases.",
+ *     "@axiljsJS supports PostgreSQL MySQL and SQLite databases.",
  *     "The ORM provides migrations query builder and repository pattern."
  *   ],
  *   "source": "database-docs"
@@ -2165,7 +2165,7 @@ app.post('/api/phase5/rag/index', async (req, res) => {
  *
  * Body:
  * {
- *   "question": "What databases does @axilJS support?",
+ *   "question": "What databases does @axiljsJS support?",
  *   "topK":     3
  * }
  */
@@ -2213,7 +2213,7 @@ app.post('/api/phase5/rag/query', async (req, res) => {
  *
  * Body:
  * {
- *   "question": "What is Phase 4 of @axilJS?"
+ *   "question": "What is Phase 4 of @axiljsJS?"
  * }
  */
 app.post('/api/phase5/rag/stream', async (req, res) => {
@@ -2533,7 +2533,7 @@ app.post('/api/phase5/mcp/connect', async (req, res) => {
     try {
         const client = new ai_1.MCPClient({
             serverUrl: body.serverUrl,
-            clientName: '@axilJS-Postman-Test',
+            clientName: '@axiljsJS-Postman-Test',
             clientVersion: '0.1.0',
             timeoutMs: 5000
         });
@@ -3202,12 +3202,12 @@ app.post('/api/phase6/flags/evaluate-batch', (req, res) => {
 // ── Deployment ────────────────────────────────────────────────────────────────
 /**
  * GET /api/phase6/deploy/info
- * Information about the @axil deploy command
+ * Information about the @axiljs deploy command
  */
 app.get('/api/phase6/deploy/info', (req, res) => {
     res.json({
         feature: 'Deployment Toolkit',
-        command: '@axil deploy',
+        command: '@axiljs deploy',
         generates: ['Dockerfile', 'deployment.yaml', 'deploy.sh'],
         kubernetes: {
             resources: [
@@ -3218,7 +3218,7 @@ app.get('/api/phase6/deploy/info', (req, res) => {
         },
         workflow: [
             '1. npm run build          → compile TypeScript',
-            '2. @axil deploy            → generate deploy/ files',
+            '2. @axiljs deploy            → generate deploy/ files',
             '3. docker build           → build container image',
             '4. docker push            → push to registry',
             '5. kubectl apply          → deploy to Kubernetes',
@@ -3354,7 +3354,7 @@ app.get('/api/phase6/dashboard/html', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>@axilJS Dashboard</title>
+  <title>@axiljsJS Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -3443,7 +3443,7 @@ app.get('/api/phase6/dashboard/html', (req, res) => {
 </head>
 <body>
 
-  <h1>⚡ @axilJS Dashboard</h1>
+  <h1>⚡ @axiljsJS Dashboard</h1>
   <p class="subtitle">Live monitoring — auto-refreshes every 3 seconds</p>
 
   <div class="grid" id="grid">
@@ -3613,7 +3613,7 @@ app.use((0, memory_1.memoryMiddleware)({
     logFlagged: true
 }));
 // Track the audit logs array as a cache
-// @axilJS will auto-prune if it grows beyond 1000 entries
+// @axiljsJS will auto-prune if it grows beyond 1000 entries
 (0, memory_1.trackCache)('audit-logs-cache', new Map(), 1000);
 // =============================================================================
 //  MEMORY MANAGEMENT — Live monitoring and leak prevention
@@ -3699,7 +3699,7 @@ app.get('/api/memory/reports', (req, res) => {
  */
 app.get('/', (req, res) => {
     res.json({
-        name: '@axilJS Testing Server',
+        name: '@axiljsJS Testing Server',
         version: '0.1.0',
         author: 'Tariq Mehmood',
         tip: 'Visit GET /api for all endpoints'
@@ -3711,7 +3711,7 @@ app.get('/', (req, res) => {
  */
 app.get('/api', (req, res) => {
     res.json({
-        name: '@axilJS — Phase 1, 2, 3, 4 API',
+        name: '@axiljsJS — Phase 1, 2, 3, 4 API',
         server: `http://localhost:${config.PORT}`,
         phases: {
             phase1: {
@@ -3872,7 +3872,7 @@ async function bootstrap() {
     // ── 1. Start the HTTP server first ───────────────────────────────────────────
     // This creates and binds the internal Node.js server to port 3000
     await app.listen(config.PORT, config.HOST);
-    // Index built-in @axilJS knowledge into RAG
+    // Index built-in @axiljsJS knowledge into RAG
     await indexBuiltinKnowledge();
     // ── 2. Get the SAME server that is already listening on port 3000 ────────────
     // WSServer must attach to this server — not a new one
@@ -3897,7 +3897,7 @@ async function bootstrap() {
         client.sendJSON({
             type: 'welcome',
             clientId: client.id,
-            message: 'Connected to @axilJS WebSocket server',
+            message: 'Connected to @axiljsJS WebSocket server',
             timestamp: Date.now()
         });
         // Auto-join general room

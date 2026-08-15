@@ -2,13 +2,13 @@
  * Lock file management.
  * Ensures deterministic, reproducible installs.
  *
- * The lock file (@axil.lock) records:
+ * The lock file (@axiljs.lock) records:
  *   - Exact resolved version of every package
  *   - SHA-256 checksum for integrity verification
  *   - Dependency tree for each package
  *
- * If @axil.lock exists → use exact versions from it
- * If @axil.lock missing → resolve versions, create lock file
+ * If @axiljs.lock exists → use exact versions from it
+ * If @axiljs.lock missing → resolve versions, create lock file
  */
 export interface LockEntry {
     version: string;

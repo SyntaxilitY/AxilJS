@@ -4,9 +4,9 @@
  * No View layer needed — res object handles formatting.
  */
 
-import type { axilRequest as Request, axilResponse as Response } from '@axil/core'
-import { JWT, hashPassword, verifyPassword } from '@axil/auth'
-import { v, validate } from '@axil/validation'
+import type { axilRequest as Request, axilResponse as Response } from '@axiljs/core'
+import { JWT, hashPassword, verifyPassword } from '@axiljs/auth'
+import { v, validate } from '@axiljs/validation'
 import { UserModel }   from '../models/User'
 import { route }       from '../utils/route'
 

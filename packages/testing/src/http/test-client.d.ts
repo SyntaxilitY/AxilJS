@@ -1,6 +1,6 @@
 /**
  * HTTP test client.
- * Makes requests to a running @axilJS application in tests.
+ * Makes requests to a running @axiljsJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:
@@ -10,7 +10,7 @@
  *   expect(res.status).toBe(200)
  *   expect(res.body.data).toHaveLength(1)
  */
-import { Application } from '@axil/core';
+import { Application } from '@axiljs/core';
 export interface TestResponse {
     status: number;
     headers: Record<string, string | string[]>;

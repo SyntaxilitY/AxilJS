@@ -1,10 +1,10 @@
 /**
- * @axilJS Response implementation.
+ * @axiljsJS Response implementation.
  * Wraps Node.js ServerResponse with a fluent, developer-friendly API.
  */
 import { ServerResponse } from 'http';
-import { @axilResponse } from '@axil/common';
-export declare class Response implements @axilResponse {
+import { @axiljsResponse } from '@axiljs/common';
+export declare class Response implements @axiljsResponse {
     raw: ServerResponse;
     statusCode: number;
     sent: boolean;
@@ -13,12 +13,12 @@ export declare class Response implements @axilResponse {
      * Set HTTP status code.
      * Returns this for chaining: res.status(404).json({ error: 'Not found' })
      */
-    status(code: number): @axilResponse;
+    status(code: number): @axiljsResponse;
     /**
      * Set a response header.
      * Returns this for chaining: res.header('X-Custom', 'value').json({})
      */
-    header(name: string, value: string): @axilResponse;
+    header(name: string, value: string): @axiljsResponse;
     /**
      * Send a JSON response.
      * Automatically sets Content-Type to application/json.

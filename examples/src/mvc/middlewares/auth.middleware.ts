@@ -2,8 +2,8 @@
  * Auth Middleware — Verifies JWT and attaches user to request
  */
 
-import { MiddlewareFn } from '@axil/common'
-import { JWT }          from '@axil/auth'
+import { MiddlewareFn } from '@axiljs/common'
+import { JWT }          from '@axiljs/auth'
 import { UserModel }    from '../models/User'
 
 export function createAuthMiddleware(jwt: JWT): MiddlewareFn {

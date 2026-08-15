@@ -1,5 +1,5 @@
 /**
- * @axil/auth - Public API
+ * @axiljs/auth - Public API
  */
 export { JWT } from './jwt/jwt';
 export type { JWTPayload, JWTSignOptions, JWTVerifyOptions } from './jwt/jwt';

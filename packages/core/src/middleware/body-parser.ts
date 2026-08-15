@@ -8,7 +8,7 @@
  *   text/plain                → raw string
  */
 
-import { MiddlewareFn, BadRequestError } from '@axil/common';
+import { MiddlewareFn, BadRequestError } from '@axiljs/common';
 import { Request } from '../http/request';
 
 /**

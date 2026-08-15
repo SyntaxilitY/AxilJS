@@ -4,9 +4,9 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerProductRoutes = registerProductRoutes;
-const core_1 = require("@axil/core");
-const auth_1 = require("@axil/auth");
-const validation_1 = require("@axil/validation");
+const core_1 = require("@axiljs/core");
+const auth_1 = require("@axiljs/auth");
+const validation_1 = require("@axiljs/validation");
 const ProductService_1 = require("../services/ProductService");
 function registerProductRoutes(app, jwt) {
     const products = new ProductService_1.ProductService();

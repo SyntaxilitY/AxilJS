@@ -8,7 +8,7 @@ import { axilEvent } from './types';
 
 // ─── Metadata Key ─────────────────────────────────────────────────────────────
 
-const EVENT_HANDLERS_KEY = '__@axiljs_event_handlers__';
+const EVENT_HANDLERS_KEY = '__@axiljsjs_event_handlers__';
 
 // ─── Metadata Type ────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ interface EventHandlerMeta {
  *
  * Usage:
  *   @OnEvent('user.created')
- *   async handleUserCreated(event: @axilEvent) { ... }
+ *   async handleUserCreated(event: @axiljsEvent) { ... }
  */
 export function OnEvent(eventType: string) {
   // Return a plain function — avoids MethodDecorator signature conflicts
@@ -69,7 +69,7 @@ export function registerEventHandlers(
 
     if (typeof method !== 'function') {
       console.warn(
-        `[@axilJS Events] '${methodName}' is not a function on ` +
+        `[@axiljsJS Events] '${methodName}' is not a function on ` +
         `${instance.constructor.name}`
       );
       continue;
@@ -78,7 +78,7 @@ export function registerEventHandlers(
     bus.on(eventType, (event: axilEvent) => method.call(instance, event));
 
     console.log(
-      `\x1b[90m[@axilJS Events]\x1b[0m Registered: ` +
+      `\x1b[90m[@axiljsJS Events]\x1b[0m Registered: ` +
       `${instance.constructor.name}.${methodName} → '${eventType}'`
     );
   }

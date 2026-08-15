@@ -45,7 +45,7 @@ export async function runTests(pattern?: string): Promise<void> {
     }
   }
 
-  const { runTests: run } = require('@axil/testing')
+  const { runTests: run } = require('@axiljs/testing')
   const passed = await run()
 
   process.exit(passed ? 0 : 1)

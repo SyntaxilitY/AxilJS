@@ -1,12 +1,12 @@
 "use strict";
 /**
- * Database connection using @axil/orm
+ * Database connection using @axiljs/orm
  * Configured for NeonDB (PostgreSQL with SSL)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.connectDB = connectDB;
 exports.getDB = getDB;
-const orm_1 = require("@axil/orm");
+const orm_1 = require("@axiljs/orm");
 const config_1 = require("./config");
 let db;
 async function connectDB() {

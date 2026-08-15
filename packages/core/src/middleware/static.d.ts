@@ -8,7 +8,7 @@
  *   - Cache headers (ETag, Last-Modified)
  *   - Range requests (partial content for video/audio)
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface StaticOptions {
     root: string;
     prefix?: string;

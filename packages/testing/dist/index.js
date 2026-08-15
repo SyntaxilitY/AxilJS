@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/testing - Public API
+ * @axiljs/testing - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createTestClient = exports.TestClient = exports.AssertionError = exports.expect = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;

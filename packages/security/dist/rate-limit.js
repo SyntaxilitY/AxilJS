@@ -11,7 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TooManyRequestsError = void 0;
 exports.rateLimit = rateLimit;
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 // Store all client records
 // In Phase 4, this becomes a distributed Redis store
 const store = new Map();

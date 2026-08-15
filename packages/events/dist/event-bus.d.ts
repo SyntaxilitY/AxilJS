@@ -12,7 +12,7 @@
  *   })
  *
  *   // Publish
- *   await bus.emit('user.created', { id: 1, email: 'tariq@@axil.dev' })
+ *   await bus.emit('user.created', { id: 1, email: 'tariq@@axiljs.dev' })
  *
  *   // Wildcard subscription
  *   bus.on('user.*', (event) => console.log('User event:', event.type))

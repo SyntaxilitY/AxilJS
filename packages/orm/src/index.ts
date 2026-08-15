@@ -1,5 +1,5 @@
 /**
- * @axil/orm - Public API
+ * @axiljs/orm - Public API
  */
 
 // Connection

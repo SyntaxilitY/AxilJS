@@ -9,7 +9,7 @@ import { EventBus } from './event-bus';
  *
  * Usage:
  *   @OnEvent('user.created')
- *   async handleUserCreated(event: @axilEvent) { ... }
+ *   async handleUserCreated(event: @axiljsEvent) { ... }
  */
 export declare function OnEvent(eventType: string): (target: any, propertyKey: string | symbol) => void;
 /**

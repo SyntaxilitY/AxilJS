@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/security - Public API
+ * @axiljs/security - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sanitizeObject = exports.escapeHtml = exports.sanitize = exports.csrf = exports.TooManyRequestsError = exports.rateLimit = exports.helmet = void 0;

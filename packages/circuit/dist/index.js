@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/circuit - Public API
+ * @axiljs/circuit - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.withTimeout = exports.retry = exports.CircuitOpenError = exports.CircuitBreaker = void 0;

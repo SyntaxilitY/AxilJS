@@ -14,7 +14,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.auditLog = auditLog;
 exports.auditMiddleware = auditMiddleware;
-const events_1 = require("@axil/events");
+const events_1 = require("@axiljs/events");
 // ─── auditLog ─────────────────────────────────────────────────────────────────
 /**
  * Log an auditable event on the global event bus.

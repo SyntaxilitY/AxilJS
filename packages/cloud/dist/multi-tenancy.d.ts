@@ -7,7 +7,7 @@
  *   app.use(multiTenancy({ strategy: 'header' }))
  *   // req.locals.tenant = { id: 'acme-corp', name: 'Acme Corp' }
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export type TenantResolutionStrategy = 'header' | 'subdomain' | 'jwt';
 export interface Tenant {
     id: string;

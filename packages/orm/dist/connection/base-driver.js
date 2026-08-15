@@ -23,7 +23,7 @@ class BaseDriver {
      */
     log(sql, params) {
         if (this.config.logging) {
-            console.log(`\x1b[90m[@axilJS ORM]\x1b[0m ${sql}`, params?.length ? params : '');
+            console.log(`\x1b[90m[@axiljsJS ORM]\x1b[0m ${sql}`, params?.length ? params : '');
         }
     }
 }

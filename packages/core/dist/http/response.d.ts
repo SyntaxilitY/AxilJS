@@ -22,7 +22,7 @@
  * No import needed. No configuration. Built into the framework.
  */
 import { ServerResponse } from 'http';
-import { axilResponse } from '@axil/common';
+import { axilResponse } from '@axiljs/common';
 export declare class Response implements axilResponse {
     raw: ServerResponse;
     statusCode: number;

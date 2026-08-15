@@ -21,7 +21,7 @@ declare const trackedEmitters: Set<WeakRef<EventEmitter>>;
  *
  * Usage:
  *   const timer = trackTimer(setTimeout(() => doWork(), 5000))
- *   // @axilJS now knows about this timer and can clean it up
+ *   // @axiljsJS now knows about this timer and can clean it up
  */
 export declare function trackTimer(timer: ReturnType<typeof setTimeout>): ReturnType<typeof setTimeout>;
 /**
@@ -46,7 +46,7 @@ export declare function untrackInterval(interval: ReturnType<typeof setInterval>
 export declare function trackCache<T extends Map<any, any> | Set<any>>(name: string, cache: T, maxSize?: number): T;
 /**
  * Register an EventEmitter for listener leak detection.
- * Node.js warns at 10 listeners — @axilJS monitors and alerts.
+ * Node.js warns at 10 listeners — @axiljsJS monitors and alerts.
  *
  * Usage:
  *   trackEmitter(myEmitter, 'MyService')

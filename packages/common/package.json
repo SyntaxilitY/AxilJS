@@ -1,7 +1,7 @@
 {
-  "name": "@axil/common",
+  "name": "@axiljs/common",
   "version": "0.1.0",
-  "description": "@axilJS shared types and interfaces",
+  "description": "AxilJS shared types, interfaces, and error classes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -11,5 +11,29 @@
   "devDependencies": {
     "typescript": "^5.4.0",
     "@types/node": "^20.0.0"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "keywords": [
+    "axiljs",
+    "backend",
+    "javascript",
+    "typescript",
+    "nodejs"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
 }

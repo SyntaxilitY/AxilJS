@@ -180,7 +180,7 @@ export class QueryBuilder {
    * Build an INSERT query.
    *
    * Usage:
-   *   await db.insert('users', { name: 'Tariq', email: 'tariq@@axil.dev' })
+   *   await db.insert('users', { name: 'Tariq', email: 'tariq@@axiljs.dev' })
    */
   insert(table: string, data: Record<string, unknown> | Record<string, unknown>[]): QueryBuilder {
     this.operation = 'INSERT';

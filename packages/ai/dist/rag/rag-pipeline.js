@@ -12,11 +12,11 @@
  *
  *   // Index documents
  *   await rag.index([
- *     { id: '1', content: '@axilJS is a backend framework...', metadata: {} }
+ *     { id: '1', content: '@axiljsJS is a backend framework...', metadata: {} }
  *   ])
  *
  *   // Query
- *   const answer = await rag.query('What is @axilJS?')
+ *   const answer = await rag.query('What is @axiljsJS?')
  *   console.log(answer.response)
  *   console.log(answer.sources) // Which documents were used
  */
@@ -63,10 +63,10 @@ class RAGPipeline {
      * @param documents  Raw documents to index
      */
     async index(documents) {
-        console.log(`\x1b[36m[@axilJS AI]\x1b[0m Indexing ${documents.length} document(s)...`);
+        console.log(`\x1b[36m[@axiljsJS AI]\x1b[0m Indexing ${documents.length} document(s)...`);
         // Step 1: Chunk documents
         const chunks = this.chunker.chunk(documents);
-        console.log(`\x1b[90m[@axilJS AI]\x1b[0m Created ${chunks.length} chunk(s)`);
+        console.log(`\x1b[90m[@axiljsJS AI]\x1b[0m Created ${chunks.length} chunk(s)`);
         // Step 2: Generate embeddings for all chunks
         // Batch in groups of 20 to avoid rate limits
         const BATCH_SIZE = 20;
@@ -93,10 +93,10 @@ class RAGPipeline {
             }));
             await this.vectorStore.add(vectorDocs);
             processed += batch.length;
-            process.stdout.write(`\r\x1b[90m[@axilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`);
+            process.stdout.write(`\r\x1b[90m[@axiljsJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`);
         }
         console.log('');
-        console.log(`\x1b[32m[@axilJS AI]\x1b[0m Indexed ${documents.length} documents ` +
+        console.log(`\x1b[32m[@axiljsJS AI]\x1b[0m Indexed ${documents.length} documents ` +
             `(${chunks.length} chunks, ${this.totalEmbeddingTokens} tokens)`);
         return { documentsIndexed: documents.length, chunksCreated: chunks.length };
     }

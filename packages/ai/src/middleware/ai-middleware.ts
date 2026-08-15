@@ -1,5 +1,5 @@
 /**
- * AI middleware for @axilJS applications.
+ * AI middleware for @axiljsJS applications.
  * Provides AI-powered HTTP endpoints out of the box.
  *
  * Usage:
@@ -8,8 +8,8 @@
  *   app.post('/embed', aiEmbed({ provider }))
  */
 
-import { RouteHandler } from '@axil/common';
-import { createSSE } from '@axil/core';
+import { RouteHandler } from '@axiljs/common';
+import { createSSE } from '@axiljs/core';
 import { AIProvider, Message } from '../types';
 import { Agent } from '../agents/agent';
 import { Tool } from '../agents/tool';

@@ -3,8 +3,8 @@
  * Uses AxilJS built-in SyntaxilitY Response Manager.
  */
 
-import type { axilRequest as Request, axilResponse as Response } from '@axil/core'
-import { v, validate } from '@axil/validation'
+import type { axilRequest as Request, axilResponse as Response } from '@axiljs/core'
+import { v, validate } from '@axiljs/validation'
 import { CommentModel } from '../models/Comment'
 import { PostModel }    from '../models/Post'
 import { UserModel }    from '../models/User'

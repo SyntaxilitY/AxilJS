@@ -12,10 +12,10 @@
  * Or:  npx ts-node src/mvc/main.ts
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-const core_1 = require("@axil/core");
-const security_1 = require("@axil/security");
-const auth_1 = require("@axil/auth");
-const observability_1 = require("@axil/observability");
+const core_1 = require("@axiljs/core");
+const security_1 = require("@axiljs/security");
+const auth_1 = require("@axiljs/auth");
+const observability_1 = require("@axiljs/observability");
 const app_config_1 = require("./config/app.config");
 const auth_routes_1 = require("./routes/auth.routes");
 const post_routes_1 = require("./routes/post.routes");

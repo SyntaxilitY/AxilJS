@@ -7,7 +7,7 @@
  * This is a defense-in-depth layer.
  */
 
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 
 // ─── HTML Escaping ────────────────────────────────────────────────────────────
 

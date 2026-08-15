@@ -4,15 +4,15 @@
  * Served at /dashboard.
  */
 
-import { RouteHandler } from '@axil/common';
-import { MetricsRegistry } from '@axil/observability';
+import { RouteHandler } from '@axiljs/common';
+import { MetricsRegistry } from '@axiljs/observability';
 
 export function createDashboard(registry: MetricsRegistry): RouteHandler {
   return (req, res) => {
     const html = `<!DOCTYPE html>
 <html>
 <head>
-  <title>@axilJS Dashboard</title>
+  <title>@axiljsJS Dashboard</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; padding: 20px; background: #0f172a; color: #e2e8f0; }
     h1 { color: #60a5fa; }
@@ -22,7 +22,7 @@ export function createDashboard(registry: MetricsRegistry): RouteHandler {
   </style>
 </head>
 <body>
-  <h1>@axilJS Monitoring Dashboard</h1>
+  <h1>@axiljsJS Monitoring Dashboard</h1>
   <div class="card">
     <h2>Live Metrics</h2>
     <pre id="metrics">${registry.toPrometheus()}</pre>

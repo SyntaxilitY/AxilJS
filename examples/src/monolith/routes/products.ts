@@ -2,10 +2,10 @@
  * Product Routes
  */
 
-import type { axilRequest as Req, axilResponse as Res } from '@axil/core'
-import { Application, Response } from '@axil/core'
-import { JWT, authenticate, requireRole } from '@axil/auth'
-import { v, validate } from '@axil/validation'
+import type { axilRequest as Req, axilResponse as Res } from '@axiljs/core'
+import { Application, Response } from '@axiljs/core'
+import { JWT, authenticate, requireRole } from '@axiljs/auth'
+import { v, validate } from '@axiljs/validation'
 import { ProductService } from '../services/ProductService'
 
 export function registerProductRoutes(app: Application, jwt: JWT) {

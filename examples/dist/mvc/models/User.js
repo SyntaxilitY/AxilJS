@@ -1,7 +1,7 @@
 "use strict";
 /**
  * User Model
- * In a real app this would be a database entity via @axil/orm.
+ * In a real app this would be a database entity via @axiljs/orm.
  * Here we use in-memory store to keep the example self-contained.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

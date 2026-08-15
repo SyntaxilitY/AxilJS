@@ -1,5 +1,5 @@
 /**
- * @axilJS Application - The main class.
+ * @axiljsJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -9,7 +9,7 @@
  *   await app.listen()
  */
 import { Server } from 'http';
-import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axil/common';
+import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axiljs/common';
 import { Router } from './router/router';
 export declare class Application {
     private config;

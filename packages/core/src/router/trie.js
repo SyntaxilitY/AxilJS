@@ -102,7 +102,7 @@ class Trie {
             const result = this.search(node.paramChild, segments, index + 1, method, params);
             if (result)
                 return result;
-            // Backtrack - @axilore params if this path didn't work
+            // Backtrack - @axiljsore params if this path didn't work
             Object.assign(params, savedParams);
             Object.keys(params).forEach(key => {
                 if (!(key in savedParams))

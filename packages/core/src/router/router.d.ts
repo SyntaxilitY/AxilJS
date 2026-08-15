@@ -1,5 +1,5 @@
 /**
- * @axilJS Router.
+ * @axiljsJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
@@ -9,7 +9,7 @@
  *   router.post('/users', createUserHandler)
  *   router.get('/users/:id', getUserHandler)
  */
-import { RouteHandler, MiddlewareFn } from '@axil/common';
+import { RouteHandler, MiddlewareFn } from '@axiljs/common';
 interface RouteEntry {
     handler: RouteHandler;
     middleware: MiddlewareFn[];

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/validation - Public API
+ * @axiljs/validation - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validate = exports.v = void 0;

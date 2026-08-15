@@ -2,7 +2,7 @@
  * Built-in CORS middleware.
  * Handles Cross-Origin Resource Sharing headers.
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface CorsOptions {
     origin?: string | string[] | ((origin: string) => boolean);
     methods?: string[];

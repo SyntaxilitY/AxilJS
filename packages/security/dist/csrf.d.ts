@@ -11,7 +11,7 @@
  *
  * Safe methods (GET, HEAD, OPTIONS) are always allowed.
  */
-import { MiddlewareFn } from '@axil/common';
+import { MiddlewareFn } from '@axiljs/common';
 export interface CsrfOptions {
     cookieName?: string;
     headerName?: string;

@@ -68,7 +68,7 @@ function helmet(options = {}) {
         if (referrerPolicy !== false) {
             res.header('Referrer-Policy', referrerPolicy);
         }
-        // Permissions-Policy (@axilrict browser APIs)
+        // Permissions-Policy (@axiljsrict browser APIs)
         if (permissionsPolicy) {
             res.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
         }

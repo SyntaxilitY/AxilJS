@@ -13,7 +13,7 @@
  *   })
  *
  *   // Publish
- *   await bus.emit('user.created', { id: 1, email: 'tariq@@axil.dev' })
+ *   await bus.emit('user.created', { id: 1, email: 'tariq@@axiljs.dev' })
  *
  *   // Wildcard subscription
  *   bus.on('user.*', (event) => console.log('User event:', event.type))
@@ -37,7 +37,7 @@ class EventBus {
     constructor(options = {}) {
         this.middleware = options.middleware || [];
         this.onError = options.onError || ((error, event) => {
-            console.error(`\x1b[31m[@axilJS Events]\x1b[0m Handler error for '${event.type}':`, error.message);
+            console.error(`\x1b[31m[@axiljsJS Events]\x1b[0m Handler error for '${event.type}':`, error.message);
         });
     }
     // ─── Subscribe ───────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CommentController = void 0;
-const validation_1 = require("@axil/validation");
+const validation_1 = require("@axiljs/validation");
 const Comment_1 = require("../models/Comment");
 const Post_1 = require("../models/Post");
 const User_1 = require("../models/User");

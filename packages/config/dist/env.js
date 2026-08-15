@@ -46,7 +46,7 @@ function loadEnv(options = {}) {
             }
         }
         catch (error) {
-            console.warn(`[@axilJS Config] Warning: Could not load env file ${filePath}:`, error.message);
+            console.warn(`[@axiljsJS Config] Warning: Could not load env file ${filePath}:`, error.message);
         }
     }
 }

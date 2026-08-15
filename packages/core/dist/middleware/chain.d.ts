@@ -5,7 +5,7 @@
  * This is the core of the middleware system.
  * Works like Express/Koa middleware but with async/await support built-in.
  */
-import { MiddlewareFn, ErrorMiddlewareFn, RouteHandler, axilRequest, axilResponse } from '@axil/common';
+import { MiddlewareFn, ErrorMiddlewareFn, RouteHandler, axilRequest, axilResponse } from '@axiljs/common';
 export declare class MiddlewareChain {
     /**
      * Execute a list of middleware functions followed by a route handler.

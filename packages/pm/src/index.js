@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/pm - Public API
+ * @axiljs/pm - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RegistryClient = exports.verifyChecksum = exports.calculateChecksum = exports.LockFileManager = exports.Installer = void 0;

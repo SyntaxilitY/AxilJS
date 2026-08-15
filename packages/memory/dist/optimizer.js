@@ -67,7 +67,7 @@ class MemoryOptimizer {
             // Only clear non-essential cached modules
             // Never clear core modules or currently-active package modules
             if (key.includes('node_modules') &&
-                !key.includes('@@axil') &&
+                !key.includes('@@axiljs') &&
                 !key.includes('typescript') &&
                 // Check if it has been accessed recently via exports
                 require.cache[key]?.exports &&

@@ -50,12 +50,12 @@ export class FeatureFlagManager {
       return false;
     }
 
-    // Tenant @axilriction
+    // Tenant @axiljsriction
     if (flag.allowedTenants && context.tenantId) {
       if (!flag.allowedTenants.includes(context.tenantId)) return false;
     }
 
-    // User @axilriction
+    // User @axiljsriction
     if (flag.allowedUsers && context.userId) {
       if (!flag.allowedUsers.includes(context.userId)) return false;
     }

@@ -1,5 +1,5 @@
 /**
- * @axil/observability - Public API
+ * @axiljs/observability - Public API
  */
 
 // Logging

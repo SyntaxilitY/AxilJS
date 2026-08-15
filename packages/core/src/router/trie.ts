@@ -9,7 +9,7 @@
  *   Wildcard:         /files/*
  */
 
-import { RouteParams } from '@axil/common';
+import { RouteParams } from '@axiljs/common';
 
 // ─── Trie Node ────────────────────────────────────────────────────────────────
 
@@ -175,7 +175,7 @@ export class Trie<T> {
 
       if (result) return result;
 
-      // Backtrack - @axilore params if this path didn't work
+      // Backtrack - @axiljsore params if this path didn't work
       Object.assign(params, savedParams);
       Object.keys(params).forEach(key => {
         if (!(key in savedParams)) delete params[key];

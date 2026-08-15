@@ -1,10 +1,10 @@
 /**
- * @axilJS Test Runner.
+ * @axiljsJS Test Runner.
  * Minimal, fast test runner with built-in assertions.
  * Zero dependencies - pure Node.js.
  *
  * Usage:
- *   import { describe, it, expect } from '@axil/testing'
+ *   import { describe, it, expect } from '@axiljs/testing'
  *
  *   describe('UserService', () => {
  *     it('should create a user', async () => {

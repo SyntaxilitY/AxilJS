@@ -6,8 +6,8 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
-const auth_1 = require("@axil/auth");
-const validation_1 = require("@axil/validation");
+const auth_1 = require("@axiljs/auth");
+const validation_1 = require("@axiljs/validation");
 const User_1 = require("../models/User");
 const route_1 = require("../utils/route");
 const registerSchema = validation_1.v.object({

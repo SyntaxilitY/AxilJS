@@ -1,5 +1,5 @@
 /**
- * @axil/cli — Public API
+ * @axiljs/cli — Public API
  * Exports CLI utilities for programmatic use.
  */
 export { createProject } from './commands/create';

@@ -63,7 +63,7 @@ export abstract class BaseDriver {
   protected log(sql: string, params?: unknown[]): void {
     if (this.config.logging) {
       console.log(
-        `\x1b[90m[@axilJS ORM]\x1b[0m ${sql}`,
+        `\x1b[90m[@axiljsJS ORM]\x1b[0m ${sql}`,
         params?.length ? params : ''
       );
     }

@@ -76,7 +76,7 @@ function generatePackageJson(name: string): string {
       test:  'axil test'
     },
     dependencies: {
-      '@axil/core': '^0.1.0'
+      '@axiljs/core': '^0.1.0'
     },
     devDependencies: {
       typescript:   '^5.4.0',
@@ -137,8 +137,8 @@ function generateMainFile(name: string): string {
  * Built with AxilJS by SyntaxilitY
  */
 
-import { Application } from '@axil/core'
-import { cors } from '@axil/core'
+import { Application } from '@axiljs/core'
+import { cors } from '@axiljs/core'
 import { appConfig } from './config/app.config'
 import { UsersController } from './modules/users/controllers/users.controller'
 
@@ -162,7 +162,7 @@ function generateAppConfig(): string {
  * Application configuration.
  */
 
-import { AppConfig } from '@axil/core'
+import { AppConfig } from '@axiljs/core'
 
 export const appConfig: AppConfig = {
   server: {
@@ -181,7 +181,7 @@ function generateUsersController(): string {
  * Users Controller.
  */
 
-import { Application, REstRequest, REstResponse } from '@axil/core'
+import { Application, REstRequest, REstResponse } from '@axiljs/core'
 import { UsersService } from '../services/users.service'
 
 export class UsersController {
@@ -230,10 +230,10 @@ export class UsersController {
 function generateUsersService(): string {
   return `/**
  * Users Service.
- * In-memory store — replaced by @axil/orm in production.
+ * In-memory store — replaced by @axiljs/orm in production.
  */
 
-import { NotFoundError } from '@axil/core'
+import { NotFoundError } from '@axiljs/core'
 
 export interface User {
   id: string

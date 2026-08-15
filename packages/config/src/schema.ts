@@ -14,7 +14,7 @@
  *   config.DEBUG      // boolean
  */
 
-import { ValidationError } from '@axil/common';
+import { ValidationError } from '@axiljs/common';
 
 // ─── Schema Field Types ───────────────────────────────────────────────────────
 

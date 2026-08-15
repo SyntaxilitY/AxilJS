@@ -1,7 +1,7 @@
 "use strict";
 /**
  * HTTP test client.
- * Makes requests to a running @axilJS application in tests.
+ * Makes requests to a running @axiljsJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:

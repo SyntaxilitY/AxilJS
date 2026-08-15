@@ -3,7 +3,7 @@
  * Triggers Node.js GC programmatically and safely.
  *
  * Node.js exposes global.gc() ONLY when started with --expose-gc flag.
- * @axilJS handles both cases gracefully.
+ * @axiljsJS handles both cases gracefully.
  */
 /**
  * Check if manual GC is available.

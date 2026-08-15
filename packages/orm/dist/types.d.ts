@@ -47,8 +47,8 @@ export interface ColumnDefinition {
     references?: {
         table: string;
         column: string;
-        onDelete?: 'CASCADE' | 'SET NULL' | '@axilRICT' | 'NO ACTION';
-        onUpdate?: 'CASCADE' | 'SET NULL' | '@axilRICT' | 'NO ACTION';
+        onDelete?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
+        onUpdate?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
     };
 }
 export interface EntityMetadata {

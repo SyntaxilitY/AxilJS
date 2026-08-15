@@ -1,5 +1,5 @@
 /**
- * @axilJS Application - The main class.
+ * @axiljsJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -17,7 +17,7 @@ import {
   RouteHandler,
   HttpMethod,
   NotFoundError
-} from '@axil/common';
+} from '@axiljs/common';
 
 import { Request } from './http/request';
 import { Response } from './http/response';
@@ -157,7 +157,7 @@ export class Application {
     rawReq: IncomingMessage,
     rawRes: ServerResponse
   ): Promise<void> {
-    // Create @axilJS request and response objects
+    // Create @axiljsJS request and response objects
     const req = new Request(rawReq);
     const res = new Response(rawRes);
 

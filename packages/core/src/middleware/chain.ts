@@ -13,7 +13,7 @@ import {
   axilRequest,
   axilResponse,
   axilError
-} from '@axil/common';
+} from '@axiljs/common';
 
 export class MiddlewareChain {
   /**

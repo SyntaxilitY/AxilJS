@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axil/config - Public API
+ * @axiljs/config - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.defineConfig = exports.loadEnv = void 0;

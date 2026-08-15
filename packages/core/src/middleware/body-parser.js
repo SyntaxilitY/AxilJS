@@ -10,7 +10,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bodyParser = bodyParser;
-const common_1 = require("@axil/common");
+const common_1 = require("@axiljs/common");
 /**
  * Create body parser middleware.
  *

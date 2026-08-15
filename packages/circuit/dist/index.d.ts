@@ -1,5 +1,5 @@
 /**
- * @axil/circuit - Public API
+ * @axiljs/circuit - Public API
  */
 export { CircuitBreaker, CircuitOpenError } from './circuit-breaker';
 export type { CircuitBreakerOptions, CircuitState } from './circuit-breaker';

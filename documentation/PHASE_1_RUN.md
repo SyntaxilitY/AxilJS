@@ -1,5 +1,5 @@
-# 1. Clone/create the @axiljs directory
-mkdir @axiljs && cd @axiljs
+# 1. Clone/create the @axiljsjs directory
+mkdir @axiljsjs && cd @axiljsjs
 
 # 2. Copy all files into their locations
 
@@ -16,7 +16,7 @@ cd packages/cli
 npm link
 
 # 6. Test it
-@axil create my-test-app
+@axiljs create my-test-app
 cd my-test-app
 npm install
 npm run dev

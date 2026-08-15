@@ -42,7 +42,7 @@ function loadFromFiles(filePaths) {
     const documents = [];
     for (const filePath of filePaths) {
         if (!(0, fs_1.existsSync)(filePath)) {
-            console.warn(`[@axilJS AI] File not found: ${filePath}`);
+            console.warn(`[@axiljsJS AI] File not found: ${filePath}`);
             continue;
         }
         try {
@@ -70,7 +70,7 @@ function loadFromFiles(filePaths) {
             });
         }
         catch (error) {
-            console.warn(`[@axilJS AI] Could not load file ${filePath}:`, error.message);
+            console.warn(`[@axiljsJS AI] Could not load file ${filePath}:`, error.message);
         }
     }
     return documents;
@@ -94,7 +94,7 @@ async function loadFromUrls(urls) {
             });
         }
         catch (error) {
-            console.warn(`[@axilJS AI] Could not load URL ${url}:`, error.message);
+            console.warn(`[@axiljsJS AI] Could not load URL ${url}:`, error.message);
         }
     }
     return documents;
