@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/queue",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "description": "AxilJS message queue, cron scheduler, and retry with backoff",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,8 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.1.2",
-    "@axiljs/events": "^0.1.2"
+    "@axiljs/common": "^0.2.1",
+    "@axiljs/events": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

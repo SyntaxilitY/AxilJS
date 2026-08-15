@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/cloud",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "description": "AxilJS enterprise — multi-tenancy, audit logs, feature flags, deployment",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,10 +9,10 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.1.2",
-    "@axiljs/core": "^0.1.2",
-    "@axiljs/events": "^0.1.2",
-    "@axiljs/observability": "^0.1.2"
+    "@axiljs/common": "^0.2.1",
+    "@axiljs/core": "^0.2.1",
+    "@axiljs/events": "^0.2.1",
+    "@axiljs/observability": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

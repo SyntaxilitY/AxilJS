@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/ai",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "description": "AxilJS AI platform — OpenAI, Anthropic, Gemini, Ollama, RAG, agents, MCP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,8 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.1.2",
-    "@axiljs/events": "^0.1.2"
+    "@axiljs/common": "^0.2.1",
+    "@axiljs/events": "^0.2.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
