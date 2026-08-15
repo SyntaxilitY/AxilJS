@@ -21,7 +21,7 @@
  *   app.get('/health/ready', health.readinessHandler())
  */
 
-import { RouteHandler } from '@restjs/common';
+import { RouteHandler } from '@axil/common';
 
 // ─── Health Check Types ───────────────────────────────────────────────────────
 
@@ -138,7 +138,7 @@ export class HealthChecker {
   /**
    * Liveness probe - is the application running?
    * Returns 200 always (if the server is running, it's alive).
-   * Used by Kubernetes to decide if the pod should be restarted.
+   * Used by Kubernetes to decide if the pod should be @axilarted.
    */
   livenessHandler(): RouteHandler {
     return (req, res) => {

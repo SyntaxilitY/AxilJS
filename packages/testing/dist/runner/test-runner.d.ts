@@ -1,10 +1,10 @@
 /**
- * REstJS Test Runner.
+ * @axilJS Test Runner.
  * Minimal, fast test runner with built-in assertions.
  * Zero dependencies - pure Node.js.
  *
  * Usage:
- *   import { describe, it, expect } from '@restjs/testing'
+ *   import { describe, it, expect } from '@axil/testing'
  *
  *   describe('UserService', () => {
  *     it('should create a user', async () => {

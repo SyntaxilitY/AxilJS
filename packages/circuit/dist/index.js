@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @restjs/circuit - Public API
+ * @axil/circuit - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.withTimeout = exports.retry = exports.CircuitOpenError = exports.CircuitBreaker = void 0;

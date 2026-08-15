@@ -12,7 +12,7 @@
  *   })
  *
  *   // Publish
- *   await bus.emit('user.created', { id: 1, email: 'tariq@restjs.dev' })
+ *   await bus.emit('user.created', { id: 1, email: 'tariq@@axil.dev' })
  *
  *   // Wildcard subscription
  *   bus.on('user.*', (event) => console.log('User event:', event.type))
@@ -20,7 +20,7 @@
 
 import { randomUUID } from 'crypto';
 import {
-  REstEvent,
+  axilEvent,
   EventHandler,
   Subscription,
   EventBusOptions,
@@ -36,10 +36,10 @@ export class EventBus {
   private middleware: EventMiddleware[];
 
   // Error handler
-  private onError: (error: Error, event: REstEvent) => void;
+  private onError: (error: Error, event: axilEvent) => void;
 
   // Event history for replay/debugging (limited size)
-  private history: REstEvent[] = [];
+  private history: axilEvent[] = [];
   private historyLimit: number = 1000;
 
   constructor(options: EventBusOptions = {}) {
@@ -47,7 +47,7 @@ export class EventBus {
 
     this.onError = options.onError || ((error, event) => {
       console.error(
-        `\x1b[31m[REstJS Events]\x1b[0m Handler error for '${event.type}':`,
+        `\x1b[31m[@axilJS Events]\x1b[0m Handler error for '${event.type}':`,
         error.message
       );
     });
@@ -109,7 +109,7 @@ export class EventBus {
   waitFor<T = unknown>(
     eventType: string,
     timeoutMs: number = 30000
-  ): Promise<REstEvent<T>> {
+  ): Promise<axilEvent<T>> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         sub.unsubscribe();
@@ -149,10 +149,10 @@ export class EventBus {
   async emit<T = unknown>(
     type: string,
     payload: T,
-    meta: Partial<Pick<REstEvent, 'source' | 'correlationId' | 'causationId' | 'version'>> = {}
+    meta: Partial<Pick<axilEvent, 'source' | 'correlationId' | 'causationId' | 'version'>> = {}
   ): Promise<void> {
     // Build the event object
-    const event: REstEvent<T> = {
+    const event: axilEvent<T> = {
       id: randomUUID(),
       type,
       payload,
@@ -210,7 +210,7 @@ export class EventBus {
   /**
    * Get recent event history.
    */
-  getHistory(type?: string): REstEvent[] {
+  getHistory(type?: string): axilEvent[] {
     if (!type) return [...this.history];
     return this.history.filter(e => e.type === type);
   }
@@ -280,7 +280,7 @@ export class EventBus {
    * Run event through middleware chain then execute the action.
    */
   private async runMiddleware(
-    event: REstEvent,
+    event: axilEvent,
     action: () => Promise<void>
   ): Promise<void> {
     if (this.middleware.length === 0) {

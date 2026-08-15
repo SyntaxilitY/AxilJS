@@ -1,73 +1,131 @@
 #!/usr/bin/env node
 /**
- * REstJS CLI Entry Point.
- * Parses command line arguments and delegates to the appropriate command.
+ * AxilJS CLI — Entry Point
+ * Developed by SyntaxilitY
  *
  * Commands:
- *   rest create <name>    Create a new project
- *   rest run              Start development server
- *   rest build            Build for production
- *   rest --version        Show version
- *   rest --help           Show help
+ *   axil create <name>    Create a new project
+ *   axil run              Start development server
+ *   axil build            Build for production
+ *   axil test             Run tests
+ *   axil deploy           Generate Docker + K8s files
+ *   axil install           Install packages
+ *   axil doctor           Diagnose project
  */
 
-import { createProject } from './commands/create';
-import { runDev } from './commands/run';
-import { buildProject } from './commands/build';
-import { installPackages } from './commands/install';
-import { runDoctor } from './commands/doctor';
-import { runTests } from './commands/test';
-import { deploy } from './commands/deploy';
+import { createProject }    from './commands/create'
+import { runDev }           from './commands/run'
+import { buildProject }     from './commands/build'
+import { installPackages }  from './commands/install'
+import { runDoctor }        from './commands/doctor'
+import { runTests }         from './commands/test'
+import { deploy }           from './commands/deploy'
 
-const args = process.argv.slice(2);
-const command = args[0];
+const args    = process.argv.slice(2)
+const command = args[0]
 
-async function main() {
+async function main(): Promise<void> {
   switch (command) {
-    case 'create': await createProject(args[1]); break;
-    case 'run':    await runDev(); break;
-    case 'build':  await buildProject(); break;
+    case 'create': {
+      const name = args[1]
+      if (!name) {
+        console.error('\x1b[31mError:\x1b[0m Please provide a project name.')
+        console.error('  Usage: axil create <project-name>')
+        process.exit(1)
+      }
+      await createProject(name)
+      break
+    }
+
+    case 'run': {
+      await runDev()
+      break
+    }
+
+    case 'build': {
+      await buildProject()
+      break
+    }
+
     case 'install':
-    case 'i':      await installPackages(args.slice(1)); break;
-    case 'test':   await runTests(args[1]); break;
-    case 'deploy': await deploy(); break;
-    case 'doctor': await runDoctor(); break;
+    case 'i': {
+      const isDev    = args.includes('-D') || args.includes('--dev')
+      const packages = args.slice(1).filter(a => a !== '-D' && a !== '--dev')
+      await installPackages(packages, isDev)
+      break
+    }
+
+    case 'test': {
+      const pattern = args[1]
+      await runTests(pattern)
+      break
+    }
+
+    case 'deploy': {
+      await deploy()
+      break
+    }
+
+    case 'doctor': {
+      await runDoctor()
+      break
+    }
+
     case '--version':
-    case '-v':     console.log('REstJS v0.1.0 (Complete Ecosystem)'); break;
-    default:       printHelp(); break;
+    case '-v': {
+      console.log('AxilJS v0.1.0')
+      break
+    }
+
+    case '--help':
+    case '-h':
+    case undefined: {
+      printHelp()
+      break
+    }
+
+    default: {
+      console.error(`\x1b[31mError:\x1b[0m Unknown command '${command}'`)
+      console.error('Run \x1b[1maxil --help\x1b[0m for available commands.')
+      process.exit(1)
+    }
   }
 }
 
-function printHelp() {
+function printHelp(): void {
   console.log(`
-\x1b[36m\x1b[1mREstJS\x1b[0m v0.1.0 — Complete Next-Generation JavaScript Backend Ecosystem
+\x1b[36m\x1b[1mAxilJS\x1b[0m v0.1.0 — Developed by SyntaxilitY
+The JavaScript Backend That Finally Rests.
 
-Commands:
-  create <name>     Create new project
-  run               Start dev server
-  build             Build for production
-  test [pattern]    Run tests
-  deploy            Generate Docker + Kubernetes manifests
-  install [pkg]     Install packages
-  doctor            Diagnose project
-  --help            Show this help
+\x1b[1mUsage:\x1b[0m
+  axil <command> [options]
 
-The full ecosystem is now implemented:
-• Runtime + HTTP Server
-• Batteries-included framework
-• ORM + Migrations
-• Auth (JWT, RBAC)
-• Validation + Testing
-• Events, WebSockets, Queue
-• Circuit Breaker, Observability
-• Full AI Platform (Providers, RAG, Agents, MCP)
-• Cloud Deployment + Monitoring
+\x1b[1mCommands:\x1b[0m
+  create <name>          Create a new AxilJS project
+  run                    Start development server with hot reload
+  build                  Compile TypeScript for production
+  install [packages]     Install packages
+  install -D [packages]  Install as devDependency
+  test [pattern]         Run tests (*.test.ts, *.spec.ts)
+  deploy                 Generate Docker + Kubernetes manifests
+  doctor                 Diagnose project issues
 
-Run: rest create my-app
-`);
+\x1b[1mOptions:\x1b[0m
+  --help, -h             Show this help message
+  --version, -v          Show version number
+
+\x1b[1mExamples:\x1b[0m
+  axil create my-api
+  axil run
+  axil build
+  axil test
+  axil test users
+  axil deploy
+  axil doctor
+`)
 }
 
-main().catch(e => {
-  console.error('\x1b[31m[REstJS]\x1b[0m', e.message);
-  process.exit(1);
-});
+main().catch(error => {
+  console.error('\x1b[31m[AxilJS]\x1b[0m Fatal error:', error.message)
+  process.exit(1)
+})

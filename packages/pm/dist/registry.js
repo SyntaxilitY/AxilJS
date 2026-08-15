@@ -2,7 +2,7 @@
 /**
  * Package registry client.
  * Fetches package metadata and downloads from the npm registry.
- * (Phase 2 uses npm registry; Phase 6 will have the official REstJS registry)
+ * (Phase 2 uses npm registry; Phase 6 will have the official @axilJS registry)
  *
  * All network operations use Node's built-in https module.
  * Zero external dependencies.
@@ -84,7 +84,7 @@ class RegistryClient {
             (0, https_1.get)(url, {
                 headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'REstJS-PM/0.1.0'
+                    'User-Agent': '@axilJS-PM/0.1.0'
                 }
             }, (response) => {
                 if (response.statusCode === 404) {

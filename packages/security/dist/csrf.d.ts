@@ -11,7 +11,7 @@
  *
  * Safe methods (GET, HEAD, OPTIONS) are always allowed.
  */
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 export interface CsrfOptions {
     cookieName?: string;
     headerName?: string;

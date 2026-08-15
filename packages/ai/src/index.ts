@@ -1,6 +1,6 @@
 /**
- * @restjs/ai - Public API
- * The complete REstJS AI platform.
+ * @axil/ai - Public API
+ * The complete @axilJS AI platform.
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────────

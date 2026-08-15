@@ -12,12 +12,12 @@
  *   })
  *
  *   // Publish
- *   await bus.emit('user.created', { id: 1, email: 'tariq@restjs.dev' })
+ *   await bus.emit('user.created', { id: 1, email: 'tariq@@axil.dev' })
  *
  *   // Wildcard subscription
  *   bus.on('user.*', (event) => console.log('User event:', event.type))
  */
-import { REstEvent, EventHandler, Subscription, EventBusOptions } from './types';
+import { axilEvent, EventHandler, Subscription, EventBusOptions } from './types';
 export declare class EventBus {
     private handlers;
     private middleware;
@@ -44,7 +44,7 @@ export declare class EventBus {
      * Usage:
      *   const event = await bus.waitFor('payment.confirmed', 5000)
      */
-    waitFor<T = unknown>(eventType: string, timeoutMs?: number): Promise<REstEvent<T>>;
+    waitFor<T = unknown>(eventType: string, timeoutMs?: number): Promise<axilEvent<T>>;
     /**
      * Unsubscribe a specific handler by subscription ID.
      */
@@ -57,7 +57,7 @@ export declare class EventBus {
      * @param payload  Event data
      * @param meta     Optional event metadata
      */
-    emit<T = unknown>(type: string, payload: T, meta?: Partial<Pick<REstEvent, 'source' | 'correlationId' | 'causationId' | 'version'>>): Promise<void>;
+    emit<T = unknown>(type: string, payload: T, meta?: Partial<Pick<axilEvent, 'source' | 'correlationId' | 'causationId' | 'version'>>): Promise<void>;
     /**
      * Emit multiple events atomically.
      * All events are emitted before any handlers run.
@@ -70,7 +70,7 @@ export declare class EventBus {
     /**
      * Get recent event history.
      */
-    getHistory(type?: string): REstEvent[];
+    getHistory(type?: string): axilEvent[];
     /**
      * Get all registered event types.
      */

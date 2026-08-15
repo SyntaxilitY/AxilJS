@@ -1,30 +1,32 @@
 {
-  "name":        "restjs-examples",
+  "name":        "axil-examples",
   "version":     "1.0.0",
-  "description": "REstJS examples — all phases",
+  "description": "AxilJS examples — all phases",
   "scripts": {
-    "dev":   "rest run",
+    "dev":   "node ../packages/cli/dist/cli.js run",
+    "dev:mvc":   "npx ts-node src/mvc/main.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test":  "node ../packages/cli/dist/cli.js test"
   },
   "dependencies": {
-    "@restjs/ai":            "0.1.0",
-    "@restjs/auth":          "0.1.0",
-    "@restjs/circuit":       "0.1.0",
-    "@restjs/common":        "0.1.0",
-    "@restjs/config":        "0.1.0",
-    "@restjs/core":          "0.1.0",
-    "@restjs/events":        "0.1.0",
-    "@restjs/observability": "0.1.0",
-    "@restjs/queue":         "0.1.0",
-    "@restjs/security":      "0.1.0",
-    "@restjs/validation":    "0.1.0",
-    "@restjs/websocket":     "0.1.0",
-    "@restjs/cloud":         "0.1.0",
-    "@restjs/memory":         "0.1.0"
+    "@axil/ai":            "0.1.0",
+    "@axil/auth":          "0.1.0",
+    "@axil/circuit":       "0.1.0",
+    "@axil/common":        "0.1.0",
+    "@axil/config":        "0.1.0",
+    "@axil/core":          "0.1.0",
+    "@axil/events":        "0.1.0",
+    "@axil/observability": "0.1.0",
+    "@axil/queue":         "0.1.0",
+    "@axil/security":      "0.1.0",
+    "@axil/validation":    "0.1.0",
+    "@axil/websocket":     "0.1.0",
+    "@axil/cloud":         "0.1.0",
+    "@axil/memory":        "0.1.0"
   },
   "devDependencies": {
-    "@restjs/cli": "0.1.0",
+    "@axil/cli":   "0.1.0",
     "@types/node": "^20.0.0",
     "typescript":  "^5.4.0"
   }

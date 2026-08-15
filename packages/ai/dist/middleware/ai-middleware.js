@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AI middleware for REstJS applications.
+ * AI middleware for @axilJS applications.
  * Provides AI-powered HTTP endpoints out of the box.
  *
  * Usage:
@@ -13,7 +13,7 @@ exports.aiChat = aiChat;
 exports.aiChatStream = aiChatStream;
 exports.aiEmbed = aiEmbed;
 exports.aiAgent = aiAgent;
-const core_1 = require("@restjs/core");
+const core_1 = require("@axil/core");
 const agent_1 = require("../agents/agent");
 /**
  * Create a chat completion route handler.

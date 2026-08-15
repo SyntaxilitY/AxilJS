@@ -11,7 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.TooManyRequestsError = void 0;
 exports.rateLimit = rateLimit;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 // Store all client records
 // In Phase 4, this becomes a distributed Redis store
 const store = new Map();
@@ -25,7 +25,7 @@ setInterval(() => {
     }
 }, 5 * 60 * 1000);
 // ─── Rate Limit Error ─────────────────────────────────────────────────────────
-class TooManyRequestsError extends common_1.REstError {
+class TooManyRequestsError extends common_1.axilError {
     constructor(message = 'Too many requests, please try again later') {
         super(message, 429, 'RATE_LIMIT_EXCEEDED');
         this.name = 'TooManyRequestsError';

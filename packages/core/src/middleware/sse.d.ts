@@ -14,7 +14,7 @@
  *     sse.close()
  *   })
  */
-import { REstResponse } from '@restjs/common';
+import { @axilResponse } from '@axil/common';
 export interface SSEEvent {
     data: unknown;
     event?: string;
@@ -31,7 +31,7 @@ export interface SSEConnection {
  * Create an SSE connection on a response object.
  * Sets all required SSE headers and returns a controller.
  */
-export declare function createSSE(res: REstResponse): SSEConnection;
+export declare function createSSE(res: @axilResponse): SSEConnection;
 /**
  * SSE heartbeat helper.
  * Keeps the connection alive by sending periodic comments.

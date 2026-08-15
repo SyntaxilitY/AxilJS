@@ -13,7 +13,7 @@
  */
 
 import { randomBytes, timingSafeEqual } from 'crypto';
-import { MiddlewareFn, ForbiddenError } from '@restjs/common';
+import { MiddlewareFn, ForbiddenError } from '@axil/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -63,8 +63,8 @@ function parseCookies(cookieHeader: string): Record<string, string> {
   if (!cookieHeader) return cookies;
 
   cookieHeader.split(';').forEach(cookie => {
-    const [name, ...rest] = cookie.trim().split('=');
-    if (name) cookies[name.trim()] = rest.join('=').trim();
+    const [name, ...axil] = cookie.trim().split('=');
+    if (name) cookies[name.trim()] = axil.join('=').trim();
   });
 
   return cookies;

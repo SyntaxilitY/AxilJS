@@ -65,7 +65,7 @@ class Agent {
             ...context,
             { role: 'user', content: task }
         ];
-        console.log(`\x1b[36m[REstJS Agent]\x1b[0m Starting task: "${task.slice(0, 60)}..."`);
+        console.log(`\x1b[36m[@axilJS Agent]\x1b[0m Starting task: "${task.slice(0, 60)}..."`);
         for (let iteration = 1; iteration <= this.options.maxIterations; iteration++) {
             const step = { iteration };
             // Ask the model what to do next
@@ -144,7 +144,7 @@ class Agent {
                 step.finalAnswer = response.content;
                 steps.push(step);
                 this.options.onStep?.(step);
-                console.log(`\x1b[32m[REstJS Agent]\x1b[0m Completed in ${iteration} iteration(s)`);
+                console.log(`\x1b[32m[@axilJS Agent]\x1b[0m Completed in ${iteration} iteration(s)`);
                 return {
                     response: response.content,
                     steps,
@@ -156,7 +156,7 @@ class Agent {
             steps.push(step);
         }
         // Hit max iterations without finishing
-        console.warn(`\x1b[33m[REstJS Agent]\x1b[0m Hit max iterations (${this.options.maxIterations})`);
+        console.warn(`\x1b[33m[@axilJS Agent]\x1b[0m Hit max iterations (${this.options.maxIterations})`);
         return {
             response: `Task could not be completed within ${this.options.maxIterations} iterations.`,
             steps,

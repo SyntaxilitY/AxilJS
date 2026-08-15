@@ -1,11 +1,11 @@
 /**
  * Core event system types.
- * Used across the entire REstJS event infrastructure.
+ * Used across the entire @axilJS event infrastructure.
  */
 
 // ─── Base Event ───────────────────────────────────────────────────────────────
 
-export interface REstEvent<T = unknown> {
+export interface axilEvent<T = unknown> {
   // Unique event identifier (e.g. 'user.created', 'order.shipped')
   type: string;
 
@@ -35,7 +35,7 @@ export interface REstEvent<T = unknown> {
 
 // Function that handles an event
 export type EventHandler<T = unknown> = (
-  event: REstEvent<T>
+  event: axilEvent<T>
 ) => void | Promise<void>;
 
 // ─── Subscription ─────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ export interface EventBusOptions {
   async?: boolean;
 
   // Error handler for failed event handlers
-  onError?: (error: Error, event: REstEvent) => void;
+  onError?: (error: Error, event: axilEvent) => void;
 
   // Middleware applied to all events before handlers
   middleware?: EventMiddleware[];
@@ -70,6 +70,6 @@ export interface EventBusOptions {
 // ─── Event Middleware ─────────────────────────────────────────────────────────
 
 export type EventMiddleware = (
-  event: REstEvent,
+  event: axilEvent,
   next: () => Promise<void>
 ) => Promise<void>;

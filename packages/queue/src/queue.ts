@@ -17,7 +17,7 @@
  *   })
  *
  *   await emailQueue.add('send-welcome', {
- *     to: 'tariq@restjs.dev',
+ *     to: 'tariq@@axil.dev',
  *     subject: 'Welcome!'
  *   })
  */
@@ -132,7 +132,7 @@ export class Queue extends EventEmitter {
     }, this.options.pollIntervalMs);
 
     console.log(
-      `\x1b[36m[REstJS Queue]\x1b[0m '${this.name}' started ` +
+      `\x1b[36m[@axilJS Queue]\x1b[0m '${this.name}' started ` +
         `(concurrency: ${this.options.concurrency})`
     );
   }
@@ -153,7 +153,7 @@ export class Queue extends EventEmitter {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    console.log(`\x1b[36m[REstJS Queue]\x1b[0m '${this.name}' stopped`);
+    console.log(`\x1b[36m[@axilJS Queue]\x1b[0m '${this.name}' stopped`);
   }
 
   // ─── Job Queries ──────────────────────────────────────────────────────────────

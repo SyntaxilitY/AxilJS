@@ -1,10 +1,10 @@
 /**
- * Memory Middleware for REstJS HTTP requests.
+ * Memory Middleware for @axilJS HTTP requests.
  * Attaches memory info to requests for debugging.
  * Flags requests that trigger significant memory increases.
  */
 
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 import { takeSnapshot } from './snapshot';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export function memoryMiddleware(
       // Flag suspicious memory increase
       if (heapDeltaMb > leakThresholdMb && logFlagged) {
         console.warn(
-          `\x1b[33m[REstJS Memory]\x1b[0m ` +
+          `\x1b[33m[@axilJS Memory]\x1b[0m ` +
           `Request caused +${heapDeltaMb}MB heap increase: ` +
           `${req.method} ${req.path} ` +
           `\x1b[90m(threshold: ${leakThresholdMb}MB)\x1b[0m`

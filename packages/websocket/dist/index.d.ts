@@ -1,5 +1,5 @@
 /**
- * @restjs/websocket - Public API
+ * @axil/websocket - Public API
  */
 export { WSServer } from './ws-server';
 export type { WSServerOptions } from './ws-server';

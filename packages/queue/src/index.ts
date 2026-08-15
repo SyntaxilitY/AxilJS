@@ -1,5 +1,5 @@
 /**
- * @restjs/queue - Public API
+ * @axil/queue - Public API
  */
 
 export { Queue } from './queue';

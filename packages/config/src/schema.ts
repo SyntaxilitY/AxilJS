@@ -14,7 +14,7 @@
  *   config.DEBUG      // boolean
  */
 
-import { ValidationError } from '@restjs/common';
+import { ValidationError } from '@axil/common';
 
 // ─── Schema Field Types ───────────────────────────────────────────────────────
 

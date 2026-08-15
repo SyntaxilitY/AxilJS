@@ -1,5 +1,5 @@
 /**
- * REstJS Application - The main class.
+ * @axilJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -8,7 +8,7 @@
  *   app.get('/users', listUsers)
  *   await app.listen()
  */
-import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@restjs/common';
+import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axil/common';
 import { Router } from './router/router';
 export declare class Application {
     private config;

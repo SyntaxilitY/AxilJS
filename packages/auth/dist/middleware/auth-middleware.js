@@ -17,7 +17,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authenticate = authenticate;
 exports.getUser = getUser;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 /**
  * Extract token from request based on configured sources.
  */

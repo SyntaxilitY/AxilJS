@@ -64,7 +64,7 @@ export function loadEnv(options: EnvLoadOptions = {}): void {
       }
     } catch (error) {
       console.warn(
-        `[REstJS Config] Warning: Could not load env file ${filePath}:`,
+        `[@axilJS Config] Warning: Could not load env file ${filePath}:`,
         (error as Error).message
       );
     }

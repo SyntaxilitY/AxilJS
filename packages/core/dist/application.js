@@ -1,6 +1,6 @@
 "use strict";
 /**
- * REstJS Application - The main class.
+ * @axilJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -12,7 +12,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Application = void 0;
 const http_1 = require("http");
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 const request_1 = require("./http/request");
 const response_1 = require("./http/response");
 const router_1 = require("./router/router");
@@ -123,7 +123,7 @@ class Application {
      * This is the core request processing pipeline.
      */
     async handleRequest(rawReq, rawRes) {
-        // Create REstJS request and response objects
+        // Create @axilJS request and response objects
         const req = new request_1.Request(rawReq);
         const res = new response_1.Response(rawRes);
         // Try to find a matching route
@@ -236,19 +236,19 @@ class Application {
         return this.server;
     }
     /**
-     * Print startup information banner.
-     */
+   * Print startup information banner.
+   */
     printBanner(port, host) {
         const env = this.config.env || 'development';
         console.log('');
-        console.log('\x1b[36m\x1b[1m ██████╗ ███████╗███████╗████████╗     ██╗███████╗\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██╔══██╗██╔════╝██╔════╝╚══██╔══╝     ██║██╔════╝\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██████╔╝█████╗  ███████╗   ██║        ██║███████╗\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██╔══██╗██╔══╝  ╚════██║   ██║   ██   ██║╚════██║\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██║  ██║███████╗███████║   ██║   ╚█████╔╝███████║\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝    ╚════╝ ╚══════╝\x1b[0m');
+        console.log('\x1b[36m\x1b[1m  █████╗ ██╗  ██╗██╗██╗          ██╗███████╗\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██╔══██╗╚██╗██╔╝██║██║          ██║██╔════╝\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ███████║ ╚███╔╝ ██║██║          ██║███████╗\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██╔══██║ ██╔██╗ ██║██║     ██   ██║╚════██║\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝\x1b[0m');
         console.log('');
-        console.log(`\x1b[1m REstJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`);
+        console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`);
         console.log('');
         console.log(`  \x1b[32m✓\x1b[0m Server running`);
         console.log(`  \x1b[32m✓\x1b[0m http://${host}:${port}`);

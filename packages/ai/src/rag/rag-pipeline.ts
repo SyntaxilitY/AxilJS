@@ -11,11 +11,11 @@
  *
  *   // Index documents
  *   await rag.index([
- *     { id: '1', content: 'REstJS is a backend framework...', metadata: {} }
+ *     { id: '1', content: '@axilJS is a backend framework...', metadata: {} }
  *   ])
  *
  *   // Query
- *   const answer = await rag.query('What is REstJS?')
+ *   const answer = await rag.query('What is @axilJS?')
  *   console.log(answer.response)
  *   console.log(answer.sources) // Which documents were used
  */
@@ -128,13 +128,13 @@ export class RAGPipeline {
     chunksCreated: number;
   }> {
     console.log(
-      `\x1b[36m[REstJS AI]\x1b[0m Indexing ${documents.length} document(s)...`
+      `\x1b[36m[@axilJS AI]\x1b[0m Indexing ${documents.length} document(s)...`
     );
 
     // Step 1: Chunk documents
     const chunks = this.chunker.chunk(documents);
     console.log(
-      `\x1b[90m[REstJS AI]\x1b[0m Created ${chunks.length} chunk(s)`
+      `\x1b[90m[@axilJS AI]\x1b[0m Created ${chunks.length} chunk(s)`
     );
 
     // Step 2: Generate embeddings for all chunks
@@ -171,13 +171,13 @@ export class RAGPipeline {
       processed += batch.length;
 
       process.stdout.write(
-        `\r\x1b[90m[REstJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
+        `\r\x1b[90m[@axilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
       );
     }
 
     console.log('');
     console.log(
-      `\x1b[32m[REstJS AI]\x1b[0m Indexed ${documents.length} documents ` +
+      `\x1b[32m[@axilJS AI]\x1b[0m Indexed ${documents.length} documents ` +
       `(${chunks.length} chunks, ${this.totalEmbeddingTokens} tokens)`
     );
 

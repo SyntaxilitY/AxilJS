@@ -1,5 +1,5 @@
 /**
- * @restjs/cloud - Public API
+ * @axil/cloud - Public API
  * Enterprise cloud platform — deployment, multi-tenancy, audit, feature flags, dashboard.
  */
 

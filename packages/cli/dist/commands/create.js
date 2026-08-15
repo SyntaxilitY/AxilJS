@@ -1,31 +1,15 @@
 "use strict";
 /**
- * rest create <name>
- * Scaffolds a new REstJS project with the standard directory structure.
- *
- * Creates:
- *   my-app/
- *   ├── src/
- *   │   ├── main.ts        Entry point
- *   │   ├── modules/       Feature modules
- *   │   └── config/        App configuration
- *   ├── package.json
- *   ├── tsconfig.json
- *   └── .gitignore
+ * axil create <name>
+ * Scaffolds a new AxilJS project with standard directory structure.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createProject = createProject;
 const fs_1 = require("fs");
 const path_1 = require("path");
-/**
- * Create a new REstJS project.
- *
- * @param name Project name and directory name
- */
 async function createProject(name) {
-    console.log(`\n\x1b[36m[REstJS]\x1b[0m Creating project: \x1b[1m${name}\x1b[0m\n`);
+    console.log(`\n\x1b[36m[AxilJS]\x1b[0m Creating project: \x1b[1m${name}\x1b[0m\n`);
     const projectDir = (0, path_1.join)(process.cwd(), name);
-    // Ensure directory doesn't already exist
     if ((0, fs_1.existsSync)(projectDir)) {
         console.error(`\x1b[31mError:\x1b[0m Directory '${name}' already exists.`);
         process.exit(1);
@@ -46,26 +30,12 @@ async function createProject(name) {
     });
     // Generate project files
     const files = [
-        {
-            path: (0, path_1.join)(projectDir, 'package.json'),
-            content: generatePackageJson(name)
-        },
-        {
-            path: (0, path_1.join)(projectDir, 'tsconfig.json'),
-            content: generateTsConfig()
-        },
-        {
-            path: (0, path_1.join)(projectDir, '.gitignore'),
-            content: generateGitignore()
-        },
-        {
-            path: (0, path_1.join)(projectDir, 'src', 'main.ts'),
-            content: generateMainFile(name)
-        },
-        {
-            path: (0, path_1.join)(projectDir, 'src', 'config', 'app.config.ts'),
-            content: generateAppConfig()
-        },
+        { path: (0, path_1.join)(projectDir, 'package.json'), content: generatePackageJson(name) },
+        { path: (0, path_1.join)(projectDir, 'tsconfig.json'), content: generateTsConfig() },
+        { path: (0, path_1.join)(projectDir, '.gitignore'), content: generateGitignore() },
+        { path: (0, path_1.join)(projectDir, '.env.example'), content: generateEnvExample() },
+        { path: (0, path_1.join)(projectDir, 'src', 'main.ts'), content: generateMainFile(name) },
+        { path: (0, path_1.join)(projectDir, 'src', 'config', 'app.config.ts'), content: generateAppConfig() },
         {
             path: (0, path_1.join)(projectDir, 'src', 'modules', 'users', 'controllers', 'users.controller.ts'),
             content: generateUsersController()
@@ -79,27 +49,26 @@ async function createProject(name) {
         (0, fs_1.writeFileSync)(path, content, 'utf-8');
         console.log(`  \x1b[32m+\x1b[0m ${path.replace(process.cwd(), '.')}`);
     });
-    // Print next steps
     console.log('\n\x1b[32m✓\x1b[0m Project created successfully!\n');
     console.log('Next steps:\n');
     console.log(`  cd ${name}`);
     console.log('  npm install');
-    console.log('  npm run dev\n');
+    console.log('  axil run\n');
 }
-// ─── File Templates ───────────────────────────────────────────────────────────
+// ─── Templates ────────────────────────────────────────────────────────────────
 function generatePackageJson(name) {
     return JSON.stringify({
         name,
         version: '1.0.0',
-        description: `${name} - Built with REstJS`,
+        description: `${name} — Built with AxilJS`,
         scripts: {
-            dev: 'ts-node src/main.ts',
+            dev: 'axil run',
             build: 'tsc',
             start: 'node dist/main.js',
-            test: 'echo "Tests coming in Phase 3"'
+            test: 'axil test'
         },
         dependencies: {
-            '@restjs/core': '^0.1.0'
+            '@axil/core': '^0.1.0'
         },
         devDependencies: {
             typescript: '^5.4.0',
@@ -120,7 +89,9 @@ function generateTsConfig() {
             emitDecoratorMetadata: true,
             outDir: './dist',
             rootDir: './src',
-            skipLibCheck: true
+            skipLibCheck: true,
+            incremental: true,
+            tsBuildInfoFile: './dist/.tsbuildinfo'
         },
         include: ['src/**/*'],
         exclude: ['dist', 'node_modules']
@@ -132,45 +103,53 @@ dist/
 .env
 .env.local
 *.log
+.tsbuildinfo
+`;
+}
+function generateEnvExample() {
+    return `# Server
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=development
+
+# Auth
+JWT_SECRET=your-secret-minimum-32-characters-long
+
+# Database
+DATABASE_URL=postgres://user:password@localhost:5432/mydb
 `;
 }
 function generateMainFile(name) {
     return `/**
- * ${name} - Entry Point
- * Start your REstJS application here.
+ * ${name} — Entry Point
+ * Built with AxilJS by SyntaxilitY
  */
 
-import { Application } from '@restjs/core';
-import { cors } from '@restjs/core';
-import { appConfig } from './config/app.config';
-import { UsersController } from './modules/users/controllers/users.controller';
+import { Application } from '@axil/core'
+import { cors } from '@axil/core'
+import { appConfig } from './config/app.config'
+import { UsersController } from './modules/users/controllers/users.controller'
 
 async function bootstrap() {
-  // Create the application
-  const app = new Application(appConfig);
+  const app = new Application(appConfig)
 
-  // Global middleware
-  app.use(cors());
+  app.use(cors())
 
-  // Register routes from controllers
-  const usersController = new UsersController();
-  usersController.register(app);
+  const usersController = new UsersController()
+  usersController.register(app)
 
-  // Start listening
-  await app.listen();
+  await app.listen()
 }
 
-// Start the application
-bootstrap().catch(console.error);
+bootstrap().catch(console.error)
 `;
 }
 function generateAppConfig() {
     return `/**
  * Application configuration.
- * Centralized config for the entire application.
  */
 
-import { AppConfig } from '@restjs/core';
+import { AppConfig } from '@axil/core'
 
 export const appConfig: AppConfig = {
   server: {
@@ -180,67 +159,55 @@ export const appConfig: AppConfig = {
   env: process.env.NODE_ENV || 'development',
   logging: true,
   prefix: '/api'
-};
+}
 `;
 }
 function generateUsersController() {
     return `/**
  * Users Controller.
- * Handles HTTP requests for the /api/users resource.
  */
 
-import { Application, REstRequest, REstResponse } from '@restjs/core';
-import { UsersService } from '../services/users.service';
+import { Application, REstRequest, REstResponse } from '@axil/core'
+import { UsersService } from '../services/users.service'
 
 export class UsersController {
-  private usersService: UsersService;
+  private usersService: UsersService
 
   constructor() {
-    this.usersService = new UsersService();
+    this.usersService = new UsersService()
   }
 
-  /**
-   * Register all user routes on the application.
-   */
   register(app: Application): void {
-    app.get('/users', this.list.bind(this));
-    app.get('/users/:id', this.getById.bind(this));
-    app.post('/users', this.create.bind(this));
-    app.put('/users/:id', this.update.bind(this));
-    app.delete('/users/:id', this.remove.bind(this));
+    app.get('/users',     this.list.bind(this))
+    app.get('/users/:id', this.getById.bind(this))
+    app.post('/users',    this.create.bind(this))
+    app.put('/users/:id', this.update.bind(this))
+    app.delete('/users/:id', this.remove.bind(this))
   }
 
-  /** GET /api/users - List all users */
   async list(req: REstRequest, res: REstResponse): Promise<void> {
-    const users = await this.usersService.findAll();
-    res.json({ data: users, total: users.length });
+    const users = await this.usersService.findAll()
+    res.json({ data: users, total: users.length })
   }
 
-  /** GET /api/users/:id - Get a specific user */
   async getById(req: REstRequest, res: REstResponse): Promise<void> {
-    const user = await this.usersService.findById(req.params.id);
-    res.json({ data: user });
+    const user = await this.usersService.findById(req.params.id)
+    res.json({ data: user })
   }
 
-  /** POST /api/users - Create a new user */
   async create(req: REstRequest, res: REstResponse): Promise<void> {
-    const user = await this.usersService.create(req.body as any);
-    res.status(201).json({ data: user });
+    const user = await this.usersService.create(req.body as any)
+    res.status(201).json({ data: user })
   }
 
-  /** PUT /api/users/:id - Update a user */
   async update(req: REstRequest, res: REstResponse): Promise<void> {
-    const user = await this.usersService.update(
-      req.params.id,
-      req.body as any
-    );
-    res.json({ data: user });
+    const user = await this.usersService.update(req.params.id, req.body as any)
+    res.json({ data: user })
   }
 
-  /** DELETE /api/users/:id - Delete a user */
   async remove(req: REstRequest, res: REstResponse): Promise<void> {
-    await this.usersService.delete(req.params.id);
-    res.status(204).send('');
+    await this.usersService.delete(req.params.id)
+    res.status(204).send('')
   }
 }
 `;
@@ -248,64 +215,60 @@ export class UsersController {
 function generateUsersService() {
     return `/**
  * Users Service.
- * Business logic for user management.
- * In a real app, this would interact with the database (Phase 3: ORM).
+ * In-memory store — replaced by @axil/orm in production.
  */
 
-import { NotFoundError } from '@restjs/core';
+import { NotFoundError } from '@axil/core'
 
 export interface User {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: string;
+  id: string
+  name: string
+  email: string
+  createdAt: string
 }
 
 export class UsersService {
-  // In-memory store - replaced by ORM in Phase 3
   private users: User[] = [
     {
       id: '1',
       name: 'Tariq Mehmood',
-      email: 'tariq@restjs.dev',
+      email: 'tariq@syntaxility.dev',
       createdAt: new Date().toISOString()
     }
-  ];
+  ]
 
   async findAll(): Promise<User[]> {
-    return this.users;
+    return this.users
   }
 
   async findById(id: string): Promise<User> {
-    const user = this.users.find(u => u.id === id);
-    if (!user) throw new NotFoundError(\`User \${id} not found\`);
-    return user;
+    const user = this.users.find(u => u.id === id)
+    if (!user) throw new NotFoundError(\`User \${id} not found\`)
+    return user
   }
 
   async create(data: Partial<User>): Promise<User> {
     const user: User = {
-      id: String(this.users.length + 1),
-      name: data.name || '',
-      email: data.email || '',
+      id:        String(this.users.length + 1),
+      name:      data.name || '',
+      email:     data.email || '',
       createdAt: new Date().toISOString()
-    };
-
-    this.users.push(user);
-    return user;
+    }
+    this.users.push(user)
+    return user
   }
 
   async update(id: string, data: Partial<User>): Promise<User> {
-    const index = this.users.findIndex(u => u.id === id);
-    if (index === -1) throw new NotFoundError(\`User \${id} not found\`);
-
-    this.users[index] = { ...this.users[index], ...data };
-    return this.users[index];
+    const index = this.users.findIndex(u => u.id === id)
+    if (index === -1) throw new NotFoundError(\`User \${id} not found\`)
+    this.users[index] = { ...this.users[index], ...data }
+    return this.users[index]
   }
 
   async delete(id: string): Promise<void> {
-    const index = this.users.findIndex(u => u.id === id);
-    if (index === -1) throw new NotFoundError(\`User \${id} not found\`);
-    this.users.splice(index, 1);
+    const index = this.users.findIndex(u => u.id === id)
+    if (index === -1) throw new NotFoundError(\`User \${id} not found\`)
+    this.users.splice(index, 1)
   }
 }
 `;

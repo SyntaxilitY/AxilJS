@@ -11,8 +11,8 @@
  *   - Result (success/failure)
  */
 
-import { getGlobalEventBus } from '@restjs/events';
-import { MiddlewareFn }      from '@restjs/common';
+import { getGlobalEventBus } from '@axil/events';
+import { MiddlewareFn }      from '@axil/common';
 
 // ─── Audit Event ──────────────────────────────────────────────────────────────
 

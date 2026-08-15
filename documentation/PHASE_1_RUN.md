@@ -1,5 +1,5 @@
-# 1. Clone/create the restjs directory
-mkdir restjs && cd restjs
+# 1. Clone/create the @axiljs directory
+mkdir @axiljs && cd @axiljs
 
 # 2. Copy all files into their locations
 
@@ -16,7 +16,7 @@ cd packages/cli
 npm link
 
 # 6. Test it
-rest create my-test-app
+@axil create my-test-app
 cd my-test-app
 npm install
 npm run dev

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @restjs/config - Public API
+ * @axil/config - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.defineConfig = exports.loadEnv = void 0;

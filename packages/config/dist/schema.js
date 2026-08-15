@@ -16,7 +16,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.defineConfig = defineConfig;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 // ─── defineConfig ─────────────────────────────────────────────────────────────
 /**
  * Define and validate application configuration from environment variables.

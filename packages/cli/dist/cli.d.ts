@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * REstJS CLI Entry Point.
- * Parses command line arguments and delegates to the appropriate command.
+ * AxilJS CLI — Entry Point
+ * Developed by SyntaxilitY
  *
  * Commands:
- *   rest create <name>    Create a new project
- *   rest run              Start development server
- *   rest build            Build for production
- *   rest --version        Show version
- *   rest --help           Show help
+ *   axil create <name>    Create a new project
+ *   axil run              Start development server
+ *   axil build            Build for production
+ *   axil test             Run tests
+ *   axil deploy           Generate Docker + K8s files
+ *   axil install           Install packages
+ *   axil doctor           Diagnose project
  */
 export {};
 //# sourceMappingURL=cli.d.ts.map

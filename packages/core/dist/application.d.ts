@@ -1,5 +1,5 @@
 /**
- * REstJS Application - The main class.
+ * @axilJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -9,7 +9,7 @@
  *   await app.listen()
  */
 import { Server } from 'http';
-import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@restjs/common';
+import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axil/common';
 import { Router } from './router/router';
 export declare class Application {
     private config;
@@ -72,8 +72,8 @@ export declare class Application {
     close(): Promise<void>;
     getServer(): Server | null;
     /**
-     * Print startup information banner.
-     */
+   * Print startup information banner.
+   */
     private printBanner;
 }
 //# sourceMappingURL=application.d.ts.map

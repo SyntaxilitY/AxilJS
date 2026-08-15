@@ -1,21 +1,6 @@
 /**
- * rest create <name>
- * Scaffolds a new REstJS project with the standard directory structure.
- *
- * Creates:
- *   my-app/
- *   ├── src/
- *   │   ├── main.ts        Entry point
- *   │   ├── modules/       Feature modules
- *   │   └── config/        App configuration
- *   ├── package.json
- *   ├── tsconfig.json
- *   └── .gitignore
- */
-/**
- * Create a new REstJS project.
- *
- * @param name Project name and directory name
+ * axil create <name>
+ * Scaffolds a new AxilJS project with standard directory structure.
  */
 export declare function createProject(name: string): Promise<void>;
 //# sourceMappingURL=create.d.ts.map

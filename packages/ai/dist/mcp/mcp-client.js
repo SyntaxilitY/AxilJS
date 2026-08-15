@@ -32,7 +32,7 @@ class MCPClient {
     constructor(options) {
         this.serverUrl = options.serverUrl.replace(/\/$/, ''); // Remove trailing slash
         this.clientInfo = {
-            name: options.clientName || 'REstJS-MCP-Client',
+            name: options.clientName || '@axilJS-MCP-Client',
             version: options.clientVersion || '0.1.0'
         };
         this.timeoutMs = options.timeoutMs || 30000;
@@ -55,7 +55,7 @@ class MCPClient {
             throw new Error('MCP server did not return protocol version');
         }
         this.connected = true;
-        console.log(`\x1b[32m[REstJS MCP]\x1b[0m Connected to MCP server: ${this.serverUrl}\n` +
+        console.log(`\x1b[32m[@axilJS MCP]\x1b[0m Connected to MCP server: ${this.serverUrl}\n` +
             `  Server: ${response.serverInfo?.name || 'Unknown'} v${response.serverInfo?.version || '?'}\n` +
             `  Protocol: ${response.protocolVersion}`);
         // Send initialized notification
@@ -66,7 +66,7 @@ class MCPClient {
      */
     async disconnect() {
         this.connected = false;
-        console.log('\x1b[33m[REstJS MCP]\x1b[0m Disconnected from MCP server');
+        console.log('\x1b[33m[@axilJS MCP]\x1b[0m Disconnected from MCP server');
     }
     // ─── Tools ────────────────────────────────────────────────────────────────────
     /**
@@ -127,7 +127,7 @@ class MCPClient {
     }
     // ─── Bridge to Agent System ───────────────────────────────────────────────────
     /**
-     * Convert MCP tools to REstJS agent Tool format.
+     * Convert MCP tools to @axilJS agent Tool format.
      * Use this to add MCP tools to an Agent.
      *
      * Usage:

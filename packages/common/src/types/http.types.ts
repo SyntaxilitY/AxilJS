@@ -1,6 +1,5 @@
 /**
- * Core HTTP types used across the entire REstJS ecosystem.
- * These are the foundation - every request and response uses these.
+ * Core HTTP types used across the entire AxilJS ecosystem.
  */
 
 import { IncomingMessage, ServerResponse } from 'http';
@@ -18,119 +17,111 @@ export type HttpMethod =
 
 // ─── Route Params ────────────────────────────────────────────────────────────
 
-// Dynamic route params like /users/:id → { id: "123" }
 export type RouteParams = Record<string, string>;
-
-// Query string params like ?page=1&limit=10
 export type QueryParams = Record<string, string | string[]>;
 
 // ─── Request ─────────────────────────────────────────────────────────────────
 
-/**
- * REstJS Request - wraps Node's IncomingMessage with useful additions.
- * Developers work with this, never raw IncomingMessage.
- */
-export interface REstRequest {
-  // Raw Node.js request (escape hatch if needed)
+export interface axilRequest {
   raw: IncomingMessage;
-
-  // HTTP method
   method: HttpMethod;
-
-  // Full URL path including query string
   url: string;
-
-  // Path without query string e.g. "/users/123"
   path: string;
-
-  // Route params e.g. { id: "123" } from /users/:id
   params: RouteParams;
-
-  // Query params e.g. { page: "1" } from ?page=1
   query: QueryParams;
-
-  // Request headers
   headers: Record<string, string | string[] | undefined>;
-
-  // Parsed request body (populated by body parser middleware)
   body: unknown;
-
-  // IP address of the client
   ip: string;
-
-  // Arbitrary data store - middleware can attach data here
-  // e.g. req.locals.user = authenticatedUser
   locals: Record<string, unknown>;
 }
 
 // ─── Response ────────────────────────────────────────────────────────────────
 
-/**
- * REstJS Response - wraps Node's ServerResponse with a fluent API.
- * Chain methods: res.status(200).json({ ok: true })
- */
-export interface REstResponse {
-  // Raw Node.js response (escape hatch if needed)
+export interface axilResponse {
   raw: ServerResponse;
 
-  // Set HTTP status code - returns this for chaining
-  status(code: number): REstResponse;
-
-  // Set a response header - returns this for chaining
-  header(name: string, value: string): REstResponse;
-
-  // Send JSON response - ends the response
+  // ── Core methods ────────────────────────────────────────────────────────────
+  status(code: number): axilResponse;
+  header(name: string, value: string): axilResponse;
   json(data: unknown): void;
-
-  // Send plain text response - ends the response
   text(data: string): void;
-
-  // Send HTML response - ends the response
   html(data: string): void;
-
-  // Send raw buffer response - ends the response
   send(data: Buffer | string): void;
-
-  // Redirect to another URL
   redirect(url: string, code?: number): void;
-
-  // Check if response has already been sent
   sent: boolean;
-
-  // Current status code
   statusCode: number;
+
+  // ── SyntaxilitY Response Manager (built-in) ─────────────────────────────────
+  // All responses auto-formatted as:
+  // { status, code, message, data }
+
+  /** 200 OK */
+  success(data: unknown, message?: string): void;
+
+  /** 201 Created */
+  created(data: unknown, message?: string): void;
+
+  /** 200 OK with pagination */
+  paginated(data: unknown[], total: number, page: number, limit: number, message?: string): void;
+
+  /** 204 No Content */
+  noContent(message?: string): void;
+
+  /** 400 Bad Request */
+  badRequest(message?: string, data?: unknown): void;
+
+  /** 401 Unauthorized */
+  unauthorized(message?: string, data?: unknown): void;
+
+  /** 403 Forbidden */
+  forbidden(message?: string, data?: unknown): void;
+
+  /** 404 Not Found */
+  notFound(message?: string, data?: unknown): void;
+
+  /** 405 Method Not Allowed */
+  methodNotAllowed(message?: string, data?: unknown): void;
+
+  /** 406 Not Acceptable */
+  notAcceptable(message?: string, data?: unknown): void;
+
+  /** 409 Conflict */
+  conflict(message?: string, data?: unknown): void;
+
+  /** 415 Unsupported Media Type */
+  unsupportedMediaType(message?: string, data?: unknown): void;
+
+  /** 422 Unprocessable Entity */
+  validationError(message?: string, data?: unknown): void;
+
+  /** 429 Too Many Requests */
+  tooManyRequests(message?: string, data?: unknown): void;
+
+  /** 500 Internal Server Error */
+  serverError(message?: string, data?: unknown): void;
+
+  /** 503 Service Unavailable */
+  serviceUnavailable(message?: string, data?: unknown): void;
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
-/**
- * Middleware function signature.
- * Call next() to pass to next middleware.
- * Call next(error) to pass to error handler.
- */
 export type MiddlewareFn = (
-  req: REstRequest,
-  res: REstResponse,
+  req: axilRequest,
+  res: axilResponse,
   next: (error?: Error) => void
 ) => void | Promise<void>;
 
-/**
- * Error handling middleware - receives the error as first argument.
- */
 export type ErrorMiddlewareFn = (
   error: Error,
-  req: REstRequest,
-  res: REstResponse,
+  req: axilRequest,
+  res: axilResponse,
   next: (error?: Error) => void
 ) => void | Promise<void>;
 
 // ─── Route Handler ───────────────────────────────────────────────────────────
 
-/**
- * Final handler for a matched route.
- * Unlike middleware, it does not receive next().
- */
 export type RouteHandler = (
-  req: REstRequest,
-  res: REstResponse
+  req: axilRequest,
+  res: axilResponse
 ) => void | Promise<void>;

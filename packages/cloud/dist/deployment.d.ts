@@ -1,7 +1,7 @@
 /**
  * Deployment Toolkit.
  * Generates Dockerfiles, Kubernetes manifests, and deployment scripts.
- * Supports `rest deploy` command.
+ * Supports `@axil deploy` command.
  */
 export interface DeploymentConfig {
     appName: string;

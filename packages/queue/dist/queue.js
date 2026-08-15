@@ -18,7 +18,7 @@
  *   })
  *
  *   await emailQueue.add('send-welcome', {
- *     to: 'tariq@restjs.dev',
+ *     to: 'tariq@@axil.dev',
  *     subject: 'Welcome!'
  *   })
  */
@@ -91,7 +91,7 @@ class Queue extends events_1.EventEmitter {
         this.pollTimer = setInterval(() => {
             this.processNext();
         }, this.options.pollIntervalMs);
-        console.log(`\x1b[36m[REstJS Queue]\x1b[0m '${this.name}' started ` +
+        console.log(`\x1b[36m[@axilJS Queue]\x1b[0m '${this.name}' started ` +
             `(concurrency: ${this.options.concurrency})`);
     }
     /**
@@ -107,7 +107,7 @@ class Queue extends events_1.EventEmitter {
         while (this.activeCount > 0) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        console.log(`\x1b[36m[REstJS Queue]\x1b[0m '${this.name}' stopped`);
+        console.log(`\x1b[36m[@axilJS Queue]\x1b[0m '${this.name}' stopped`);
     }
     // ─── Job Queries ──────────────────────────────────────────────────────────────
     /**

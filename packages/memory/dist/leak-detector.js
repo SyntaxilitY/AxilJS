@@ -20,7 +20,7 @@ exports.trackCache = trackCache;
 exports.trackEmitter = trackEmitter;
 exports.detectAndFix = detectAndFix;
 // ─── Registry ─────────────────────────────────────────────────────────────────
-// Track all timers registered through REstJS
+// Track all timers registered through @axilJS
 const trackedTimers = new Set();
 exports.trackedTimers = trackedTimers;
 const trackedIntervals = new Set();
@@ -38,7 +38,7 @@ exports.trackedEmitters = trackedEmitters;
  *
  * Usage:
  *   const timer = trackTimer(setTimeout(() => doWork(), 5000))
- *   // REstJS now knows about this timer and can clean it up
+ *   // @axilJS now knows about this timer and can clean it up
  */
 function trackTimer(timer) {
     trackedTimers.add(timer);
@@ -83,7 +83,7 @@ function trackCache(name, cache, maxSize = 10000) {
 // ─── Emitter Tracking ─────────────────────────────────────────────────────────
 /**
  * Register an EventEmitter for listener leak detection.
- * Node.js warns at 10 listeners — REstJS monitors and alerts.
+ * Node.js warns at 10 listeners — @axilJS monitors and alerts.
  *
  * Usage:
  *   trackEmitter(myEmitter, 'MyService')

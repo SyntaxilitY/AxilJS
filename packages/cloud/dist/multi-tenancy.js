@@ -11,7 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.multiTenancy = multiTenancy;
 exports.getTenant = getTenant;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 // ─── multiTenancy ─────────────────────────────────────────────────────────────
 /**
  * Create multi-tenancy middleware.

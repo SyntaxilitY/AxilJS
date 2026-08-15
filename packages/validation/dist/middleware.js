@@ -5,7 +5,7 @@
  * Returns 422 with detailed errors if validation fails.
  *
  * Usage:
- *   import { validate, v } from '@restjs/validation'
+ *   import { validate, v } from '@axil/validation'
  *
  *   const createUserSchema = v.object({
  *     name:  v.string().min(2).max(100),
@@ -17,7 +17,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validate = validate;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 /**
  * Create validation middleware.
  * Validated data replaces the original (includes transforms like trim).

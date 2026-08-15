@@ -3,7 +3,7 @@
  * Handles Cross-Origin Resource Sharing headers.
  */
 
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 
 export interface CorsOptions {
   // Allowed origins (default: '*')

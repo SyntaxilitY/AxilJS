@@ -1,5 +1,5 @@
 /**
- * @restjs/config - Public API
+ * @axil/config - Public API
  */
 
 export { loadEnv } from './env';

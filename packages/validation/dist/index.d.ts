@@ -1,5 +1,5 @@
 /**
- * @restjs/validation - Public API
+ * @axil/validation - Public API
  */
 export { v } from './schema';
 export type { ValidationResult, ValidationError, BaseValidator } from './schema';

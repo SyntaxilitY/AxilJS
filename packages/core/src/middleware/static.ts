@@ -17,7 +17,7 @@ import {
 } from 'fs';
 import { join, extname, resolve } from 'path';
 import { createHash } from 'crypto';
-import { MiddlewareFn, NotFoundError } from '@restjs/common';
+import { MiddlewareFn, NotFoundError } from '@axil/common';
 
 // ─── MIME Types ───────────────────────────────────────────────────────────────
 

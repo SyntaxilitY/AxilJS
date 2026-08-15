@@ -17,7 +17,7 @@
  *   })
  *
  *   await emailQueue.add('send-welcome', {
- *     to: 'tariq@restjs.dev',
+ *     to: 'tariq@@axil.dev',
  *     subject: 'Welcome!'
  *   })
  */

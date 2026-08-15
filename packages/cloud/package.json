@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/cloud",
+  "name": "@axil/cloud",
   "version": "0.1.0",
-  "description": "REstJS Enterprise Cloud Platform - deployment, multi-tenancy, audit, monitoring",
+  "description": "@axilJS Enterprise Cloud Platform - deployment, multi-tenancy, audit, monitoring",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,10 +9,10 @@
     "dev":   "tsc --watch"
   },
   "dependencies": {
-    "@restjs/common":        "0.1.0",
-    "@restjs/core":          "0.1.0",
-    "@restjs/events":        "0.1.0",
-    "@restjs/observability": "0.1.0"
+    "@axil/common":        "0.1.0",
+    "@axil/core":          "0.1.0",
+    "@axil/events":        "0.1.0",
+    "@axil/observability": "0.1.0"
   },
   "devDependencies": {
     "typescript":  "^5.4.0",

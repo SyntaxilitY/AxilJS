@@ -88,7 +88,7 @@ export const currentDateTimeTool = createTool({
 
 /**
  * Tool to perform math calculations.
- * Safer than eval - uses a restricted expression evaluator.
+ * Safer than eval - uses a @axilricted expression evaluator.
  */
 export const calculatorTool = createTool({
   name: 'calculator',
@@ -105,12 +105,12 @@ export const calculatorTool = createTool({
   },
   handler: async ({ expression }) => {
     try {
-      // Restricted evaluation - only allow math operations
+      // @axilricted evaluation - only allow math operations
       // No eval() - use a safe expression parser
       const safeExpression = (expression as string)
         .replace(/[^0-9+\-*/().,\s%MathsqrtabceilogpowroundfloorceiltPIf]/g, '');
 
-      // Use Function constructor in a restricted scope
+      // Use Function constructor in a @axilricted scope
       const result = new Function(
         'Math',
         `"use strict"; return (${safeExpression})`

@@ -342,7 +342,7 @@ class EnumValidator extends BaseValidator {
  * Entry point for all schema definitions.
  *
  * Usage:
- *   import { v } from '@restjs/validation'
+ *   import { v } from '@axil/validation'
  *
  *   const schema = v.object({ name: v.string().min(1) })
  */

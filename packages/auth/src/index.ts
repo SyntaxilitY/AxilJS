@@ -1,5 +1,5 @@
 /**
- * @restjs/auth - Public API
+ * @axil/auth - Public API
  */
 
 // JWT

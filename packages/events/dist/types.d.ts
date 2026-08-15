@@ -1,8 +1,8 @@
 /**
  * Core event system types.
- * Used across the entire REstJS event infrastructure.
+ * Used across the entire @axilJS event infrastructure.
  */
-export interface REstEvent<T = unknown> {
+export interface axilEvent<T = unknown> {
     type: string;
     payload: T;
     id: string;
@@ -12,7 +12,7 @@ export interface REstEvent<T = unknown> {
     causationId?: string;
     version?: number;
 }
-export type EventHandler<T = unknown> = (event: REstEvent<T>) => void | Promise<void>;
+export type EventHandler<T = unknown> = (event: axilEvent<T>) => void | Promise<void>;
 export interface Subscription {
     unsubscribe(): void;
     eventType: string;
@@ -21,8 +21,8 @@ export interface Subscription {
 export interface EventBusOptions {
     maxListeners?: number;
     async?: boolean;
-    onError?: (error: Error, event: REstEvent) => void;
+    onError?: (error: Error, event: axilEvent) => void;
     middleware?: EventMiddleware[];
 }
-export type EventMiddleware = (event: REstEvent, next: () => Promise<void>) => Promise<void>;
+export type EventMiddleware = (event: axilEvent, next: () => Promise<void>) => Promise<void>;
 //# sourceMappingURL=types.d.ts.map

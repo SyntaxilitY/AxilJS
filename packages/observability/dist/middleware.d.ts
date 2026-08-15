@@ -9,7 +9,7 @@
  *   app.use(observabilityMiddleware({ metrics, tracer }))
  *   app.get('/metrics', metricsHandler(metrics))
  */
-import { MiddlewareFn, RouteHandler } from '@restjs/common';
+import { MiddlewareFn, RouteHandler } from '@axil/common';
 import { MetricsRegistry } from './metrics';
 import { Tracer } from './tracing';
 export interface ObservabilityOptions {

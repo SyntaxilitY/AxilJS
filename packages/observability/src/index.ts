@@ -1,5 +1,5 @@
 /**
- * @restjs/observability - Public API
+ * @axil/observability - Public API
  */
 
 // Logging

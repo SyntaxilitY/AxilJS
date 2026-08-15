@@ -1,5 +1,5 @@
 /**
- * @restjs/common - Public API
+ * @axil/common - Public API
  * Export everything that other packages and user applications need.
  */
 

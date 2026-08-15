@@ -1,5 +1,5 @@
 /**
- * @restjs/observability - Public API
+ * @axil/observability - Public API
  */
 export { Logger, ConsoleTransport, FileTransport } from './logger';
 export type { LogLevel, LogEntry, LoggerOptions, Transport } from './logger';

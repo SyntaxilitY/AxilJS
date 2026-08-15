@@ -5,7 +5,7 @@
 
 // ─── Leak Types ───────────────────────────────────────────────────────────────
 
-// Every type of memory leak REstJS can detect and fix
+// Every type of memory leak @axilJS can detect and fix
 export type LeakType =
   | 'event-listener'    // Unremoved event listeners
   | 'timer'             // Uncleared setTimeout / setInterval

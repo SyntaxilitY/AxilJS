@@ -1,4 +1,6 @@
-```bash
+<div align="center">
+
+```
  █████╗ ██╗  ██╗██╗██╗     ██╗████████╗██╗   ██╗     ██╗███████╗
 ██╔══██╗╚██╗██╔╝██║██║     ██║╚══██╔══╝╚██╗ ██╔╝     ██║██╔════╝
 ███████║ ╚███╔╝ ██║██║     ██║   ██║    ╚████╔╝      ██║███████╗
@@ -7,11 +9,11 @@
 ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝╚═╝   ╚═╝      ╚═╝     ╚════╝ ╚══════╝
 ```
 
-# AxilitYJS
+# AxilJS
 
 ### The JavaScript Backend That Finally Rests.
 
-**Developed by SyntaxilitY — Next-Generation JavaScript Backend Ecosystem**
+**Developed by SyntaxilitY — Superior JavaScript Backend Ecosystem**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
@@ -21,24 +23,26 @@
 [![Author](https://img.shields.io/badge/author-Tariq%20Mehmood-blueviolet.svg)]()
 
 [Getting Started](#-getting-started) •
-[Why axilitYJS](#-why-axilityjs) •
+[Why AxilJS](#-why-axiljs) •
 [Packages](#-packages) •
 [Examples](#-examples) •
 [CLI](#-cli) •
 [Roadmap](#-roadmap) •
 [Contributing](#-contributing)
 
+</div>
+
 ---
 
-## What is axilitYJS?
+## What is AxilJS?
 
-**axilitYJS** is a complete JavaScript backend ecosystem — developed by **SyntaxilitY** & **Tariq Mehmood**.
+**AxilJS** is a complete JavaScript backend ecosystem — developed by **SyntaxilitY** and **Tariq Mehmood**.
 
-The name comes directly from **Synt`axility`JS** — agility through syntax.
+The name comes directly from **Synt`axil`itYJS** — agility through syntax.
 
-In nature, the **axil** is the point on a plant where new growth begins. axilitYJS is that point for your backend — the source where everything grows naturally, together.
+In nature, the **axil** is the point on a plant where new growth begins. AxilJS is that point for your backend — the source where everything grows naturally, together.
 
-Every other tool gives you one layer. axilitYJS gives you everything:
+Every other tool gives you one layer. AxilJS gives you everything:
 
 ```
 One install → HTTP server + ORM + Auth + Validation + Testing
@@ -55,16 +59,17 @@ No dependency hell.
 ## The Name
 
 ```
-Synt  +  axility  +  JS
-         ───────
+Synt  +  axil  +  itY  +  JS
+         ────
          agility through syntax
          the axil — where natural growth begins
+         the Y — the SyntaxilitY signature
 ```
 
 | Part | Meaning |
 |---|---|
-| `axility` | Extracted from SyntaxilitY — agility, natural growth |
-| `Y` | The capitalized Y — the SyntaxilitY signature |
+| `axil` | Extracted from SyntaxilitY — agility, natural growth point |
+| `itY` | The SyntaxilitY signature |
 | `JS` | JavaScript |
 
 ---
@@ -83,7 +88,7 @@ Synt  +  axility  +  JS
 
 ```bash
 # Install CLI globally
-npm install -g @axility/cli
+npm install -g @axil/cli
 
 # Create a new project
 axil create my-api
@@ -106,7 +111,7 @@ That is it. No configuration files to create. No boilerplate to write.
 
 ## Project Structure
 
-Every axilitYJS project follows this standard layout:
+Every AxilJS project follows this standard layout:
 
 ```
 my-api/
@@ -179,27 +184,27 @@ OLLAMA_URL=http://localhost:11434
 
 ## Packages
 
-All packages live under the `@axility` scope and work together out of the box.
+All packages live under the `@axil` scope and work together out of the box.
 
 | Package | Purpose |
 |---|---|
-| `@axility/core` | HTTP server, router, middleware, SSE, static files |
-| `@axility/config` | Environment loading, typed config validation |
-| `@axility/security` | Helmet, rate limiting, CSRF, sanitization |
-| `@axility/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
-| `@axility/auth` | JWT, password hashing, RBAC |
-| `@axility/validation` | Schema-based request validation |
-| `@axility/testing` | Test runner, assertions, HTTP test client |
-| `@axility/events` | In-process event bus, pub/sub |
-| `@axility/websocket` | RFC 6455 WebSocket server, rooms |
-| `@axility/queue` | Message queue, scheduler, retry |
-| `@axility/circuit` | Circuit breaker, retry, timeout |
-| `@axility/observability` | Logging, metrics, tracing, health checks |
-| `@axility/ai` | AI providers, RAG, agents, vector store, MCP |
-| `@axility/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
-| `@axility/memory` | Memory leak detection, GC, optimization |
-| `@axility/pm` | Package manager with lock file and checksums |
-| `@axility/cli` | CLI — all `axil` commands |
+| `@axil/core` | HTTP server, router, middleware, SSE, static files |
+| `@axil/config` | Environment loading, typed config validation |
+| `@axil/security` | Helmet, rate limiting, CSRF, sanitization |
+| `@axil/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
+| `@axil/auth` | JWT, password hashing, RBAC |
+| `@axil/validation` | Schema-based request validation |
+| `@axil/testing` | Test runner, assertions, HTTP test client |
+| `@axil/events` | In-process event bus, pub/sub |
+| `@axil/websocket` | RFC 6455 WebSocket server, rooms |
+| `@axil/queue` | Message queue, scheduler, retry |
+| `@axil/circuit` | Circuit breaker, retry, timeout |
+| `@axil/observability` | Logging, metrics, tracing, health checks |
+| `@axil/ai` | AI providers, RAG, agents, vector store, MCP |
+| `@axil/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
+| `@axil/memory` | Memory leak detection, GC, optimization |
+| `@axil/pm` | Package manager with lock file and checksums |
+| `@axil/cli` | CLI — all `axil` commands |
 
 ---
 
@@ -208,9 +213,9 @@ All packages live under the `@axility` scope and work together out of the box.
 ### Core HTTP Server
 
 ```typescript
-import { Application, cors } from '@axility/core'
-import { loadEnv, defineConfig } from '@axility/config'
-import { helmet, rateLimit } from '@axility/security'
+import { Application, cors } from '@axil/core'
+import { loadEnv, defineConfig } from '@axil/config'
+import { helmet, rateLimit } from '@axil/security'
 
 loadEnv()
 
@@ -243,7 +248,7 @@ app.listen()
 ### Configuration
 
 ```typescript
-import { loadEnv, defineConfig } from '@axility/config'
+import { loadEnv, defineConfig } from '@axil/config'
 
 loadEnv()
 
@@ -265,7 +270,7 @@ const config = defineConfig({
 ### Security
 
 ```typescript
-import { helmet, rateLimit, csrf, sanitize } from '@axility/security'
+import { helmet, rateLimit, csrf, sanitize } from '@axil/security'
 
 app.use(helmet())
 app.use(rateLimit({ max: 100, windowMs: 60000 }))
@@ -283,7 +288,7 @@ app.use(sanitize())
 
 ```typescript
 import { createConnection, Entity, Column,
-         PrimaryKey, BaseRepository } from '@axility/orm'
+         PrimaryKey, BaseRepository } from '@axil/orm'
 
 @Entity('users')
 class User {
@@ -323,7 +328,7 @@ await users.delete(1)
 
 ```typescript
 // src/migrations/001_create_users.ts
-import { Migration } from '@axility/orm'
+import { Migration } from '@axil/orm'
 
 const migration: Migration = {
   async up(db) {
@@ -346,7 +351,7 @@ module.exports = migration
 ```
 
 ```typescript
-import { MigrationRunner } from '@axility/orm'
+import { MigrationRunner } from '@axil/orm'
 
 const runner = new MigrationRunner(db.getDriver())
 await runner.up()
@@ -359,13 +364,13 @@ await runner.status()
 ```typescript
 import { JWT, hashPassword, verifyPassword,
          authenticate, requireRole,
-         requirePermission }              from '@axility/auth'
+         requirePermission }              from '@axil/auth'
 
 const jwt = new JWT(process.env.JWT_SECRET)
 
-const hashed = await hashPassword('userPassword123')
-const valid  = await verifyPassword('userPassword123', hashed)
-const token  = jwt.sign({ sub: String(user.id), role: 'admin' }, { expiresIn: '7d' })
+const hashed  = await hashPassword('userPassword123')
+const valid   = await verifyPassword('userPassword123', hashed)
+const token   = jwt.sign({ sub: String(user.id), role: 'admin' }, { expiresIn: '7d' })
 const payload = jwt.verify(token)
 
 app.get('/profile', authenticate(jwt), (req, res) => res.json(req.locals.user))
@@ -377,7 +382,7 @@ app.get('/feed', authenticate(jwt, { required: false }), getFeed)
 ### Validation
 
 ```typescript
-import { v, validate } from '@axility/validation'
+import { v, validate } from '@axil/validation'
 
 const createUserSchema = v.object({
   name:     v.string().min(2).max(100),
@@ -402,7 +407,7 @@ app.post('/users',
 
 ```typescript
 import { describe, it, expect,
-         beforeAll, createTestClient } from '@axility/testing'
+         beforeAll, createTestClient } from '@axil/testing'
 
 describe('Users API', () => {
   let client: any
@@ -444,7 +449,7 @@ axil test users
 ### Event Bus
 
 ```typescript
-import { EventBus, OnEvent, registerEventHandlers } from '@axility/events'
+import { EventBus, OnEvent, registerEventHandlers } from '@axil/events'
 
 const bus = new EventBus()
 
@@ -472,7 +477,7 @@ sub.unsubscribe()
 ### WebSockets
 
 ```typescript
-import { WSServer } from '@axility/websocket'
+import { WSServer } from '@axil/websocket'
 
 const wss = new WSServer(app.getServer(), { path: '/ws' })
 
@@ -493,7 +498,7 @@ wss.on('connection', (client) => {
 ### Message Queue
 
 ```typescript
-import { Queue } from '@axility/queue'
+import { Queue } from '@axil/queue'
 
 const emailQueue = new Queue('emails', { concurrency: 5 })
 
@@ -517,13 +522,13 @@ await emailQueue.add('send-alert', { to: 'admin@example.com' }, { priority: 10 }
 ### Task Scheduler
 
 ```typescript
-import { Scheduler } from '@axility/queue'
+import { Scheduler } from '@axil/queue'
 
 const scheduler = new Scheduler()
 
-scheduler.schedule('daily-report',  '0 9 * * *',   sendDailyReport)
-scheduler.schedule('cleanup',       '0 2 * * *',   cleanupOldData)
-scheduler.schedule('weekly-backup', '0 0 * * 0',   backupDatabase)
+scheduler.schedule('daily-report',  '0 9 * * *',  sendDailyReport)
+scheduler.schedule('cleanup',       '0 2 * * *',  cleanupOldData)
+scheduler.schedule('weekly-backup', '0 0 * * 0',  backupDatabase)
 
 scheduler.start()
 
@@ -534,7 +539,7 @@ scheduler.setEnabled('cleanup', false)
 ### Circuit Breaker
 
 ```typescript
-import { CircuitBreaker, retry, withTimeout } from '@axility/circuit'
+import { CircuitBreaker, retry, withTimeout } from '@axil/circuit'
 
 const paymentCB = new CircuitBreaker('payment-api', {
   failureThreshold: 5,
@@ -552,7 +557,7 @@ const response = await withTimeout(fetch('https://slow-api.example.com'), 5000)
 ```typescript
 import { Logger, MetricsRegistry, HealthChecker,
          Tracer, observabilityMiddleware,
-         metricsHandler } from '@axility/observability'
+         metricsHandler } from '@axil/observability'
 
 const logger  = new Logger({ name: 'UserService' })
 logger.info('User created', { userId: 123 })
@@ -587,7 +592,7 @@ app.get('/metrics',      metricsHandler(metrics))
 import { OpenAIProvider, OllamaProvider, RAGPipeline,
          VectorStore, Agent, createTool,
          calculatorTool, currentDateTimeTool,
-         loadFromText } from '@axility/ai'
+         loadFromText } from '@axil/ai'
 
 const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
 // or: new OllamaProvider({ model: 'llama3.2' })
@@ -595,7 +600,7 @@ const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
 // or: new GeminiProvider({ apiKey: process.env.GOOGLE_API_KEY })
 
 const response = await provider.complete({
-  messages: [{ role: 'user', content: 'What is axilitYJS?' }],
+  messages: [{ role: 'user', content: 'What is AxilJS?' }],
   system:   'You are a helpful assistant.'
 })
 
@@ -605,11 +610,11 @@ for await (const chunk of stream) { process.stdout.write(chunk.delta) }
 const rag = new RAGPipeline({ provider, vectorStore: new VectorStore() })
 
 await rag.index(loadFromText([
-  'axilitYJS supports PostgreSQL MySQL and SQLite.',
+  'AxilJS supports PostgreSQL MySQL and SQLite.',
   'The ORM provides migrations and a query builder.'
 ]))
 
-const answer = await rag.query('What databases does axilitYJS support?')
+const answer = await rag.query('What databases does AxilJS support?')
 console.log(answer.response)
 console.log(answer.sources)
 
@@ -638,7 +643,7 @@ console.log(agentResult.steps)
 ### Multi-Tenancy
 
 ```typescript
-import { multiTenancy, getTenant, auditLog } from '@axility/cloud'
+import { multiTenancy, getTenant, auditLog } from '@axil/cloud'
 
 app.use(multiTenancy({
   strategy:      'header',
@@ -663,7 +668,7 @@ auditLog({
 ### Feature Flags
 
 ```typescript
-import { FeatureFlagManager } from '@axility/cloud'
+import { FeatureFlagManager } from '@axil/cloud'
 
 const flags = new FeatureFlagManager()
 
@@ -685,7 +690,7 @@ const isEnabled = flags.isEnabled('new-checkout', {
 
 ```typescript
 import { MemoryMonitor, optimizer,
-         memoryMiddleware, trackCache } from '@axility/memory'
+         memoryMiddleware, trackCache } from '@axil/memory'
 
 const monitor = new MemoryMonitor({
   intervalMs:               30000,
@@ -709,7 +714,7 @@ console.log(`Freed: ${result.freedMb}MB`)
 ### Server-Sent Events
 
 ```typescript
-import { createSSE, sseHeartbeat } from '@axility/core'
+import { createSSE, sseHeartbeat } from '@axil/core'
 
 app.get('/events', (req, res) => {
   const sse      = createSSE(res)
@@ -769,7 +774,7 @@ axil run
 ```
 
 ```
- axilitYJS development server
+ AxilJS development server
  ─────────────────────────────────────
 
 01:30:00 [axil run] Initial compilation...
@@ -790,8 +795,8 @@ axil run
 
 ```bash
 # Clone
-git clone https://github.com/SyntaxilitY/AxilitYJS.git
-cd axilitYJS
+git clone https://github.com/SyntaxilitY/AxilJS.git
+cd AxilJS
 
 # Install workspace dependencies
 npm install
@@ -821,7 +826,7 @@ cd ../cli                 && npm run build
 
 ## What Gets Fixed Automatically
 
-axilitYJS monitors and fixes memory issues on its own:
+AxilJS monitors and fixes memory issues on its own:
 
 | Issue | Detected | Auto Fixed |
 |---|---|---|
@@ -834,9 +839,9 @@ axilitYJS monitors and fixes memory issues on its own:
 
 ---
 
-## Why axilitYJS?
+## Why AxilJS?
 
-| | Node.js | Express | NestJS | Bun | **axilitYJS** |
+| | Node.js | Express | NestJS | Bun | **AxilJS** |
 |---|---|---|---|---|---|
 | HTTP Framework | ✗ | ✓ | ✓ | Partial | ✓ |
 | ORM | ✗ | ✗ | ✗ | ✗ | ✓ |
@@ -866,10 +871,10 @@ Phase 7  ✅  Memory management — leak detection, GC, optimization
 
 Upcoming
 ────────
-Phase 8     Official axilitYJS package registry
+Phase 8     Official AxilJS package registry
 Phase 9     gRPC and native RPC support
-Phase 10    axilitYJS Cloud (managed hosting)
-Phase 11    axilitYJS Studio (visual admin panel)
+Phase 10    AxilJS Cloud (managed hosting)
+Phase 11    AxilJS Studio (visual admin panel)
 ```
 
 ---
@@ -878,8 +883,8 @@ Phase 11    axilitYJS Studio (visual admin panel)
 
 ```bash
 # Clone
-git clone https://github.com/SyntaxilitY/AxilitYJS.git
-cd axilitYJS
+git clone https://github.com/SyntaxilitY/AxilJS.git
+cd AxilJS
 
 npm install
 npm run build:all
@@ -901,7 +906,7 @@ npm run build:all
 ```
 MIT License
 
-Copyright (c) 2026 Tariq Mehmood
+Copyright (c) 2025 Tariq Mehmood — SyntaxilitY
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the "Software"),
@@ -926,11 +931,11 @@ DEALINGS IN THE SOFTWARE.
 
 <div align="center">
 
-**axilitYJS** — *The JavaScript Backend That Finally Rests.*
+**AxilJS** — *The JavaScript Backend That Finally Rests.*
 
 A [SyntaxilitY](https://github.com/SyntaxilitY) open source project.
 Built by [Tariq Mehmood](https://github.com/TariqMehmood1004).
 
-⭐ Star this repo if axilitYJS saves you from assembling another ecosystem from scratch.
+⭐ Star this repo if AxilJS saves you from assembling another ecosystem from scratch.
 
 </div>

@@ -1,6 +1,6 @@
 /**
  * Application configuration types.
- * Used when creating a new REstJS application.
+ * Used when creating a new @axilJS application.
  */
 export interface ServerConfig {
     port?: number;

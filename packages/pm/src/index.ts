@@ -1,5 +1,5 @@
 /**
- * @restjs/pm - Public API
+ * @axil/pm - Public API
  */
 
 export { Installer } from './installer';

@@ -1,5 +1,5 @@
 /**
- * @restjs/auth - Public API
+ * @axil/auth - Public API
  */
 export { JWT } from './jwt/jwt';
 export type { JWTPayload, JWTSignOptions, JWTVerifyOptions } from './jwt/jwt';

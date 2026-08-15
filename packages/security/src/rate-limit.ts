@@ -8,7 +8,7 @@
  *   - Sets Retry-After header
  */
 
-import { MiddlewareFn, REstError } from '@restjs/common';
+import { MiddlewareFn, axilError } from '@axil/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -61,7 +61,7 @@ setInterval(() => {
 
 // ─── Rate Limit Error ─────────────────────────────────────────────────────────
 
-export class TooManyRequestsError extends REstError {
+export class TooManyRequestsError extends axilError {
   constructor(message = 'Too many requests, please try again later') {
     super(message, 429, 'RATE_LIMIT_EXCEEDED');
     this.name = 'TooManyRequestsError';

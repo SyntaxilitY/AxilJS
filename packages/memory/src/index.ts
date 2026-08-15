@@ -1,6 +1,6 @@
 /**
- * @restjs/memory — Public API
- * Memory management, leak detection, and optimization for REstJS.
+ * @axil/memory — Public API
+ * Memory management, leak detection, and optimization for @axilJS.
  */
 
 // Monitor

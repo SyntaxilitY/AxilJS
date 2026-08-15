@@ -5,7 +5,7 @@
  * This is the core of the middleware system.
  * Works like Express/Koa middleware but with async/await support built-in.
  */
-import { MiddlewareFn, ErrorMiddlewareFn, RouteHandler, REstRequest, REstResponse } from '@restjs/common';
+import { MiddlewareFn, ErrorMiddlewareFn, RouteHandler, @axilRequest, @axilResponse } from '@axil/common';
 export declare class MiddlewareChain {
     /**
      * Execute a list of middleware functions followed by a route handler.
@@ -18,6 +18,6 @@ export declare class MiddlewareChain {
      * @param req           The request object
      * @param res           The response object
      */
-    static execute(middleware: MiddlewareFn[], handler: RouteHandler, errorHandlers: ErrorMiddlewareFn[], req: REstRequest, res: REstResponse): Promise<void>;
+    static execute(middleware: MiddlewareFn[], handler: RouteHandler, errorHandlers: ErrorMiddlewareFn[], req: @axilRequest, res: @axilResponse): Promise<void>;
 }
 //# sourceMappingURL=chain.d.ts.map

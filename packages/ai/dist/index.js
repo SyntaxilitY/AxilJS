@@ -1,7 +1,7 @@
 "use strict";
 /**
- * @restjs/ai - Public API
- * The complete REstJS AI platform.
+ * @axil/ai - Public API
+ * The complete @axilJS AI platform.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;

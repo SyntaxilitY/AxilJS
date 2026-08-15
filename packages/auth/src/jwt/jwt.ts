@@ -10,7 +10,7 @@
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
-import { UnauthorizedError } from '@restjs/common';
+import { UnauthorizedError } from '@axil/common';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

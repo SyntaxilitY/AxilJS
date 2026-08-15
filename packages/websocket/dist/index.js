@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @restjs/websocket - Public API
+ * @axil/websocket - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.performHandshake = exports.isWebSocketUpgrade = exports.OPCODES = exports.parseFrame = exports.buildFrame = exports.WSClient = exports.WSServer = void 0;

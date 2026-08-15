@@ -1,12 +1,12 @@
 "use strict";
 /**
- * REstJS error types.
- * All framework errors extend REstError so they can be caught consistently.
+ * axilJS error types.
+ * All framework errors extend axilError so they can be caught consistently.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InternalError = exports.ValidationError = exports.ForbiddenError = exports.UnauthorizedError = exports.BadRequestError = exports.NotFoundError = exports.REstError = void 0;
+exports.InternalError = exports.ValidationError = exports.ForbiddenError = exports.UnauthorizedError = exports.BadRequestError = exports.NotFoundError = exports.axilError = void 0;
 // ─── Base Error ───────────────────────────────────────────────────────────────
-class REstError extends Error {
+class axilError extends Error {
     // HTTP status code to send to client
     statusCode;
     // Machine-readable error code e.g. 'NOT_FOUND'
@@ -15,50 +15,50 @@ class REstError extends Error {
     details;
     constructor(message, statusCode = 500, code = 'INTERNAL_ERROR', details) {
         super(message);
-        this.name = 'REstError';
+        this.name = 'axilError';
         this.statusCode = statusCode;
         this.code = code;
         this.details = details;
     }
 }
-exports.REstError = REstError;
+exports.axilError = axilError;
 // ─── Common HTTP Errors ───────────────────────────────────────────────────────
-class NotFoundError extends REstError {
+class NotFoundError extends axilError {
     constructor(message = 'Resource not found') {
         super(message, 404, 'NOT_FOUND');
         this.name = 'NotFoundError';
     }
 }
 exports.NotFoundError = NotFoundError;
-class BadRequestError extends REstError {
+class BadRequestError extends axilError {
     constructor(message = 'Bad request', details) {
         super(message, 400, 'BAD_REQUEST', details);
         this.name = 'BadRequestError';
     }
 }
 exports.BadRequestError = BadRequestError;
-class UnauthorizedError extends REstError {
+class UnauthorizedError extends axilError {
     constructor(message = 'Unauthorized') {
         super(message, 401, 'UNAUTHORIZED');
         this.name = 'UnauthorizedError';
     }
 }
 exports.UnauthorizedError = UnauthorizedError;
-class ForbiddenError extends REstError {
+class ForbiddenError extends axilError {
     constructor(message = 'Forbidden') {
         super(message, 403, 'FORBIDDEN');
         this.name = 'ForbiddenError';
     }
 }
 exports.ForbiddenError = ForbiddenError;
-class ValidationError extends REstError {
+class ValidationError extends axilError {
     constructor(message = 'Validation failed', details) {
         super(message, 422, 'VALIDATION_ERROR', details);
         this.name = 'ValidationError';
     }
 }
 exports.ValidationError = ValidationError;
-class InternalError extends REstError {
+class InternalError extends axilError {
     constructor(message = 'Internal server error') {
         super(message, 500, 'INTERNAL_ERROR');
         this.name = 'InternalError';

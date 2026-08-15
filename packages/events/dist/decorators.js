@@ -7,7 +7,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.OnEvent = OnEvent;
 exports.registerEventHandlers = registerEventHandlers;
 // ─── Metadata Key ─────────────────────────────────────────────────────────────
-const EVENT_HANDLERS_KEY = '__restjs_event_handlers__';
+const EVENT_HANDLERS_KEY = '__@axiljs_event_handlers__';
 // ─── @OnEvent Decorator ───────────────────────────────────────────────────────
 /**
  * Mark a method as an event handler.
@@ -15,7 +15,7 @@ const EVENT_HANDLERS_KEY = '__restjs_event_handlers__';
  *
  * Usage:
  *   @OnEvent('user.created')
- *   async handleUserCreated(event: REstEvent) { ... }
+ *   async handleUserCreated(event: @axilEvent) { ... }
  */
 function OnEvent(eventType) {
     // Return a plain function — avoids MethodDecorator signature conflicts
@@ -49,12 +49,12 @@ function registerEventHandlers(instance, bus) {
     for (const { eventType, methodName } of handlers) {
         const method = instance[methodName];
         if (typeof method !== 'function') {
-            console.warn(`[REstJS Events] '${methodName}' is not a function on ` +
+            console.warn(`[@axilJS Events] '${methodName}' is not a function on ` +
                 `${instance.constructor.name}`);
             continue;
         }
         bus.on(eventType, (event) => method.call(instance, event));
-        console.log(`\x1b[90m[REstJS Events]\x1b[0m Registered: ` +
+        console.log(`\x1b[90m[@axilJS Events]\x1b[0m Registered: ` +
             `${instance.constructor.name}.${methodName} → '${eventType}'`);
     }
 }

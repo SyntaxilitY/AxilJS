@@ -19,7 +19,7 @@
 import { ConnectionManager } from '../connection/connection-manager';
 import { QueryBuilder } from '../query-builder/query-builder';
 import { getEntityMetadata } from '../decorators/entity';
-import { NotFoundError } from '@restjs/common';
+import { NotFoundError } from '@axil/common';
 
 export class BaseRepository<T extends object> {
   protected tableName: string;

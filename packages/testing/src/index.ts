@@ -1,5 +1,5 @@
 /**
- * @restjs/testing - Public API
+ * @axil/testing - Public API
  */
 
 // Test runner

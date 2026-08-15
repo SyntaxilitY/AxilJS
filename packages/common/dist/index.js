@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @restjs/common - Public API
+ * @axil/common - Public API
  * Export everything that other packages and user applications need.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {

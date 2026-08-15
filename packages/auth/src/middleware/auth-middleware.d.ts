@@ -13,7 +13,7 @@
  *   // Optional auth (don't fail if no token)
  *   app.get('/feed', authenticate(jwt, { required: false }), getFeed)
  */
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 import { JWT } from '../jwt/jwt';
 export interface AuthOptions {
     required?: boolean;

@@ -1,20 +1,21 @@
 {
-  "name": "@restjs/cli",
+  "name": "@axil/cli",
   "version": "0.1.0",
-  "description": "REstJS CLI - rest create, rest run, rest build, rest deploy",
+  "description": "AxilJS CLI — axil create, run, build, test, deploy",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "rest": "dist/cli.js"
+    "axil": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
     "dev":   "tsc --watch"
   },
   "dependencies": {
-    "@restjs/common": "0.1.0"
+    "@axil/common": "0.1.0"
   },
   "devDependencies": {
-    "typescript":  "^5.4.0",
+    "typescript": "^5.4.0",
     "@types/node": "^20.0.0"
   }
 }

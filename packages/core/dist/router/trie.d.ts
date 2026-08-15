@@ -8,7 +8,7 @@
  *   Dynamic params:   /users/:id
  *   Wildcard:         /files/*
  */
-import { RouteParams } from '@restjs/common';
+import { RouteParams } from '@axil/common';
 export interface TrieMatch<T> {
     handler: T;
     params: RouteParams;

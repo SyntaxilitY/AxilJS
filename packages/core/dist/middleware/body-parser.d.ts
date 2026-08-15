@@ -7,7 +7,7 @@
  *   application/x-www-form-urlencoded → parses form data
  *   text/plain                → raw string
  */
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 /**
  * Create body parser middleware.
  *

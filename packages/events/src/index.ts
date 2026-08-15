@@ -1,5 +1,5 @@
 /**
- * @restjs/events - Public API
+ * @axil/events - Public API
  */
 
 export { EventBus, getGlobalEventBus, setGlobalEventBus } from './event-bus';

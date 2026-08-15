@@ -3,13 +3,13 @@
  * Lock file management.
  * Ensures deterministic, reproducible installs.
  *
- * The lock file (rest.lock) records:
+ * The lock file (@axil.lock) records:
  *   - Exact resolved version of every package
  *   - SHA-256 checksum for integrity verification
  *   - Dependency tree for each package
  *
- * If rest.lock exists → use exact versions from it
- * If rest.lock missing → resolve versions, create lock file
+ * If @axil.lock exists → use exact versions from it
+ * If @axil.lock missing → resolve versions, create lock file
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LockFileManager = void 0;
@@ -19,7 +19,7 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const crypto_1 = require("crypto");
 // ─── Lock File Manager ────────────────────────────────────────────────────────
-const LOCKFILE_NAME = 'rest.lock';
+const LOCKFILE_NAME = '@axil.lock';
 const LOCKFILE_VERSION = 1;
 class LockFileManager {
     lockfilePath;
@@ -45,7 +45,7 @@ class LockFileManager {
             return JSON.parse(content);
         }
         catch {
-            console.warn('[REstJS PM] Warning: Could not parse rest.lock - creating new one');
+            console.warn('[@axilJS PM] Warning: Could not parse @axil.lock - creating new one');
             return {
                 lockfileVersion: LOCKFILE_VERSION,
                 updatedAt: new Date().toISOString(),

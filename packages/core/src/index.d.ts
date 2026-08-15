@@ -1,6 +1,6 @@
 /**
- * @restjs/core - Public API
- * Everything a developer needs to build with REstJS.
+ * @axil/core - Public API
+ * Everything a developer needs to build with @axilJS.
  */
 export { Application } from './application';
 export { Router } from './router/router';
@@ -14,5 +14,5 @@ export { serveStatic } from './middleware/static';
 export type { StaticOptions } from './middleware/static';
 export { createSSE, sseHeartbeat } from './middleware/sse';
 export type { SSEEvent, SSEConnection } from './middleware/sse';
-export * from '@restjs/common';
+export * from '@axil/common';
 //# sourceMappingURL=index.d.ts.map

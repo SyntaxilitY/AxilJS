@@ -1,6 +1,6 @@
 /**
  * HTTP test client.
- * Makes requests to a running REstJS application in tests.
+ * Makes requests to a running @axilJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:
@@ -12,7 +12,7 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
-import { Application } from '@restjs/core';
+import { Application } from '@axil/core';
 
 // ─── Test Response ────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/pm",
+  "name": "@axil/pm",
   "version": "0.1.0",
-  "description": "REstJS package manager - deterministic installs, checksums, registry",
+  "description": "@axilJS package manager - deterministic installs, checksums, registry",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

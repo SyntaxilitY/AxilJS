@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/testing",
+  "name": "@axil/testing",
   "version": "0.1.0",
-  "description": "REstJS testing framework - test runner, assertions, HTTP client",
+  "description": "@axilJS testing framework - test runner, assertions, HTTP client",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,8 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@restjs/common": "0.1.0",
-    "@restjs/core": "0.1.0"
+    "@axil/common": "0.1.0",
+    "@axil/core": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

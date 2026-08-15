@@ -115,7 +115,7 @@ export declare class MCPClient {
         }>;
     }>;
     /**
-     * Convert MCP tools to REstJS agent Tool format.
+     * Convert MCP tools to @axilJS agent Tool format.
      * Use this to add MCP tools to an Agent.
      *
      * Usage:

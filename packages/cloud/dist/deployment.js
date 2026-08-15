@@ -2,7 +2,7 @@
 /**
  * Deployment Toolkit.
  * Generates Dockerfiles, Kubernetes manifests, and deployment scripts.
- * Supports `rest deploy` command.
+ * Supports `@axil deploy` command.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateDeployment = generateDeployment;
@@ -66,6 +66,6 @@ echo "Applying Kubernetes manifests..."
 kubectl apply -f deployment.yaml
 echo "Deployment complete."
 `);
-    console.log(`\x1b[32m[REstJS Deploy]\x1b[0m Generated deployment files in ./${dir}/`);
+    console.log(`\x1b[32m[@axilJS Deploy]\x1b[0m Generated deployment files in ./${dir}/`);
 }
 //# sourceMappingURL=deployment.js.map

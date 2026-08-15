@@ -1,5 +1,5 @@
 /**
- * @restjs/orm - Public API
+ * @axil/orm - Public API
  */
 
 // Connection

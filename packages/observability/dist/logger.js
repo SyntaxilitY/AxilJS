@@ -12,7 +12,7 @@
  *
  * Usage:
  *   const logger = new Logger({ name: 'UserService' })
- *   logger.info('User created', { userId: 123, email: 'tariq@restjs.dev' })
+ *   logger.info('User created', { userId: 123, email: 'tariq@@axil.dev' })
  *   logger.error('Database error', { error: err.message, query })
  *
  *   const requestLogger = logger.child({ requestId: req.id })
@@ -52,7 +52,7 @@ class ConsoleTransport {
             return;
         }
         // Pretty format
-        const { level, message, name, timestamp, pid, ...rest } = entry;
+        const { level, message, name, timestamp, pid, ...axil } = entry;
         const color = COLORS[level];
         const time = new Date(timestamp).toLocaleTimeString();
         const levelPad = level.toUpperCase().padEnd(5);
@@ -61,15 +61,15 @@ class ConsoleTransport {
             `${DIM}[${name}]${RESET} ` +
             `${message}`;
         // Append extra context on the same line if small
-        const restKeys = Object.keys(rest);
-        if (restKeys.length > 0 && restKeys.length <= 3) {
-            const extras = restKeys
-                .map(k => `${DIM}${k}${RESET}=${JSON.stringify(rest[k])}`)
+        const axilKeys = Object.keys(axil);
+        if (axilKeys.length > 0 && axilKeys.length <= 3) {
+            const extras = axilKeys
+                .map(k => `${DIM}${k}${RESET}=${JSON.stringify(axil[k])}`)
                 .join(' ');
             line += ` ${extras}`;
         }
-        else if (restKeys.length > 3) {
-            line += '\n' + JSON.stringify(rest, null, 2)
+        else if (axilKeys.length > 3) {
+            line += '\n' + JSON.stringify(axil, null, 2)
                 .split('\n')
                 .map(l => '  ' + l)
                 .join('\n');
@@ -106,7 +106,7 @@ class Logger {
     context;
     transports;
     constructor(options = {}) {
-        this.name = options.name || 'REstJS';
+        this.name = options.name || 'axilJS';
         this.format = options.format ||
             (process.env.NODE_ENV === 'production' ? 'json' : 'pretty');
         const defaultLevel = process.env.NODE_ENV === 'production' ? 'info' : 'debug';

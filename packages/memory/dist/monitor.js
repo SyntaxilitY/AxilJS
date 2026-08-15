@@ -55,7 +55,7 @@ class MemoryMonitor extends events_1.EventEmitter {
         if (this.running)
             return;
         this.running = true;
-        console.log(`${C.cyan}[REstJS Memory]${C.reset} Monitor started ` +
+        console.log(`${C.cyan}[@axilJS Memory]${C.reset} Monitor started ` +
             `${C.gray}(scan every ${this.options.intervalMs / 1000}s)${C.reset}`);
         // Immediate first scan
         this.scan();
@@ -77,7 +77,7 @@ class MemoryMonitor extends events_1.EventEmitter {
             clearInterval(this.timer);
             this.timer = undefined;
         }
-        console.log(`${C.cyan}[REstJS Memory]${C.reset} Monitor stopped`);
+        console.log(`${C.cyan}[@axilJS Memory]${C.reset} Monitor stopped`);
     }
     // ─── Scan ─────────────────────────────────────────────────────────────────
     /**
@@ -155,7 +155,7 @@ class MemoryMonitor extends events_1.EventEmitter {
             status === 'leaks-fixed' ? '✓ Leaks Fixed' :
                 status === 'leaks-detected' ? '⚠ Leaks Found' :
                     '✗ Critical';
-        console.log(`${C.cyan}[REstJS Memory]${C.reset} ` +
+        console.log(`${C.cyan}[@axilJS Memory]${C.reset} ` +
             `${statusColor}${statusLabel}${C.reset} ` +
             `${C.gray}heap: ${after.heapUsedMb}MB/${after.heapTotalMb}MB ` +
             `(${after.usagePercent}%)${C.reset}` +
@@ -167,7 +167,7 @@ class MemoryMonitor extends events_1.EventEmitter {
         }
         // Critical warning
         if (status === 'critical') {
-            console.log(`${C.red}${C.bold}[REstJS Memory] CRITICAL: ` +
+            console.log(`${C.red}${C.bold}[@axilJS Memory] CRITICAL: ` +
                 `${after.heapUsedMb}MB used — running emergency optimization${C.reset}`);
         }
     }

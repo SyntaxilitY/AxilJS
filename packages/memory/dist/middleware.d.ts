@@ -1,9 +1,9 @@
 /**
- * Memory Middleware for REstJS HTTP requests.
+ * Memory Middleware for @axilJS HTTP requests.
  * Attaches memory info to requests for debugging.
  * Flags requests that trigger significant memory increases.
  */
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 export interface MemoryMiddlewareOptions {
     leakThresholdMb?: number;
     exposeHeader?: boolean;

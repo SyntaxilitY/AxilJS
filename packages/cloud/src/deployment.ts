@@ -1,7 +1,7 @@
 /**
  * Deployment Toolkit.
  * Generates Dockerfiles, Kubernetes manifests, and deployment scripts.
- * Supports `rest deploy` command.
+ * Supports `@axil deploy` command.
  */
 
 import { writeFileSync, mkdirSync } from 'fs';
@@ -80,5 +80,5 @@ kubectl apply -f deployment.yaml
 echo "Deployment complete."
 `);
 
-  console.log(`\x1b[32m[REstJS Deploy]\x1b[0m Generated deployment files in ./${dir}/`);
+  console.log(`\x1b[32m[@axilJS Deploy]\x1b[0m Generated deployment files in ./${dir}/`);
 }

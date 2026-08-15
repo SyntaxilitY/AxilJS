@@ -121,7 +121,7 @@ declare class EnumValidator<T extends string> extends BaseValidator<T> {
  * Entry point for all schema definitions.
  *
  * Usage:
- *   import { v } from '@restjs/validation'
+ *   import { v } from '@axil/validation'
  *
  *   const schema = v.object({ name: v.string().min(1) })
  */

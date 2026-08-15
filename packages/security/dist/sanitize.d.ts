@@ -6,7 +6,7 @@
  * Note: SQL injection protection is primarily the ORM's job (Phase 3).
  * This is a defense-in-depth layer.
  */
-import { MiddlewareFn } from '@restjs/common';
+import { MiddlewareFn } from '@axil/common';
 /**
  * Escape HTML special characters in a string.
  * Use when outputting user input into HTML.

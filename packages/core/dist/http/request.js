@@ -1,6 +1,6 @@
 "use strict";
 /**
- * REstJS Request implementation.
+ * @axilJS Request implementation.
  * Wraps Node.js IncomingMessage and provides a clean API.
  */
 Object.defineProperty(exports, "__esModule", { value: true });

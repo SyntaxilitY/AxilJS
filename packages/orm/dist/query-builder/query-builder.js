@@ -134,7 +134,7 @@ class QueryBuilder {
      * Build an INSERT query.
      *
      * Usage:
-     *   await db.insert('users', { name: 'Tariq', email: 'tariq@restjs.dev' })
+     *   await db.insert('users', { name: 'Tariq', email: 'tariq@@axil.dev' })
      */
     insert(table, data) {
         this.operation = 'INSERT';

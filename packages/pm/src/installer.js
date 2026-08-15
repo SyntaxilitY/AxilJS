@@ -23,8 +23,8 @@ class Installer {
         this.cwd = options.cwd || process.cwd();
         this.lockManager = new lockfile_1.LockFileManager(this.cwd);
         this.registry = new registry_1.RegistryClient();
-        // Local cache directory: ~/.restjs/cache
-        this.cacheDir = (0, path_1.join)(process.env.HOME || process.env.USERPROFILE || this.cwd, '.restjs', 'cache');
+        // Local cache directory: ~/.@axiljs/cache
+        this.cacheDir = (0, path_1.join)(process.env.HOME || process.env.USERPROFILE || this.cwd, '.@axiljs', 'cache');
         // Ensure cache directory exists
         (0, fs_1.mkdirSync)(this.cacheDir, { recursive: true });
     }
@@ -36,7 +36,7 @@ class Installer {
         const pkgPath = (0, path_1.join)(this.cwd, 'package.json');
         if (!(0, fs_1.existsSync)(pkgPath)) {
             throw new Error(`No package.json found in ${this.cwd}.\n` +
-                `Run 'rest create <name>' to create a new project.`);
+                `Run '@axil create <name>' to create a new project.`);
         }
         // Parse package.json
         const pkgJson = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8'));
@@ -46,10 +46,10 @@ class Installer {
             ...(includeDev ? pkgJson.devDependencies || {} : {})
         };
         if (Object.keys(toInstall).length === 0) {
-            console.log('[REstJS PM] No dependencies to install.');
+            console.log('[@axilJS PM] No dependencies to install.');
             return;
         }
-        console.log(`\n\x1b[36m[REstJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`);
+        console.log(`\n\x1b[36m[@axilJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`);
         const nodeModulesDir = (0, path_1.join)(this.cwd, 'node_modules');
         (0, fs_1.mkdirSync)(nodeModulesDir, { recursive: true });
         let installed = 0;
@@ -75,7 +75,7 @@ class Installer {
         this.lockManager.save();
         // Print summary
         console.log('');
-        console.log(`\x1b[36m[REstJS PM]\x1b[0m Done. ` +
+        console.log(`\x1b[36m[@axilJS PM]\x1b[0m Done. ` +
             `${installed} installed, ${cached} from cache` +
             (failed > 0 ? `, \x1b[31m${failed} failed\x1b[0m` : '') +
             '.');
@@ -143,7 +143,7 @@ class Installer {
      * Full tar/gzip extraction requires the built-in zlib module.
      */
     async extract(tarball, packageName, nodeModulesDir) {
-        // For scoped packages: @restjs/core → @restjs/core directory structure
+        // For scoped packages: @axil/core → @axil/core directory structure
         const packageDir = (0, path_1.join)(nodeModulesDir, packageName);
         (0, fs_1.mkdirSync)(packageDir, { recursive: true });
         // In production this would use Node's built-in zlib to extract the .tgz
@@ -155,8 +155,8 @@ class Installer {
         if (!(0, fs_1.existsSync)((0, path_1.join)(packageDir, 'package.json'))) {
             (0, fs_1.writeFileSync)((0, path_1.join)(packageDir, 'package.json'), JSON.stringify({
                 name: packageName,
-                _restjs_installed: true,
-                _restjs_note: 'Installed by REstJS PM'
+                _@axiljs_installed: true,
+                _@axiljs_note: 'Installed by @axilJS PM'
             }, null, 2));
         }
     }

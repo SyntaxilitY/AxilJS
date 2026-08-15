@@ -15,7 +15,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.csrf = csrf;
 const crypto_1 = require("crypto");
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 // ─── Token Generation ─────────────────────────────────────────────────────────
 /**
  * Generate a cryptographically secure random token.
@@ -44,9 +44,9 @@ function parseCookies(cookieHeader) {
     if (!cookieHeader)
         return cookies;
     cookieHeader.split(';').forEach(cookie => {
-        const [name, ...rest] = cookie.trim().split('=');
+        const [name, ...axil] = cookie.trim().split('=');
         if (name)
-            cookies[name.trim()] = rest.join('=').trim();
+            cookies[name.trim()] = axil.join('=').trim();
     });
     return cookies;
 }

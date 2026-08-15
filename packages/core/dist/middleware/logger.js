@@ -4,9 +4,9 @@
  * Logs each request with method, path, status, and duration.
  *
  * Output example:
- *   [REstJS] GET /users/123 → 200 OK  4ms
- *   [REstJS] POST /users   → 201 Created  12ms
- *   [REstJS] GET /missing  → 404 Not Found  1ms
+ *   [@axilJS] GET /users/123 → 200 OK  4ms
+ *   [@axilJS] POST /users   → 201 Created  12ms
+ *   [@axilJS] GET /missing  → 404 Not Found  1ms
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requestLogger = requestLogger;
@@ -73,7 +73,7 @@ function requestLogger(enabled = true) {
             const status = res.raw.statusCode;
             const mColor = methodColor(method);
             const sColor = statusColor(status);
-            console.log(`${colors.gray}[REstJS]${colors.reset} ` +
+            console.log(`${colors.gray}[@axilJS]${colors.reset} ` +
                 `${mColor}${colors.bold}${method.padEnd(7)}${colors.reset} ` +
                 `${path.padEnd(30)} ` +
                 `${sColor}→ ${status}${colors.reset} ` +

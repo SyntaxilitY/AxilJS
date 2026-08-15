@@ -7,7 +7,7 @@
  *   - Returns 429 Too Many Requests
  *   - Sets Retry-After header
  */
-import { MiddlewareFn, REstError } from '@restjs/common';
+import { MiddlewareFn, axilError } from '@axil/common';
 export interface RateLimitOptions {
     windowMs?: number;
     max?: number;
@@ -23,7 +23,7 @@ export interface RateLimitOptions {
     }) => boolean;
     headers?: boolean;
 }
-export declare class TooManyRequestsError extends REstError {
+export declare class TooManyRequestsError extends axilError {
     constructor(message?: string);
 }
 /**

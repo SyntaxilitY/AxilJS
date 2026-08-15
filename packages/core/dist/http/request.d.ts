@@ -1,10 +1,10 @@
 /**
- * REstJS Request implementation.
+ * @axilJS Request implementation.
  * Wraps Node.js IncomingMessage and provides a clean API.
  */
 import { IncomingMessage } from 'http';
-import { REstRequest, HttpMethod, RouteParams, QueryParams } from '@restjs/common';
-export declare class Request implements REstRequest {
+import { axilRequest, HttpMethod, RouteParams, QueryParams } from '@axil/common';
+export declare class Request implements axilRequest {
     raw: IncomingMessage;
     method: HttpMethod;
     url: string;

@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/circuit",
+  "name": "@axil/circuit",
   "version": "0.1.0",
-  "description": "REstJS resilience - circuit breaker, retry, timeout, bulkhead",
+  "description": "@axilJS resilience - circuit breaker, retry, timeout, bulkhead",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@restjs/common": "0.1.0"
+    "@axil/common": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

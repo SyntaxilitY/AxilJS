@@ -102,7 +102,7 @@ export class MigrationRunner {
     });
 
     if (pending.length === 0) {
-      console.log('\x1b[32m[REstJS ORM]\x1b[0m All migrations up to date.');
+      console.log('\x1b[32m[@axilJS ORM]\x1b[0m All migrations up to date.');
       return;
     }
 
@@ -113,7 +113,7 @@ export class MigrationRunner {
     const batch = lastBatch + 1;
 
     console.log(
-      `\n\x1b[36m[REstJS ORM]\x1b[0m Running ${pending.length} migrations (batch ${batch})...\n`
+      `\n\x1b[36m[@axilJS ORM]\x1b[0m Running ${pending.length} migrations (batch ${batch})...\n`
     );
 
     // Run each pending migration in a transaction
@@ -159,7 +159,7 @@ export class MigrationRunner {
     const executed = await this.getExecutedMigrations();
 
     if (executed.length === 0) {
-      console.log('\x1b[33m[REstJS ORM]\x1b[0m Nothing to roll back.');
+      console.log('\x1b[33m[@axilJS ORM]\x1b[0m Nothing to roll back.');
       return;
     }
 
@@ -170,7 +170,7 @@ export class MigrationRunner {
       .reverse(); // Roll back in reverse order
 
     console.log(
-      `\n\x1b[33m[REstJS ORM]\x1b[0m Rolling back batch ${lastBatch}...\n`
+      `\n\x1b[33m[@axilJS ORM]\x1b[0m Rolling back batch ${lastBatch}...\n`
     );
 
     for (const migration of toRollback) {
@@ -211,7 +211,7 @@ export class MigrationRunner {
     const executed = await this.getExecutedMigrations();
     const executedMap = new Map(executed.map(m => [m.name, m]));
 
-    console.log('\n\x1b[36m[REstJS ORM]\x1b[0m Migration Status:\n');
+    console.log('\n\x1b[36m[@axilJS ORM]\x1b[0m Migration Status:\n');
 
     for (const file of files) {
       const name = file.replace(/\.(ts|js)$/, '');

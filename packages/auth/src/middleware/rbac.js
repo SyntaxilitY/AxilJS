@@ -17,7 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRole = requireRole;
 exports.requirePermission = requirePermission;
 exports.requireOwnership = requireOwnership;
-const common_1 = require("@restjs/common");
+const common_1 = require("@axil/common");
 /**
  * Require the authenticated user to have one of the specified roles.
  * Must be used AFTER authenticate() middleware.

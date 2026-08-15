@@ -71,7 +71,7 @@ class MigrationRunner {
             return !executedNames.has(name);
         });
         if (pending.length === 0) {
-            console.log('\x1b[32m[REstJS ORM]\x1b[0m All migrations up to date.');
+            console.log('\x1b[32m[@axilJS ORM]\x1b[0m All migrations up to date.');
             return;
         }
         // Determine next batch number
@@ -79,7 +79,7 @@ class MigrationRunner {
             ? Math.max(...executed.map(m => m.batch))
             : 0;
         const batch = lastBatch + 1;
-        console.log(`\n\x1b[36m[REstJS ORM]\x1b[0m Running ${pending.length} migrations (batch ${batch})...\n`);
+        console.log(`\n\x1b[36m[@axilJS ORM]\x1b[0m Running ${pending.length} migrations (batch ${batch})...\n`);
         // Run each pending migration in a transaction
         for (const file of pending) {
             const name = file.replace(/\.(ts|js)$/, '');
@@ -109,7 +109,7 @@ class MigrationRunner {
         await this.ensureMigrationsTable();
         const executed = await this.getExecutedMigrations();
         if (executed.length === 0) {
-            console.log('\x1b[33m[REstJS ORM]\x1b[0m Nothing to roll back.');
+            console.log('\x1b[33m[@axilJS ORM]\x1b[0m Nothing to roll back.');
             return;
         }
         // Find last batch
@@ -117,7 +117,7 @@ class MigrationRunner {
         const toRollback = executed
             .filter(m => m.batch === lastBatch)
             .reverse(); // Roll back in reverse order
-        console.log(`\n\x1b[33m[REstJS ORM]\x1b[0m Rolling back batch ${lastBatch}...\n`);
+        console.log(`\n\x1b[33m[@axilJS ORM]\x1b[0m Rolling back batch ${lastBatch}...\n`);
         for (const migration of toRollback) {
             const filePath = (0, path_1.join)(this.migrationsDir, `${migration.name}.ts`);
             const jsPath = (0, path_1.join)(this.migrationsDir, `${migration.name}.js`);
@@ -146,7 +146,7 @@ class MigrationRunner {
         const files = this.getMigrationFiles();
         const executed = await this.getExecutedMigrations();
         const executedMap = new Map(executed.map(m => [m.name, m]));
-        console.log('\n\x1b[36m[REstJS ORM]\x1b[0m Migration Status:\n');
+        console.log('\n\x1b[36m[@axilJS ORM]\x1b[0m Migration Status:\n');
         for (const file of files) {
             const name = file.replace(/\.(ts|js)$/, '');
             const record = executedMap.get(name);

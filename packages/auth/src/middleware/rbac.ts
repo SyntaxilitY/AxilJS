@@ -13,7 +13,7 @@
  *   app.post('/posts', authenticate(jwt), requirePermission('posts:create'), createPost)
  */
 
-import { MiddlewareFn, ForbiddenError, UnauthorizedError } from '@restjs/common';
+import { MiddlewareFn, ForbiddenError, UnauthorizedError } from '@axil/common';
 
 /**
  * Require the authenticated user to have one of the specified roles.

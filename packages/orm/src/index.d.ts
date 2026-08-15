@@ -1,5 +1,5 @@
 /**
- * @restjs/orm - Public API
+ * @axil/orm - Public API
  */
 export { ConnectionManager, createConnection } from './connection/connection-manager';
 export { BaseDriver } from './connection/base-driver';

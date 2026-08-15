@@ -15,7 +15,7 @@
  *   })
  */
 
-import { REstResponse } from '@restjs/common';
+import { axilResponse } from '@axil/common';
 
 // ─── SSE Event ────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ export interface SSEConnection {
  * Create an SSE connection on a response object.
  * Sets all required SSE headers and returns a controller.
  */
-export function createSSE(res: REstResponse): SSEConnection {
+export function createSSE(res: axilResponse): SSEConnection {
   let open = true;
 
   // Set SSE-required headers

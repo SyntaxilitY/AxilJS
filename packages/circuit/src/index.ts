@@ -1,5 +1,5 @@
 /**
- * @restjs/circuit - Public API
+ * @axil/circuit - Public API
  */
 
 export { CircuitBreaker, CircuitOpenError } from './circuit-breaker';

@@ -67,7 +67,7 @@ export function loadFromFiles(filePaths: string[]): RawDocument[] {
 
   for (const filePath of filePaths) {
     if (!existsSync(filePath)) {
-      console.warn(`[REstJS AI] File not found: ${filePath}`);
+      console.warn(`[@axilJS AI] File not found: ${filePath}`);
       continue;
     }
 
@@ -98,7 +98,7 @@ export function loadFromFiles(filePaths: string[]): RawDocument[] {
       });
     } catch (error) {
       console.warn(
-        `[REstJS AI] Could not load file ${filePath}:`,
+        `[@axilJS AI] Could not load file ${filePath}:`,
         (error as Error).message
       );
     }
@@ -129,7 +129,7 @@ export async function loadFromUrls(urls: string[]): Promise<RawDocument[]> {
       });
     } catch (error) {
       console.warn(
-        `[REstJS AI] Could not load URL ${url}:`,
+        `[@axilJS AI] Could not load URL ${url}:`,
         (error as Error).message
       );
     }

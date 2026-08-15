@@ -1,16 +1,11 @@
 /**
- * Core HTTP types used across the entire REstJS ecosystem.
- * These are the foundation - every request and response uses these.
+ * Core HTTP types used across the entire AxilJS ecosystem.
  */
 import { IncomingMessage, ServerResponse } from 'http';
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS';
 export type RouteParams = Record<string, string>;
 export type QueryParams = Record<string, string | string[]>;
-/**
- * REstJS Request - wraps Node's IncomingMessage with useful additions.
- * Developers work with this, never raw IncomingMessage.
- */
-export interface REstRequest {
+export interface axilRequest {
     raw: IncomingMessage;
     method: HttpMethod;
     url: string;
@@ -22,14 +17,10 @@ export interface REstRequest {
     ip: string;
     locals: Record<string, unknown>;
 }
-/**
- * REstJS Response - wraps Node's ServerResponse with a fluent API.
- * Chain methods: res.status(200).json({ ok: true })
- */
-export interface REstResponse {
+export interface axilResponse {
     raw: ServerResponse;
-    status(code: number): REstResponse;
-    header(name: string, value: string): REstResponse;
+    status(code: number): axilResponse;
+    header(name: string, value: string): axilResponse;
     json(data: unknown): void;
     text(data: string): void;
     html(data: string): void;
@@ -37,20 +28,40 @@ export interface REstResponse {
     redirect(url: string, code?: number): void;
     sent: boolean;
     statusCode: number;
+    /** 200 OK */
+    success(data: unknown, message?: string): void;
+    /** 201 Created */
+    created(data: unknown, message?: string): void;
+    /** 200 OK with pagination */
+    paginated(data: unknown[], total: number, page: number, limit: number, message?: string): void;
+    /** 204 No Content */
+    noContent(message?: string): void;
+    /** 400 Bad Request */
+    badRequest(message?: string, data?: unknown): void;
+    /** 401 Unauthorized */
+    unauthorized(message?: string, data?: unknown): void;
+    /** 403 Forbidden */
+    forbidden(message?: string, data?: unknown): void;
+    /** 404 Not Found */
+    notFound(message?: string, data?: unknown): void;
+    /** 405 Method Not Allowed */
+    methodNotAllowed(message?: string, data?: unknown): void;
+    /** 406 Not Acceptable */
+    notAcceptable(message?: string, data?: unknown): void;
+    /** 409 Conflict */
+    conflict(message?: string, data?: unknown): void;
+    /** 415 Unsupported Media Type */
+    unsupportedMediaType(message?: string, data?: unknown): void;
+    /** 422 Unprocessable Entity */
+    validationError(message?: string, data?: unknown): void;
+    /** 429 Too Many Requests */
+    tooManyRequests(message?: string, data?: unknown): void;
+    /** 500 Internal Server Error */
+    serverError(message?: string, data?: unknown): void;
+    /** 503 Service Unavailable */
+    serviceUnavailable(message?: string, data?: unknown): void;
 }
-/**
- * Middleware function signature.
- * Call next() to pass to next middleware.
- * Call next(error) to pass to error handler.
- */
-export type MiddlewareFn = (req: REstRequest, res: REstResponse, next: (error?: Error) => void) => void | Promise<void>;
-/**
- * Error handling middleware - receives the error as first argument.
- */
-export type ErrorMiddlewareFn = (error: Error, req: REstRequest, res: REstResponse, next: (error?: Error) => void) => void | Promise<void>;
-/**
- * Final handler for a matched route.
- * Unlike middleware, it does not receive next().
- */
-export type RouteHandler = (req: REstRequest, res: REstResponse) => void | Promise<void>;
+export type MiddlewareFn = (req: axilRequest, res: axilResponse, next: (error?: Error) => void) => void | Promise<void>;
+export type ErrorMiddlewareFn = (error: Error, req: axilRequest, res: axilResponse, next: (error?: Error) => void) => void | Promise<void>;
+export type RouteHandler = (req: axilRequest, res: axilResponse) => void | Promise<void>;
 //# sourceMappingURL=http.types.d.ts.map

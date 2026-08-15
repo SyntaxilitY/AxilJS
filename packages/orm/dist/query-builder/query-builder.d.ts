@@ -53,7 +53,7 @@ export declare class QueryBuilder {
      * Build an INSERT query.
      *
      * Usage:
-     *   await db.insert('users', { name: 'Tariq', email: 'tariq@restjs.dev' })
+     *   await db.insert('users', { name: 'Tariq', email: 'tariq@@axil.dev' })
      */
     insert(table: string, data: Record<string, unknown> | Record<string, unknown>[]): QueryBuilder;
     /**

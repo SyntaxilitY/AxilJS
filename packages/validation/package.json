@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/validation",
+  "name": "@axil/validation",
   "version": "0.1.0",
-  "description": "REstJS schema-based request validation",
+  "description": "@axilJS schema-based request validation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@restjs/common": "0.1.0"
+    "@axil/common": "0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

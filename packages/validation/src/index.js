@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @restjs/validation - Public API
+ * @axil/validation - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validate = exports.v = void 0;

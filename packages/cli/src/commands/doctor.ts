@@ -1,145 +1,106 @@
 /**
- * rest doctor
- * Diagnoses the current project for common issues.
- * Checks environment, dependencies, and configuration.
+ * axil doctor
+ * Diagnoses project for common issues.
  */
 
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-import { execSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs'
+import { join }                     from 'path'
+import { execSync }                 from 'child_process'
 
 interface Check {
-  name: string;
-  pass: boolean;
-  message: string;
+  name: string
+  pass: boolean
+  message: string
 }
 
-/**
- * Run diagnostics on the current project.
- */
 export async function runDoctor(): Promise<void> {
-  console.log('\n\x1b[36m[REstJS]\x1b[0m Running diagnostics...\n');
+  console.log('\n\x1b[36m[AxilJS]\x1b[0m Running diagnostics...\n')
 
-  const checks: Check[] = [];
-  const cwd = process.cwd();
-
-  // ── Environment Checks ──────────────────────────────────────────────────────
+  const checks: Check[] = []
+  const cwd = process.cwd()
 
   // Node.js version
-  const nodeVersion = process.version;
-  const nodeMajor = parseInt(nodeVersion.slice(1));
+  const nodeVersion = process.version
+  const nodeMajor   = parseInt(nodeVersion.slice(1))
   checks.push({
-    name: 'Node.js version',
-    pass: nodeMajor >= 18,
+    name:    'Node.js version',
+    pass:    nodeMajor >= 18,
     message: `${nodeVersion} ${nodeMajor >= 18 ? '(OK)' : '(need >= 18)'}`
-  });
+  })
 
-  // TypeScript installed
-  let tsVersion = 'not found';
-  let hasTs = false;
+  // TypeScript
+  let tsVersion = 'not found'
+  let hasTs     = false
   try {
-    tsVersion = execSync('npx tsc --version', { stdio: 'pipe' })
-      .toString()
-      .trim();
-    hasTs = true;
-  } catch {
-    // TypeScript not available
-  }
-  checks.push({
-    name: 'TypeScript',
-    pass: hasTs,
-    message: tsVersion
-  });
+    tsVersion = execSync('npx tsc --version', { stdio: 'pipe' }).toString().trim()
+    hasTs = true
+  } catch {}
+  checks.push({ name: 'TypeScript', pass: hasTs, message: tsVersion })
 
-  // ── Project File Checks ─────────────────────────────────────────────────────
-
+  // Project files
   const requiredFiles = [
-    { file: 'package.json', name: 'package.json' },
+    { file: 'package.json',  name: 'package.json' },
     { file: 'tsconfig.json', name: 'tsconfig.json' },
-    { file: 'src/main.ts', name: 'src/main.ts (entry point)' }
-  ];
+    { file: 'src/main.ts',   name: 'src/main.ts (entry point)' }
+  ]
 
   for (const { file, name } of requiredFiles) {
-    const exists = existsSync(join(cwd, file));
-    checks.push({
-      name,
-      pass: exists,
-      message: exists ? 'Found' : 'Missing'
-    });
+    const exists = existsSync(join(cwd, file))
+    checks.push({ name, pass: exists, message: exists ? 'Found' : 'Missing' })
   }
 
-  // ── package.json Checks ─────────────────────────────────────────────────────
-
-  const pkgPath = join(cwd, 'package.json');
+  // Check for @axil/core
+  const pkgPath = join(cwd, 'package.json')
   if (existsSync(pkgPath)) {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-
-    // Check for @restjs/core
-    const hasCore =
-      pkg.dependencies?.['@restjs/core'] !== undefined ||
-      pkg.devDependencies?.['@restjs/core'] !== undefined;
+    const pkg     = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    const hasCore = pkg.dependencies?.['@axil/core'] !== undefined ||
+                    pkg.devDependencies?.['@axil/core'] !== undefined
 
     checks.push({
-      name: '@restjs/core dependency',
-      pass: hasCore,
+      name:    '@axil/core dependency',
+      pass:    hasCore,
       message: hasCore
-        ? pkg.dependencies?.['@restjs/core'] || pkg.devDependencies?.['@restjs/core']
+        ? pkg.dependencies?.['@axil/core'] || pkg.devDependencies?.['@axil/core']
         : 'Not found in dependencies'
-    });
+    })
 
-    // Check for lock file
-    const hasLock = existsSync(join(cwd, 'rest.lock'));
+    // Lock file
+    const hasLock = existsSync(join(cwd, 'axil.lock'))
     checks.push({
-      name: 'rest.lock (deterministic installs)',
-      pass: hasLock,
-      message: hasLock ? 'Found' : 'Missing - run rest install'
-    });
+      name:    'axil.lock (deterministic installs)',
+      pass:    hasLock,
+      message: hasLock ? 'Found' : 'Missing — run axil install'
+    })
   }
 
-  // ── Security Checks ─────────────────────────────────────────────────────────
-
-  // Check for .env file exposure
-  const hasGitignore = existsSync(join(cwd, '.gitignore'));
-  let envProtected = false;
+  // .env protection
+  const hasGitignore  = existsSync(join(cwd, '.gitignore'))
+  let   envProtected  = false
 
   if (hasGitignore) {
-    const gitignore = readFileSync(join(cwd, '.gitignore'), 'utf-8');
-    envProtected = gitignore.includes('.env');
+    const gitignore = readFileSync(join(cwd, '.gitignore'), 'utf-8')
+    envProtected    = gitignore.includes('.env')
   }
 
   checks.push({
-    name: '.env protected in .gitignore',
-    pass: envProtected,
-    message: envProtected
-      ? 'Protected'
-      : hasGitignore
-      ? '.env not in .gitignore - add it!'
-      : 'No .gitignore found'
-  });
+    name:    '.env protected in .gitignore',
+    pass:    envProtected,
+    message: envProtected ? 'Protected' : '.env not in .gitignore'
+  })
 
-    // ── Print Results ───────────────────────────────────────────────────────────
-
-  const passed = checks.filter(c => c.pass).length;
-  const failed = checks.filter(c => !c.pass).length;
+  // Print results
+  const passed = checks.filter(c => c.pass).length
+  const failed = checks.filter(c => !c.pass).length
 
   for (const check of checks) {
-    const icon = check.pass
-      ? '\x1b[32m✓\x1b[0m'
-      : '\x1b[31m✗\x1b[0m';
-
-    const name = check.name.padEnd(35);
-
-    console.log(`  ${icon} ${name} ${check.message}`);
+    const icon = check.pass ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'
+    console.log(`  ${icon} ${check.name.padEnd(35)} ${check.message}`)
   }
 
-  console.log('');
-
+  console.log('')
   console.log(
     `  ${passed}/${checks.length} checks passed` +
-      (failed > 0
-        ? ` \x1b[31m(${failed} issues found)\x1b[0m`
-        : ' \x1b[32m✓\x1b[0m')
-  );
-
-  console.log('');
+    (failed > 0 ? ` \x1b[31m(${failed} issues found)\x1b[0m` : ' \x1b[32m✓\x1b[0m')
+  )
+  console.log('')
 }

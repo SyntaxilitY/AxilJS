@@ -1,7 +1,7 @@
 {
-  "name": "@restjs/common",
+  "name": "@axil/common",
   "version": "0.1.0",
-  "description": "REstJS shared types and interfaces",
+  "description": "@axilJS shared types and interfaces",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {

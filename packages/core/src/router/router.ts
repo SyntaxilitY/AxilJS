@@ -1,5 +1,5 @@
 /**
- * REstJS Router.
+ * @axilJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
@@ -14,9 +14,9 @@ import {
   RouteHandler,
   MiddlewareFn,
   HttpMethod,
-  REstRequest,
-  REstResponse
-} from '@restjs/common';
+  axilRequest,
+  axilResponse
+} from '@axil/common';
 
 import { Trie } from './trie';
 

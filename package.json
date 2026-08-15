@@ -1,5 +1,5 @@
 {
-  "name": "axility",
+  "name": "axil",
   "version": "0.1.0",
   "private": true,
   "workspaces": [
@@ -7,38 +7,32 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-
-    "build:common":       "cd packages/common       && npm run build",
-    "build:config":       "cd packages/config       && npm run build",
-    "build:security":     "cd packages/security     && npm run build",
-    "build:pm":           "cd packages/pm           && npm run build",
-    "build:orm":          "cd packages/orm          && npm run build",
-    "build:auth":         "cd packages/auth         && npm run build",
-    "build:validation":   "cd packages/validation   && npm run build",
-    "build:core":         "cd packages/core         && npm run build",
-    "build:testing":      "cd packages/testing      && npm run build",
-    "build:events":       "cd packages/events       && npm run build",
-    "build:websocket":    "cd packages/websocket    && npm run build",
-    "build:queue":        "cd packages/queue        && npm run build",
-    "build:circuit":      "cd packages/circuit      && npm run build",
-    "build:observability":"cd packages/observability && npm run build",
-    "build:ai":           "cd packages/ai           && npm run build",
-    "build:cloud":        "cd packages/cloud        && npm run build",
-    "build:cli":          "cd packages/cli          && npm run build",
-    "build:memory":       "cd packages/memory       && npm run build",
-
-    "build:all":
-      "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli",
-
-    "dev":  "npm run dev  --workspaces --if-present",
+    "build:common": "cd packages/common       && npm run build",
+    "build:config": "cd packages/config       && npm run build",
+    "build:security": "cd packages/security     && npm run build",
+    "build:pm": "cd packages/pm           && npm run build",
+    "build:orm": "cd packages/orm          && npm run build",
+    "build:auth": "cd packages/auth         && npm run build",
+    "build:validation": "cd packages/validation   && npm run build",
+    "build:core": "cd packages/core         && npm run build",
+    "build:testing": "cd packages/testing      && npm run build",
+    "build:events": "cd packages/events       && npm run build",
+    "build:websocket": "cd packages/websocket    && npm run build",
+    "build:queue": "cd packages/queue        && npm run build",
+    "build:circuit": "cd packages/circuit      && npm run build",
+    "build:observability": "cd packages/observability && npm run build",
+    "build:ai": "cd packages/ai           && npm run build",
+    "build:cloud": "cd packages/cloud        && npm run build",
+    "build:cli": "cd packages/cli          && npm run build",
+    "build:memory": "cd packages/memory       && npm run build",
+    "build:all": "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory",
+    "dev": "npm run dev  --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-
     "clean": "npm run clean --workspaces --if-present",
-
     "lint": "npm run lint --workspaces --if-present"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
   }
 }

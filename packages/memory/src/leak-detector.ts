@@ -15,7 +15,7 @@ import { LeakRecord, LeakType } from './types';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-// Track all timers registered through REstJS
+// Track all timers registered through @axilJS
 const trackedTimers:    Set<ReturnType<typeof setTimeout>>  = new Set();
 const trackedIntervals: Set<ReturnType<typeof setInterval>> = new Set();
 
@@ -33,7 +33,7 @@ const trackedEmitters: Set<WeakRef<EventEmitter>> = new Set();
  *
  * Usage:
  *   const timer = trackTimer(setTimeout(() => doWork(), 5000))
- *   // REstJS now knows about this timer and can clean it up
+ *   // @axilJS now knows about this timer and can clean it up
  */
 export function trackTimer(
   timer: ReturnType<typeof setTimeout>
@@ -96,7 +96,7 @@ export function trackCache<T extends Map<any, any> | Set<any>>(
 
 /**
  * Register an EventEmitter for listener leak detection.
- * Node.js warns at 10 listeners — REstJS monitors and alerts.
+ * Node.js warns at 10 listeners — @axilJS monitors and alerts.
  *
  * Usage:
  *   trackEmitter(myEmitter, 'MyService')

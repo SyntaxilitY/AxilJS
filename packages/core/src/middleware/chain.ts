@@ -10,10 +10,10 @@ import {
   MiddlewareFn,
   ErrorMiddlewareFn,
   RouteHandler,
-  REstRequest,
-  REstResponse,
-  REstError
-} from '@restjs/common';
+  axilRequest,
+  axilResponse,
+  axilError
+} from '@axil/common';
 
 export class MiddlewareChain {
   /**
@@ -31,8 +31,8 @@ export class MiddlewareChain {
     middleware: MiddlewareFn[],
     handler: RouteHandler,
     errorHandlers: ErrorMiddlewareFn[],
-    req: REstRequest,
-    res: REstResponse
+    req: axilRequest,
+    res: axilResponse
   ): Promise<void> {
     // Build the execution queue: all middleware + final handler
     // We convert the handler to look like middleware for uniform handling
@@ -95,8 +95,8 @@ export class MiddlewareChain {
 async function runErrorHandlers(
   error: Error,
   handlers: ErrorMiddlewareFn[],
-  req: REstRequest,
-  res: REstResponse
+  req: axilRequest,
+  res: axilResponse
 ): Promise<void> {
   let index = 0;
 
@@ -107,12 +107,12 @@ async function runErrorHandlers(
       // No more error handlers - send default error response if not sent
       if (!res.sent) {
         const statusCode =
-          currentError instanceof REstError
+          currentError instanceof axilError
             ? currentError.statusCode
             : 500;
 
         const code =
-          currentError instanceof REstError
+          currentError instanceof axilError
             ? currentError.code
             : 'INTERNAL_ERROR';
 

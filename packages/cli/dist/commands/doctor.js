@@ -1,22 +1,17 @@
 "use strict";
 /**
- * rest doctor
- * Diagnoses the current project for common issues.
- * Checks environment, dependencies, and configuration.
+ * axil doctor
+ * Diagnoses project for common issues.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDoctor = runDoctor;
 const fs_1 = require("fs");
 const path_1 = require("path");
 const child_process_1 = require("child_process");
-/**
- * Run diagnostics on the current project.
- */
 async function runDoctor() {
-    console.log('\n\x1b[36m[REstJS]\x1b[0m Running diagnostics...\n');
+    console.log('\n\x1b[36m[AxilJS]\x1b[0m Running diagnostics...\n');
     const checks = [];
     const cwd = process.cwd();
-    // ── Environment Checks ──────────────────────────────────────────────────────
     // Node.js version
     const nodeVersion = process.version;
     const nodeMajor = parseInt(nodeVersion.slice(1));
@@ -25,24 +20,16 @@ async function runDoctor() {
         pass: nodeMajor >= 18,
         message: `${nodeVersion} ${nodeMajor >= 18 ? '(OK)' : '(need >= 18)'}`
     });
-    // TypeScript installed
+    // TypeScript
     let tsVersion = 'not found';
     let hasTs = false;
     try {
-        tsVersion = (0, child_process_1.execSync)('npx tsc --version', { stdio: 'pipe' })
-            .toString()
-            .trim();
+        tsVersion = (0, child_process_1.execSync)('npx tsc --version', { stdio: 'pipe' }).toString().trim();
         hasTs = true;
     }
-    catch {
-        // TypeScript not available
-    }
-    checks.push({
-        name: 'TypeScript',
-        pass: hasTs,
-        message: tsVersion
-    });
-    // ── Project File Checks ─────────────────────────────────────────────────────
+    catch { }
+    checks.push({ name: 'TypeScript', pass: hasTs, message: tsVersion });
+    // Project files
     const requiredFiles = [
         { file: 'package.json', name: 'package.json' },
         { file: 'tsconfig.json', name: 'tsconfig.json' },
@@ -50,36 +37,30 @@ async function runDoctor() {
     ];
     for (const { file, name } of requiredFiles) {
         const exists = (0, fs_1.existsSync)((0, path_1.join)(cwd, file));
-        checks.push({
-            name,
-            pass: exists,
-            message: exists ? 'Found' : 'Missing'
-        });
+        checks.push({ name, pass: exists, message: exists ? 'Found' : 'Missing' });
     }
-    // ── package.json Checks ─────────────────────────────────────────────────────
+    // Check for @axil/core
     const pkgPath = (0, path_1.join)(cwd, 'package.json');
     if ((0, fs_1.existsSync)(pkgPath)) {
         const pkg = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8'));
-        // Check for @restjs/core
-        const hasCore = pkg.dependencies?.['@restjs/core'] !== undefined ||
-            pkg.devDependencies?.['@restjs/core'] !== undefined;
+        const hasCore = pkg.dependencies?.['@axil/core'] !== undefined ||
+            pkg.devDependencies?.['@axil/core'] !== undefined;
         checks.push({
-            name: '@restjs/core dependency',
+            name: '@axil/core dependency',
             pass: hasCore,
             message: hasCore
-                ? pkg.dependencies?.['@restjs/core'] || pkg.devDependencies?.['@restjs/core']
+                ? pkg.dependencies?.['@axil/core'] || pkg.devDependencies?.['@axil/core']
                 : 'Not found in dependencies'
         });
-        // Check for lock file
-        const hasLock = (0, fs_1.existsSync)((0, path_1.join)(cwd, 'rest.lock'));
+        // Lock file
+        const hasLock = (0, fs_1.existsSync)((0, path_1.join)(cwd, 'axil.lock'));
         checks.push({
-            name: 'rest.lock (deterministic installs)',
+            name: 'axil.lock (deterministic installs)',
             pass: hasLock,
-            message: hasLock ? 'Found' : 'Missing - run rest install'
+            message: hasLock ? 'Found' : 'Missing — run axil install'
         });
     }
-    // ── Security Checks ─────────────────────────────────────────────────────────
-    // Check for .env file exposure
+    // .env protection
     const hasGitignore = (0, fs_1.existsSync)((0, path_1.join)(cwd, '.gitignore'));
     let envProtected = false;
     if (hasGitignore) {
@@ -89,27 +70,18 @@ async function runDoctor() {
     checks.push({
         name: '.env protected in .gitignore',
         pass: envProtected,
-        message: envProtected
-            ? 'Protected'
-            : hasGitignore
-                ? '.env not in .gitignore - add it!'
-                : 'No .gitignore found'
+        message: envProtected ? 'Protected' : '.env not in .gitignore'
     });
-    // ── Print Results ───────────────────────────────────────────────────────────
+    // Print results
     const passed = checks.filter(c => c.pass).length;
     const failed = checks.filter(c => !c.pass).length;
     for (const check of checks) {
-        const icon = check.pass
-            ? '\x1b[32m✓\x1b[0m'
-            : '\x1b[31m✗\x1b[0m';
-        const name = check.name.padEnd(35);
-        console.log(`  ${icon} ${name} ${check.message}`);
+        const icon = check.pass ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
+        console.log(`  ${icon} ${check.name.padEnd(35)} ${check.message}`);
     }
     console.log('');
     console.log(`  ${passed}/${checks.length} checks passed` +
-        (failed > 0
-            ? ` \x1b[31m(${failed} issues found)\x1b[0m`
-            : ' \x1b[32m✓\x1b[0m'));
+        (failed > 0 ? ` \x1b[31m(${failed} issues found)\x1b[0m` : ' \x1b[32m✓\x1b[0m'));
     console.log('');
 }
 //# sourceMappingURL=doctor.js.map

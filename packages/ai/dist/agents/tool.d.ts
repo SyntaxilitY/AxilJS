@@ -45,7 +45,7 @@ export declare function createTool(config: ToolConfig): Tool;
 export declare const currentDateTimeTool: Tool;
 /**
  * Tool to perform math calculations.
- * Safer than eval - uses a restricted expression evaluator.
+ * Safer than eval - uses a @axilricted expression evaluator.
  */
 export declare const calculatorTool: Tool;
 /**

@@ -153,7 +153,7 @@ class Scheduler extends events_1.EventEmitter {
             this.tick();
             this.timer = setInterval(() => this.tick(), 60000);
         }, msUntilNextMinute);
-        console.log('\x1b[36m[REstJS Scheduler]\x1b[0m Started');
+        console.log('\x1b[36m[@axilJS Scheduler]\x1b[0m Started');
         this.listTasks();
     }
     /**
@@ -167,7 +167,7 @@ class Scheduler extends events_1.EventEmitter {
             clearInterval(this.timer);
             this.timer = undefined;
         }
-        console.log('\x1b[36m[REstJS Scheduler]\x1b[0m Stopped');
+        console.log('\x1b[36m[@axilJS Scheduler]\x1b[0m Stopped');
     }
     /**
      * Enable or disable a specific task by name.
@@ -212,7 +212,7 @@ class Scheduler extends events_1.EventEmitter {
             if (matchesCron(now, task.parsed)) {
                 // Run in background — don't await so other tasks aren't blocked
                 this.runTask(task).catch(err => {
-                    console.error(`\x1b[31m[REstJS Scheduler]\x1b[0m Tick error in '${task.name}':`, err.message);
+                    console.error(`\x1b[31m[@axilJS Scheduler]\x1b[0m Tick error in '${task.name}':`, err.message);
                 });
             }
         }
@@ -232,7 +232,7 @@ class Scheduler extends events_1.EventEmitter {
         catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             this.emit('failed', task.name, err);
-            console.error(`\x1b[31m[REstJS Scheduler]\x1b[0m Task '${task.name}' failed:`, err.message);
+            console.error(`\x1b[31m[@axilJS Scheduler]\x1b[0m Task '${task.name}' failed:`, err.message);
         }
     }
     /**
@@ -240,10 +240,10 @@ class Scheduler extends events_1.EventEmitter {
      */
     listTasks() {
         if (this.tasks.size === 0) {
-            console.log('\x1b[90m[REstJS Scheduler]\x1b[0m No tasks registered');
+            console.log('\x1b[90m[@axilJS Scheduler]\x1b[0m No tasks registered');
             return;
         }
-        console.log(`\x1b[90m[REstJS Scheduler]\x1b[0m ` +
+        console.log(`\x1b[90m[@axilJS Scheduler]\x1b[0m ` +
             `${this.tasks.size} task(s) registered:`);
         for (const task of this.tasks.values()) {
             console.log(`  • ${task.name.padEnd(25)} ${task.expression}`);

@@ -1,7 +1,7 @@
 "use strict";
 /**
- * @restjs/core - Public API
- * Everything a developer needs to build with REstJS.
+ * @axil/core - Public API
+ * Everything a developer needs to build with @axilJS.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -42,5 +42,5 @@ Object.defineProperty(exports, "serveStatic", { enumerable: true, get: function 
 var sse_1 = require("./middleware/sse");
 Object.defineProperty(exports, "createSSE", { enumerable: true, get: function () { return sse_1.createSSE; } });
 Object.defineProperty(exports, "sseHeartbeat", { enumerable: true, get: function () { return sse_1.sseHeartbeat; } });
-__exportStar(require("@restjs/common"), exports);
+__exportStar(require("@axil/common"), exports);
 //# sourceMappingURL=index.js.map

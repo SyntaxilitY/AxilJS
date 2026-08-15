@@ -1,21 +1,21 @@
 import { createServer } from 'http';
-import { Application, cors, createSSE, sseHeartbeat } from '@restjs/core';
-import { loadEnv, defineConfig } from '@restjs/config';
-import { helmet, rateLimit, sanitize } from '@restjs/security';
-import { JWT } from '@restjs/auth';
-import { authenticate, requireRole } from '@restjs/auth';
-import { hashPassword, verifyPassword } from '@restjs/auth';
-import { v, validate } from '@restjs/validation';
-import { EventBus } from '@restjs/events';
-import { WSServer } from '@restjs/websocket';
-import { Queue } from '@restjs/queue';
-import { Scheduler } from '@restjs/queue';
-import { CircuitBreaker, retry, withTimeout } from '@restjs/circuit';
+import { Application, cors, createSSE, sseHeartbeat } from '@axil/core';
+import { loadEnv, defineConfig } from '@axil/config';
+import { helmet, rateLimit, sanitize } from '@axil/security';
+import { JWT } from '@axil/auth';
+import { authenticate, requireRole } from '@axil/auth';
+import { hashPassword, verifyPassword } from '@axil/auth';
+import { v, validate } from '@axil/validation';
+import { EventBus } from '@axil/events';
+import { WSServer } from '@axil/websocket';
+import { Queue } from '@axil/queue';
+import { Scheduler } from '@axil/queue';
+import { CircuitBreaker, retry, withTimeout } from '@axil/circuit';
 import {
   Logger, MetricsRegistry, HealthChecker,
   Tracer, observabilityMiddleware,
   metricsHandler
-} from '@restjs/observability';
+} from '@axil/observability';
 import {
   OpenAIProvider,
   AnthropicProvider,
@@ -32,13 +32,13 @@ import {
   loadFromString,
   DocumentChunker,
   MCPClient
-} from '@restjs/ai';
+} from '@axil/ai';
 
 import type {
   AIProvider,
   Message,
   CompletionOptions
-} from '@restjs/ai';
+} from '@axil/ai';
 
 import {
   multiTenancy,
@@ -47,9 +47,9 @@ import {
   auditMiddleware,
   FeatureFlagManager,
   generateDeployment
-} from '@restjs/cloud';
+} from '@axil/cloud';
 
-import type { Tenant, FeatureFlag } from '@restjs/cloud';
+import type { Tenant, FeatureFlag } from '@axil/cloud';
 
 import {
   MemoryMonitor,
@@ -59,19 +59,19 @@ import {
   takeSnapshot,
   formatBytes,
   gcTip
-} from '@restjs/memory';
+} from '@axil/memory';
 
 
 
 // ─── KEEP SERVER FROM CRASH ────────────────────────────────────────────────────────────────
 
 process.on('uncaughtException', (err) => {
-  console.error('\x1b[31m[REstJS] Uncaught Exception:\x1b[0m', err.message);
+  console.error('\x1b[31m[@axilJS] Uncaught Exception:\x1b[0m', err.message);
   // Do NOT exit — keep the server running
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('\x1b[31m[REstJS] Unhandled Promise Rejection:\x1b[0m', reason);
+  console.error('\x1b[31m[@axilJS] Unhandled Promise Rejection:\x1b[0m', reason);
   // Do NOT exit — keep the server running
 });
 
@@ -86,7 +86,7 @@ const config = defineConfig({
   PORT: { type: 'number', default: 3000 },
   HOST: { type: 'string', default: '127.0.0.1' },
   NODE_ENV: { type: 'string', default: 'development' },
-  JWT_SECRET: { type: 'string', default: 'restjs-dev-secret-minimum-32-chars!!' },
+  JWT_SECRET: { type: 'string', default: '@axiljs-dev-secret-minimum-32-chars!!' },
   AI_PROVIDER: { type: 'string', default: 'ollama' },
   OPENAI_API_KEY: { type: 'string', required: false },
   ANTHROPIC_API_KEY: { type: 'string', required: false },
@@ -102,13 +102,13 @@ const jwt = new JWT(config.JWT_SECRET);
 // ─── Phase 4 Infrastructure ───────────────────────────────────────────────────
 
 // Structured logger
-const logger = new Logger({ name: 'REstJS' });
+const logger = new Logger({ name: '@axilJS' });
 
 // Prometheus metrics registry
 const metrics = new MetricsRegistry();
 
 // Distributed tracer
-const tracer = new Tracer({ serviceName: 'restjs-example' });
+const tracer = new Tracer({ serviceName: '@axiljs-example' });
 
 // In-process event bus
 const eventBus = new EventBus();
@@ -275,7 +275,7 @@ app.use(observabilityMiddleware({ metrics, tracer }));
  */
 app.get('/api/phase1/hello', (req, res) => {
   res.json({
-    message: 'Hello from REstJS!',
+    message: 'Hello from @axilJS!',
     phase: 1,
     feature: 'Core HTTP Server'
   });
@@ -634,7 +634,7 @@ app.get('/api/phase2/sse', (req, res) => {
  * Body:
  * {
  *   "name":     "Tariq Mehmood",
- *   "email":    "tariq@restjs.dev",
+ *   "email":    "tariq@@axil.dev",
  *   "password": "secret123",
  *   "role":     "admin"         ← optional: admin | user | guest
  * }
@@ -686,7 +686,7 @@ app.post(
  *
  * Body:
  * {
- *   "email":    "tariq@restjs.dev",
+ *   "email":    "tariq@@axil.dev",
  *   "password": "secret123"
  * }
  *
@@ -1140,7 +1140,7 @@ app.delete(
  * Body:
  * {
  *   "name":  "Tariq",
- *   "email": "tariq@restjs.dev",
+ *   "email": "tariq@@axil.dev",
  *   "role":  "admin",
  *   "age":   30,
  *   "tags":  ["js", "ts"]
@@ -1189,7 +1189,7 @@ app.post(
  * Body: any data — see what passes and what fails
  * {
  *   "username":   "tariq",
- *   "website":    "https://restjs.dev",
+ *   "website":    "https://@axiljs.dev",
  *   "score":      95,
  *   "active":     true,
  *   "tags":       ["js", "ts", "ai"],
@@ -1912,7 +1912,7 @@ app.get('/api/phase4/health', health.handler());
 /**
  * GET /api/phase4/health/live
  * Liveness probe — is the process alive?
- * Kubernetes uses this to decide if the pod should be restarted.
+ * Kubernetes uses this to decide if the pod should be @axilarted.
  * Always returns 200 if the event loop is responsive.
  */
 app.get('/api/phase4/health/live', health.livenessHandler());
@@ -2168,51 +2168,51 @@ const ragPipeline = new RAGPipeline({
   }
 });
 
-// ── Index built-in REstJS knowledge ──────────────────────────────────────────
+// ── Index built-in @axilJS knowledge ──────────────────────────────────────────
 
 async function indexBuiltinKnowledge(): Promise<void> {
   const docs = loadFromText([
-    `REstJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
+    `@axilJS is a next-generation JavaScript backend ecosystem created by Tariq Mehmood.
      It provides a complete platform including runtime, framework, ORM, authentication,
      validation, testing, events, WebSockets, queues, observability, AI, and cloud deployment.
-     Unlike Express or NestJS, REstJS is batteries-included — everything works out of the box.`,
+     Unlike Express or NestJS, @axilJS is batteries-included — everything works out of the box.`,
 
-    `REstJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
-     body parser, CORS, request logger, and the CLI with rest create and rest run commands.
+    `@axilJS Phase 1 provides the core HTTP server with a trie-based router, middleware chain,
+     body parser, CORS, request logger, and the CLI with @axil create and @axil run commands.
      The router supports static routes, dynamic parameters like :id, and wildcard routes.`,
 
-    `REstJS Phase 2 adds configuration management with loadEnv and defineConfig, security
+    `@axilJS Phase 2 adds configuration management with loadEnv and defineConfig, security
      middleware including helmet, rate limiting, CSRF protection and sanitization, static file
      serving with ETag caching, Server-Sent Events streaming, and the package manager with
-     SHA-256 checksum verification and a rest.lock file for deterministic installs.`,
+     SHA-256 checksum verification and a @axil.lock file for deterministic installs.`,
 
-    `REstJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
+    `@axilJS Phase 3 delivers ORM support for PostgreSQL, MySQL and SQLite with a fluent query
      builder, base repository with CRUD and pagination, database migrations, JWT authentication
      with HMAC-SHA256, password hashing with scrypt, role-based access control, and a
      schema-based validation library with v.string().email() and similar chainable APIs.`,
 
-    `REstJS Phase 4 implements distributed systems including an in-process event bus with
+    `@axilJS Phase 4 implements distributed systems including an in-process event bus with
      wildcard subscriptions, a full RFC 6455 WebSocket server with rooms and broadcasting,
      message queue with priority and retry, cron scheduler, circuit breaker with three states,
      retry with exponential backoff, structured logging, Prometheus metrics, and distributed
      tracing with W3C Trace Context.`,
 
-    `REstJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
+    `@axilJS Phase 5 is the AI platform. It supports OpenAI, Anthropic Claude, Google Gemini,
      and local LLMs via Ollama. It provides a RAG pipeline for retrieval-augmented generation,
      a vector store for semantic similarity search, an agent framework with tool calling using
      the ReAct reasoning pattern, built-in tools like calculator and datetime, and an MCP
      client for the Model Context Protocol.`,
 
-    `REstJS CLI commands: rest create <name> creates a new project, rest run starts the
-     development server with hot reload using incremental TypeScript compilation, rest build
-     compiles for production, rest test discovers and runs test files, rest deploy generates
-     Docker and Kubernetes manifests, rest install manages packages, rest doctor diagnoses issues.`,
+    `@axilJS CLI commands: @axil create <name> creates a new project, @axil run starts the
+     development server with hot reload using incremental TypeScript compilation, @axil build
+     compiles for production, @axil test discovers and runs test files, @axil deploy generates
+     Docker and Kubernetes manifests, @axil install manages packages, @axil doctor diagnoses issues.`,
 
-    `REstJS is different from Node.js Express NestJS Deno and Bun because it provides every
+    `@axilJS is different from Node.js Express NestJS Deno and Bun because it provides every
      layer in one unified ecosystem. No need to assemble 40 packages from different teams.
      One install gives you HTTP server, ORM, auth, validation, testing, events, WebSockets,
      queue, observability, AI platform, and cloud deployment tools.`
-  ], 'restjs-docs');
+  ], '@axiljs-docs');
 
   try {
     await ragPipeline.index(docs);
@@ -2275,7 +2275,7 @@ const userDataTool = createTool({
   handler: async () => ({
     totalUsers: users.length,
     totalPosts: posts.length,
-    note: 'Data from REstJS in-memory store'
+    note: 'Data from @axilJS in-memory store'
   })
 });
 
@@ -2320,7 +2320,7 @@ app.get('/api/phase5/provider', (req, res) => {
  *
  * Body:
  * {
- *   "message": "What is REstJS?",
+ *   "message": "What is @axilJS?",
  *   "system":  "You are a helpful assistant."
  * }
  */
@@ -2424,7 +2424,7 @@ app.post('/api/phase5/chat/conversation', async (req, res) => {
  *
  * Body:
  * {
- *   "message": "Explain what REstJS is in detail",
+ *   "message": "Explain what @axilJS is in detail",
  *   "system":  "You are a helpful assistant."
  * }
  *
@@ -2631,7 +2631,7 @@ app.get('/api/phase5/rag/stats', (req, res) => {
  * Body:
  * {
  *   "texts": [
- *     "REstJS supports PostgreSQL MySQL and SQLite databases.",
+ *     "@axilJS supports PostgreSQL MySQL and SQLite databases.",
  *     "The ORM provides migrations query builder and repository pattern."
  *   ],
  *   "source": "database-docs"
@@ -2672,7 +2672,7 @@ app.post('/api/phase5/rag/index', async (req, res) => {
  *
  * Body:
  * {
- *   "question": "What databases does REstJS support?",
+ *   "question": "What databases does @axilJS support?",
  *   "topK":     3
  * }
  */
@@ -2727,7 +2727,7 @@ app.post('/api/phase5/rag/query', async (req, res) => {
  *
  * Body:
  * {
- *   "question": "What is Phase 4 of REstJS?"
+ *   "question": "What is Phase 4 of @axilJS?"
  * }
  */
 app.post('/api/phase5/rag/stream', async (req, res) => {
@@ -3092,7 +3092,7 @@ app.post('/api/phase5/mcp/connect', async (req, res) => {
   try {
     const client = new MCPClient({
       serverUrl: body.serverUrl,
-      clientName: 'REstJS-Postman-Test',
+      clientName: '@axilJS-Postman-Test',
       clientVersion: '0.1.0',
       timeoutMs: 5000
     });
@@ -3901,12 +3901,12 @@ app.post('/api/phase6/flags/evaluate-batch', (req, res) => {
 
 /**
  * GET /api/phase6/deploy/info
- * Information about the rest deploy command
+ * Information about the @axil deploy command
  */
 app.get('/api/phase6/deploy/info', (req, res) => {
   res.json({
     feature: 'Deployment Toolkit',
-    command: 'rest deploy',
+    command: '@axil deploy',
     generates: ['Dockerfile', 'deployment.yaml', 'deploy.sh'],
     kubernetes: {
       resources: [
@@ -3917,7 +3917,7 @@ app.get('/api/phase6/deploy/info', (req, res) => {
     },
     workflow: [
       '1. npm run build          → compile TypeScript',
-      '2. rest deploy            → generate deploy/ files',
+      '2. @axil deploy            → generate deploy/ files',
       '3. docker build           → build container image',
       '4. docker push            → push to registry',
       '5. kubectl apply          → deploy to Kubernetes',
@@ -4067,7 +4067,7 @@ app.get('/api/phase6/dashboard/html', (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>REstJS Dashboard</title>
+  <title>@axilJS Dashboard</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -4156,7 +4156,7 @@ app.get('/api/phase6/dashboard/html', (req, res) => {
 </head>
 <body>
 
-  <h1>⚡ REstJS Dashboard</h1>
+  <h1>⚡ @axilJS Dashboard</h1>
   <p class="subtitle">Live monitoring — auto-refreshes every 3 seconds</p>
 
   <div class="grid" id="grid">
@@ -4336,7 +4336,7 @@ app.use(memoryMiddleware({
 }));
 
 // Track the audit logs array as a cache
-// REstJS will auto-prune if it grows beyond 1000 entries
+// @axilJS will auto-prune if it grows beyond 1000 entries
 trackCache('audit-logs-cache', new Map(), 1000);
 
 
@@ -4435,7 +4435,7 @@ app.get('/api/memory/reports', (req, res) => {
  */
 app.get('/', (req, res) => {
   res.json({
-    name: 'REstJS Testing Server',
+    name: '@axilJS Testing Server',
     version: '0.1.0',
     author: 'Tariq Mehmood',
     tip: 'Visit GET /api for all endpoints'
@@ -4448,7 +4448,7 @@ app.get('/', (req, res) => {
  */
 app.get('/api', (req, res) => {
   res.json({
-    name: 'REstJS — Phase 1, 2, 3, 4 API',
+    name: '@axilJS — Phase 1, 2, 3, 4 API',
     server: `http://localhost:${config.PORT}`,
     phases: {
 
@@ -4620,7 +4620,7 @@ async function bootstrap() {
   // This creates and binds the internal Node.js server to port 3000
   await app.listen(config.PORT, config.HOST);
 
-  // Index built-in REstJS knowledge into RAG
+  // Index built-in @axilJS knowledge into RAG
   await indexBuiltinKnowledge();
 
   // ── 2. Get the SAME server that is already listening on port 3000 ────────────
@@ -4651,7 +4651,7 @@ async function bootstrap() {
     client.sendJSON({
       type: 'welcome',
       clientId: client.id,
-      message: 'Connected to REstJS WebSocket server',
+      message: 'Connected to @axilJS WebSocket server',
       timestamp: Date.now()
     });
 

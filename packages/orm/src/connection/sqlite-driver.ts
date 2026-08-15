@@ -42,7 +42,7 @@ export class SQLiteDriver extends BaseDriver {
       this.connected = true;
 
       console.log(
-        `\x1b[32m[REstJS ORM]\x1b[0m SQLite connected: ${filename}`
+        `\x1b[32m[@axilJS ORM]\x1b[0m SQLite connected: ${filename}`
       );
     } catch (error: any) {
       if (error.code === 'MODULE_NOT_FOUND') {

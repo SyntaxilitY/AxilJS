@@ -1,5 +1,5 @@
 /**
- * @restjs/security - Public API
+ * @axil/security - Public API
  */
 export { helmet } from './helmet';
 export type { HelmetOptions } from './helmet';

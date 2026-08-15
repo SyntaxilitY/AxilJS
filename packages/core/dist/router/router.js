@@ -1,6 +1,6 @@
 "use strict";
 /**
- * REstJS Router.
+ * @axilJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
