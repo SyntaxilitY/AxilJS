@@ -43,7 +43,7 @@ export interface ConnectionConfig {
   logging?: boolean;
 
   // SSL configuration
-  ssl?: boolean | { ca?: string; cert?: string; key?: string };
+  ssl?: boolean | { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
 }
 
 // ─── Query Result ──────────────────────────────────────────────────────────────

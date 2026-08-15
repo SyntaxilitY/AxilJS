@@ -22,6 +22,7 @@ export interface ConnectionConfig {
         ca?: string;
         cert?: string;
         key?: string;
+        rejectUnauthorized?: boolean;
     };
 }
 export interface QueryResult<T = Record<string, unknown>> {

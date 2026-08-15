@@ -3,11 +3,12 @@
   "version":     "1.0.0",
   "description": "AxilJS examples — all phases",
   "scripts": {
-    "dev":   "node ../packages/cli/dist/cli.js run",
-    "dev:mvc":   "npx ts-node src/mvc/main.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "test":  "node ../packages/cli/dist/cli.js test"
+    "dev":       "node ../packages/cli/dist/cli.js run",
+    "dev:mvc":   "npx nodemon --watch src/mvc --ext ts --exec \"npx ts-node src/mvc/main.ts\"",
+    "dev:mono":  "npx nodemon --watch src/monolith --ext ts --exec \"npx ts-node src/monolith/main.ts\"",
+    "build":     "tsc",
+    "start":     "node dist/server.js",
+    "test":      "node ../packages/cli/dist/cli.js test"
   },
   "dependencies": {
     "@axil/ai":            "0.1.0",
@@ -18,6 +19,7 @@
     "@axil/core":          "0.1.0",
     "@axil/events":        "0.1.0",
     "@axil/observability": "0.1.0",
+    "@axil/orm":           "0.1.0",
     "@axil/queue":         "0.1.0",
     "@axil/security":      "0.1.0",
     "@axil/validation":    "0.1.0",
@@ -28,6 +30,8 @@
   "devDependencies": {
     "@axil/cli":   "0.1.0",
     "@types/node": "^20.0.0",
-    "typescript":  "^5.4.0"
+    "typescript":  "^5.4.0",
+    "ts-node":     "^10.9.0",
+    "nodemon":     "^3.1.0"
   }
 }

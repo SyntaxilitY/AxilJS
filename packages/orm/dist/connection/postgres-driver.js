@@ -20,7 +20,10 @@ class PostgresDriver extends base_driver_1.BaseDriver {
             const { Pool } = require('pg');
             // Build connection config for pg
             const pgConfig = this.config.url
-                ? { connectionString: this.config.url, ssl: this.config.ssl }
+                ? {
+                    connectionString: this.config.url,
+                    ssl: this.config.ssl
+                }
                 : {
                     host: this.config.host || 'localhost',
                     port: this.config.port || 5432,
