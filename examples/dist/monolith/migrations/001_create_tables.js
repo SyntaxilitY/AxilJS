@@ -68,3 +68,4 @@ const migration = {
     }
 };
 module.exports = migration;
+//# sourceMappingURL=001_create_tables.js.map

@@ -37,3 +37,4 @@ exports.CommentModel = {
         return before - store.length;
     }
 };
+//# sourceMappingURL=Comment.js.map

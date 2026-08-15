@@ -24,3 +24,4 @@ function commentRoutes(jwt) {
     router.delete('/comments/:id', auth, ctrl.destroy);
     return router;
 }
+//# sourceMappingURL=comment.routes.js.map

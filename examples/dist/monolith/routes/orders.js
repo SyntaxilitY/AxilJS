@@ -62,3 +62,4 @@ function registerOrderRoutes(app, jwt) {
         res.success(result, `Order status updated to ${body.status}`);
     });
 }
+//# sourceMappingURL=orders.js.map

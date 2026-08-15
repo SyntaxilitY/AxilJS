@@ -8,3 +8,4 @@ exports.route = route;
 function route(...handlers) {
     return handlers;
 }
+//# sourceMappingURL=route.js.map

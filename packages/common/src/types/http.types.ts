@@ -2,7 +2,8 @@
  * Core HTTP types used across the entire AxilJS ecosystem.
  */
 
-import { IncomingMessage, ServerResponse } from 'http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Buffer } from 'node:buffer';
 
 // ─── HTTP Methods ────────────────────────────────────────────────────────────
 

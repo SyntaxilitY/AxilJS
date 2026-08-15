@@ -23,3 +23,4 @@ function mvcLogger() {
         next();
     };
 }
+//# sourceMappingURL=logger.middleware.js.map

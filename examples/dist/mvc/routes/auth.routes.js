@@ -15,3 +15,4 @@ function authRoutes(jwt) {
     router.put('/profile', auth, ...ctrl.updateProfile);
     return router;
 }
+//# sourceMappingURL=auth.routes.js.map

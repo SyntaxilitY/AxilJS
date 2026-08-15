@@ -67,3 +67,4 @@ function requireAuthorOrAdmin() {
         next();
     };
 }
+//# sourceMappingURL=auth.middleware.js.map

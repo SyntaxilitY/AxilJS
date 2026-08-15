@@ -54,3 +54,4 @@ exports.UserModel = {
         return safe;
     }
 };
+//# sourceMappingURL=User.js.map

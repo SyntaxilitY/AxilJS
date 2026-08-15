@@ -104,3 +104,4 @@ start().catch(err => {
     logger.error('Startup failed', { error: err.message });
     process.exit(1);
 });
+//# sourceMappingURL=main.js.map

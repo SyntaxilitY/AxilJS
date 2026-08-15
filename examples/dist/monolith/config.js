@@ -13,3 +13,4 @@ exports.config = (0, config_1.defineConfig)({
     JWT_SECRET: { type: 'string', default: 'axiljs-monolith-secret-32-chars!!' },
     DATABASE_URL: { type: 'string', default: 'postgresql://neondb_owner:npg_Cht0cBTzoDi2@ep-spring-silence-azxw55ks-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require' }
 });
+//# sourceMappingURL=config.js.map

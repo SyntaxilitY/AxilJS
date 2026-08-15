@@ -12,3 +12,4 @@ exports.config = (0, config_1.defineConfig)({
     NODE_ENV: { type: 'string', default: 'development' },
     JWT_SECRET: { type: 'string', default: 'axiljs-mvc-secret-minimum-32-chars!!' }
 });
+//# sourceMappingURL=app.config.js.map

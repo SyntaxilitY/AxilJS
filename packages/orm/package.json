@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/orm",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "AxilJS ORM — PostgreSQL, MySQL, SQLite with migrations and query builder",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,17 +9,17 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "0.1.0"
+    "@axiljs/common": "^0.1.2"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
   },
   "peerDependencies": {
-    "pg": ">=8.0.0",
-    "mysql2": ">=3.0.0",
-    "better-sqlite3": ">=9.0.0",
-    "mongodb": ">=6.0.0"
+    "better-sqlite3": ">=13.0.3",
+    "mongodb": ">=7.5.0",
+    "mysql2": ">=3.23.3",
+    "pg": ">=8.23.0"
   },
   "peerDependenciesOptional": {
     "pg": true,

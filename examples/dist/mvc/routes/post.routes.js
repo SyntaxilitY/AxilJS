@@ -26,3 +26,4 @@ function postRoutes(jwt) {
     router.patch('/:id/publish', auth, author, ctrl.publish);
     return router;
 }
+//# sourceMappingURL=post.routes.js.map

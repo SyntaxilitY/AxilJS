@@ -47,3 +47,9 @@ node_modules
 
 # __pycache__
 __pycache__
+SRS REstJS.pdf
+generate-report.ps1
+.npmrc
+PHASE_1_CORE_FOUNDATION.md
+scripts
+documentation

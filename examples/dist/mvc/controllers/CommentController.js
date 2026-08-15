@@ -66,3 +66,4 @@ class CommentController {
     };
 }
 exports.CommentController = CommentController;
+//# sourceMappingURL=CommentController.js.map

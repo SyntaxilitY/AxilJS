@@ -24,3 +24,4 @@ function getDB() {
         throw new Error('Database not connected. Call connectDB() first.');
     return db;
 }
+//# sourceMappingURL=db.js.map

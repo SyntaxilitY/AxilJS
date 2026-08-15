@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/config",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "AxilJS environment loading and typed configuration validation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,11 +9,11 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "0.1.0"
+    "@axiljs/common": "^0.1.2"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
   },
   "publishConfig": {
     "access": "public"

@@ -1,0 +1,160 @@
+﻿AxilJS - Current & Latest Dependency Versions
+Generated: 2026-08-15 21:45:26
+
+============================================================
+PACKAGE: @axiljs/ai
+VERSION: 0.1.0
+============================================================
+@anthropic-ai/sdk | declared: >=0.20.0 | latest: 0.117.1 | type: peerDependency
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/events | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@google/generative-ai | declared: >=0.1.0 | latest: 0.24.1 | type: peerDependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+openai | declared: >=4.0.0 | latest: 7.4.0 | type: peerDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/auth
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/circuit
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/cli
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/cloud
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/core | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/events | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/observability | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/common
+VERSION: 0.1.0
+============================================================
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/config
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/core
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+syntaxility-api-response-manager | declared: ^1.0.0 | latest: 1.0.4 | type: dependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/events
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/memory
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/observability
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/orm
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+better-sqlite3 | declared: >=9.0.0 | latest: 13.0.3 | type: peerDependency
+mongodb | declared: >=6.0.0 | latest: 7.5.0 | type: peerDependency
+mysql2 | declared: >=3.0.0 | latest: 3.23.3 | type: peerDependency
+pg | declared: >=8.0.0 | latest: 8.23.0 | type: peerDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/pm
+VERSION: 0.1.0
+============================================================
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/queue
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/events | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/security
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/testing
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/core | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/validation
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+
+============================================================
+PACKAGE: @axiljs/websocket
+VERSION: 0.1.0
+============================================================
+@axiljs/common | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@axiljs/events | declared: 0.1.0 | latest: 0.1.0 | type: dependency
+@types/node | declared: ^20.0.0 | latest: 26.2.0 | type: devDependency
+typescript | declared: ^5.4.0 | latest: 7.0.2 | type: devDependency
+

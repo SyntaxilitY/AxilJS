@@ -43,3 +43,4 @@ function registerCartRoutes(app, jwt) {
         res.success(result, 'Cart cleared');
     });
 }
+//# sourceMappingURL=cart.js.map

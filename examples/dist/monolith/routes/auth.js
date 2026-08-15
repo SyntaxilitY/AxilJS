@@ -47,3 +47,4 @@ function registerAuthRoutes(app, jwt) {
         res.success(user, 'Profile fetched');
     });
 }
+//# sourceMappingURL=auth.js.map

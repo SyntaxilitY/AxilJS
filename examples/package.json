@@ -1,37 +1,37 @@
 {
-  "name":        "axil-examples",
-  "version":     "1.0.0",
+  "name": "axil-examples",
+  "version": "0.1.2",
   "description": "AxilJS examples — all phases",
   "scripts": {
-    "dev":       "node ../packages/cli/dist/cli.js run",
-    "dev:mvc":   "npx nodemon --watch src/mvc --ext ts --exec \"npx ts-node src/mvc/main.ts\"",
-    "dev:mono":  "npx nodemon --watch src/monolith --ext ts --exec \"npx ts-node src/monolith/main.ts\"",
-    "build":     "tsc",
-    "start":     "node dist/server.js",
-    "test":      "node ../packages/cli/dist/cli.js test"
+    "dev": "npx tsx watch src/server.ts",
+    "dev:mvc": "npx tsx watch src/mvc/main.ts",
+    "dev:mono": "npx tsx watch src/monolith/main.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
   },
   "dependencies": {
-    "@axiljs/ai":            "0.1.0",
-    "@axiljs/auth":          "0.1.0",
-    "@axiljs/circuit":       "0.1.0",
-    "@axiljs/common":        "0.1.0",
-    "@axiljs/config":        "0.1.0",
-    "@axiljs/core":          "0.1.0",
-    "@axiljs/events":        "0.1.0",
-    "@axiljs/observability": "0.1.0",
-    "@axiljs/orm":           "0.1.0",
-    "@axiljs/queue":         "0.1.0",
-    "@axiljs/security":      "0.1.0",
-    "@axiljs/validation":    "0.1.0",
-    "@axiljs/websocket":     "0.1.0",
-    "@axiljs/cloud":         "0.1.0",
-    "@axiljs/memory":        "0.1.0"
+    "@axiljs/ai": "^0.1.2",
+    "@axiljs/auth": "^0.1.2",
+    "@axiljs/circuit": "^0.1.2",
+    "@axiljs/cloud": "^0.1.2",
+    "@axiljs/common": "^0.1.2",
+    "@axiljs/config": "^0.1.2",
+    "@axiljs/core": "^0.1.2",
+    "@axiljs/events": "^0.1.2",
+    "@axiljs/memory": "^0.1.2",
+    "@axiljs/observability": "^0.1.2",
+    "@axiljs/orm": "^0.1.2",
+    "@axiljs/queue": "^0.1.2",
+    "@axiljs/security": "^0.1.2",
+    "@axiljs/validation": "^0.1.2",
+    "@axiljs/websocket": "^0.1.2"
   },
   "devDependencies": {
-    "@axiljs/cli":   "0.1.0",
-    "@types/node": "^20.0.0",
-    "typescript":  "^5.4.0",
-    "ts-node":     "^10.9.0",
-    "nodemon":     "^3.1.0"
+    "@axiljs/cli": "^0.1.2",
+    "@types/node": "^26.2.0",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   }
 }

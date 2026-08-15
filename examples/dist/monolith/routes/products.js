@@ -62,3 +62,4 @@ function registerProductRoutes(app, jwt) {
         res.success(null, 'Product deleted');
     });
 }
+//# sourceMappingURL=products.js.map
