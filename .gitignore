@@ -45,6 +45,8 @@ node_modules
 .env.local
 .venv
 
+dist*
+
 # __pycache__
 __pycache__
 SRS REstJS.pdf
