@@ -1,4 +1,3 @@
-<div align="center">
 
 ```
  █████╗ ██╗  ██╗██╗██╗     ██╗████████╗██╗   ██╗     ██╗███████╗
@@ -25,12 +24,11 @@
 [Getting Started](#-getting-started) •
 [Why AxilJS](#-why-axiljs) •
 [Packages](#-packages) •
-[Examples](#-examples) •
+[Architecture Examples](#-architecture-examples) •
 [CLI](#-cli) •
 [Roadmap](#-roadmap) •
 [Contributing](#-contributing)
 
-</div>
 
 ---
 
@@ -48,6 +46,7 @@ Every other tool gives you one layer. AxilJS gives you everything:
 One install → HTTP server + ORM + Auth + Validation + Testing
            + Events + WebSockets + Queue + Observability
            + AI Platform + Cloud Deploy + Memory Management
+           + Built-in Response Manager
 ```
 
 No assembling 40 packages from 40 different teams.
@@ -105,7 +104,7 @@ axil run
 
 Your API is running at `http://localhost:3000`.
 
-That is it. No configuration files to create. No boilerplate to write.
+That is it. No configuration files. No boilerplate.
 
 ---
 
@@ -144,6 +143,7 @@ my-api/
 ```bash
 axil create <name>        # Create a new project
 axil run                  # Start dev server with hot reload
+axil run src/mvc/main.ts  # Hot reload with custom entry point
 axil build                # Compile TypeScript for production
 axil test [pattern]       # Run test files
 axil deploy               # Generate Docker + Kubernetes files
@@ -188,7 +188,7 @@ All packages live under the `@axil` scope and work together out of the box.
 
 | Package | Purpose |
 |---|---|
-| `@axil/core` | HTTP server, router, middleware, SSE, static files |
+| `@axil/core` | HTTP server, router, middleware, SSE, static files, **built-in response manager** |
 | `@axil/config` | Environment loading, typed config validation |
 | `@axil/security` | Helmet, rate limiting, CSRF, sanitization |
 | `@axil/orm` | ORM — PostgreSQL, MySQL, SQLite, migrations |
@@ -205,6 +205,69 @@ All packages live under the `@axil` scope and work together out of the box.
 | `@axil/memory` | Memory leak detection, GC, optimization |
 | `@axil/pm` | Package manager with lock file and checksums |
 | `@axil/cli` | CLI — all `axil` commands |
+
+---
+
+## Built-in Response Manager
+
+AxilJS includes **SyntaxilitY API Response Manager** built directly into the `res` object. No imports needed — every response is automatically formatted.
+
+```typescript
+// Every res object has these methods built-in
+
+res.success(data, 'Users fetched')
+res.created(data, 'User created')
+res.paginated(items, total, page, limit, 'Posts fetched')
+res.notFound('User not found')
+res.unauthorized('Invalid token')
+res.forbidden('Admin access required')
+res.conflict('Email already exists')
+res.badRequest('Missing required field')
+res.validationError('Validation failed')
+res.serverError('Database error')
+res.tooManyRequests()
+res.serviceUnavailable()
+```
+
+Every response follows a consistent format:
+
+```json
+{
+  "status": 200,
+  "code": "HTTP_200_OK",
+  "message": "Users fetched",
+  "data": { }
+}
+```
+
+Paginated responses include full metadata:
+
+```json
+{
+  "status": 200,
+  "code": "HTTP_200_OK",
+  "message": "Users fetched",
+  "data": {
+    "metadata": [ ],
+    "pagination": {
+      "total": 42,
+      "page": 1,
+      "limit": 10,
+      "totalPages": 5,
+      "hasNextPage": true,
+      "hasPrevPage": false
+    }
+  }
+}
+```
+
+Extract pagination params from request:
+
+```typescript
+import { Response } from '@axil/core'
+
+const { page, limit, skip } = Response.getPaginationParams(req)
+```
 
 ---
 
@@ -231,15 +294,15 @@ app.use(cors({ origin: '*' }))
 app.use(rateLimit({ max: 100, windowMs: 60000 }))
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() })
+  res.success({ uptime: process.uptime() }, 'Healthy')
 })
 
 app.get('/users/:id', (req, res) => {
-  res.json({ id: req.params.id })
+  res.success({ id: req.params.id }, 'User fetched')
 })
 
 app.post('/users', (req, res) => {
-  res.status(201).json({ data: req.body })
+  res.created(req.body, 'User created')
 })
 
 app.listen()
@@ -261,10 +324,6 @@ const config = defineConfig({
                   enum: ['development', 'production', 'test'],
                   default: 'development' }
 })
-
-// config.PORT is typed as number
-// config.DATABASE_URL is typed as string
-// Throws ValidationError on startup if required fields missing
 ```
 
 ### Security
@@ -274,12 +333,7 @@ import { helmet, rateLimit, csrf, sanitize } from '@axil/security'
 
 app.use(helmet())
 app.use(rateLimit({ max: 100, windowMs: 60000 }))
-
-app.post('/auth/login',
-  rateLimit({ max: 5, windowMs: 900000 }),
-  loginHandler
-)
-
+app.post('/auth/login', rateLimit({ max: 5, windowMs: 900000 }), loginHandler)
 app.use(csrf())
 app.use(sanitize())
 ```
@@ -300,31 +354,27 @@ class User {
 
   @Column({ type: 'string', unique: true })
   email: string
-
-  @Column({ type: 'boolean', default: false })
-  active: boolean
 }
 
 const db = await createConnection({
   driver: 'postgres',
-  url:    process.env.DATABASE_URL
+  url:    process.env.DATABASE_URL,
+  ssl:    { rejectUnauthorized: false }  // for NeonDB / managed PostgreSQL
 })
 
 class UserRepository extends BaseRepository<User> {
   constructor() { super(User, db) }
-  async findActive() { return this.find({ active: true }) }
 }
 
 const users = new UserRepository()
 
-const user    = await users.create({ name: 'Tariq', email: 'tariq@syntaxility.dev' })
-const found   = await users.findById(1)
-const updated = await users.update(1, { name: 'Tariq Mehmood' })
-const page    = await users.paginate({ page: 1, perPage: 20 })
-await users.delete(1)
+const user = await users.create({ name: 'Tariq', email: 'tariq@syntaxility.dev' })
+const page = await users.paginate({ page: 1, perPage: 20 })
 ```
 
 ### Migrations
+
+Migrations automatically use the correct SQL syntax per database driver:
 
 ```typescript
 // src/migrations/001_create_users.ts
@@ -334,16 +384,15 @@ const migration: Migration = {
   async up(db) {
     await db.query(`
       CREATE TABLE users (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        id         SERIAL PRIMARY KEY,
         name       VARCHAR(255) NOT NULL,
         email      VARCHAR(255) UNIQUE NOT NULL,
-        password   VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `)
   },
   async down(db) {
-    await db.query(`DROP TABLE IF EXISTS users`)
+    await db.query('DROP TABLE IF EXISTS users')
   }
 }
 
@@ -352,31 +401,37 @@ module.exports = migration
 
 ```typescript
 import { MigrationRunner } from '@axil/orm'
+import path from 'path'
 
-const runner = new MigrationRunner(db.getDriver())
-await runner.up()
-await runner.down()
-await runner.status()
+const runner = new MigrationRunner(
+  db.getDriver(),
+  path.join(__dirname, 'migrations')
+)
+
+await runner.up()     // Run pending migrations
+await runner.down()   // Rollback last batch
+await runner.status() // Show migration status
 ```
 
 ### Authentication
 
 ```typescript
 import { JWT, hashPassword, verifyPassword,
-         authenticate, requireRole,
-         requirePermission }              from '@axil/auth'
+         authenticate, requireRole } from '@axil/auth'
 
 const jwt = new JWT(process.env.JWT_SECRET)
 
-const hashed  = await hashPassword('userPassword123')
-const valid   = await verifyPassword('userPassword123', hashed)
-const token   = jwt.sign({ sub: String(user.id), role: 'admin' }, { expiresIn: '7d' })
-const payload = jwt.verify(token)
+const hashed = await hashPassword('password123')
+const valid  = await verifyPassword('password123', hashed)
+const token  = jwt.sign({ sub: '1', role: 'admin' }, { expiresIn: '7d' })
 
-app.get('/profile', authenticate(jwt), (req, res) => res.json(req.locals.user))
-app.delete('/users/:id', authenticate(jwt), requireRole('admin'), deleteUser)
-app.post('/posts', authenticate(jwt), requirePermission('posts:create'), createPost)
-app.get('/feed', authenticate(jwt, { required: false }), getFeed)
+app.get('/profile', authenticate(jwt), (req, res) => {
+  res.success(req.locals.user, 'Profile fetched')
+})
+
+app.delete('/users/:id', authenticate(jwt), requireRole('admin'), (req, res) => {
+  res.success(null, 'User deleted')
+})
 ```
 
 ### Validation
@@ -384,21 +439,17 @@ app.get('/feed', authenticate(jwt, { required: false }), getFeed)
 ```typescript
 import { v, validate } from '@axil/validation'
 
-const createUserSchema = v.object({
-  name:     v.string().min(2).max(100),
-  email:    v.string().email(),
-  age:      v.number().min(0).max(150).integer().optional(),
-  role:     v.enum(['admin', 'user', 'guest']),
-  tags:     v.array(v.string()).max(10).optional(),
-  settings: v.object({
-    theme: v.enum(['light', 'dark']).default('light')
-  }).optional()
-})
-
 app.post('/users',
-  validate({ body: createUserSchema }),
+  validate({
+    body: v.object({
+      name:  v.string().min(2).max(100),
+      email: v.string().email(),
+      role:  v.enum(['admin', 'user']),
+      age:   v.number().min(0).integer().optional()
+    })
+  }),
   (req, res) => {
-    res.status(201).json({ data: req.body })
+    res.created(req.body, 'User created')
   }
 )
 ```
@@ -411,7 +462,6 @@ import { describe, it, expect,
 
 describe('Users API', () => {
   let client: any
-
   beforeAll(() => { client = createTestClient(app) })
 
   it('returns 401 without token', async () => {
@@ -427,16 +477,6 @@ describe('Users API', () => {
 
     expect(res.status).toBe(201)
     expect(res.body.data.name).toBe('Tariq')
-  })
-
-  it('validates request body', async () => {
-    const res = await client
-      .post('/users')
-      .auth(token)
-      .send({ name: 'T' })
-
-    expect(res.status).toBe(422)
-    expect(res.body.error.code).toBe('VALIDATION_ERROR')
   })
 })
 ```
@@ -468,10 +508,7 @@ class NotificationService {
 registerEventHandlers(new NotificationService(), bus)
 
 await bus.emit('user.created', { id: 1, email: 'tariq@syntaxility.dev' })
-
-const sub   = bus.on('payment.received', async (event) => { await processPayment(event.payload) })
 const event = await bus.waitFor('payment.confirmed', 5000)
-sub.unsubscribe()
 ```
 
 ### WebSockets
@@ -487,11 +524,10 @@ wss.on('connection', (client) => {
 
   client.on('message', (data) => {
     const msg = JSON.parse(data.toString())
-    wss.toRoomJSON('general', { type: 'message', from: client.id, content: msg.content })
-    wss.broadcastJSON({ type: 'announcement', content: msg.content })
+    wss.toRoomJSON('general', {
+      type: 'message', from: client.id, content: msg.content
+    })
   })
-
-  client.on('close', () => console.log('Disconnected:', client.id))
 })
 ```
 
@@ -507,16 +543,12 @@ emailQueue.process('send-welcome', async (job) => {
   return { sent: true }
 })
 
-emailQueue.on('completed', (job) => console.log('Done:', job.id))
-emailQueue.on('failed', (job, err) => console.error('Failed:', err))
-
 emailQueue.start()
 
 await emailQueue.add('send-welcome', { to: 'tariq@syntaxility.dev' })
 await emailQueue.add('send-reminder', { to: 'user@example.com' }, {
   delay: 3600000, maxAttempts: 3
 })
-await emailQueue.add('send-alert', { to: 'admin@example.com' }, { priority: 10 })
 ```
 
 ### Task Scheduler
@@ -531,9 +563,7 @@ scheduler.schedule('cleanup',       '0 2 * * *',  cleanupOldData)
 scheduler.schedule('weekly-backup', '0 0 * * 0',  backupDatabase)
 
 scheduler.start()
-
 await scheduler.runNow('daily-report')
-scheduler.setEnabled('cleanup', false)
 ```
 
 ### Circuit Breaker
@@ -547,9 +577,9 @@ const paymentCB = new CircuitBreaker('payment-api', {
   fallback: () => ({ error: 'Payment service unavailable' })
 })
 
-const result   = await paymentCB.execute(async () => paymentService.charge(amount))
-const data     = await retry(() => fetchFromExternalAPI(), { attempts: 3, delay: 1000, backoff: 'exponential' })
-const response = await withTimeout(fetch('https://slow-api.example.com'), 5000)
+const result   = await paymentCB.execute(() => paymentService.charge(amount))
+const data     = await retry(() => fetchAPI(), { attempts: 3, delay: 1000, backoff: 'exponential' })
+const response = await withTimeout(fetch('https://api.example.com'), 5000)
 ```
 
 ### Observability
@@ -560,23 +590,13 @@ import { Logger, MetricsRegistry, HealthChecker,
          metricsHandler } from '@axil/observability'
 
 const logger  = new Logger({ name: 'UserService' })
-logger.info('User created', { userId: 123 })
-logger.error('DB error', { error: err.message })
+const metrics = new MetricsRegistry()
+const health  = new HealthChecker()
+const tracer  = new Tracer({ serviceName: 'my-api' })
 
-const metrics  = new MetricsRegistry()
-const requests = metrics.counter('http_requests_total', 'Total requests')
-requests.inc({ method: 'GET', status: '200' })
-
-const health = new HealthChecker()
 health.addCheck('database', async () => {
   await db.ping()
   return { message: 'Connected' }
-})
-
-const tracer = new Tracer({ serviceName: 'my-api' })
-await tracer.trace('user.create', async (span) => {
-  span.setAttribute('user.email', email)
-  return await createUser(data)
 })
 
 app.use(observabilityMiddleware({ metrics, tracer }))
@@ -595,7 +615,7 @@ import { OpenAIProvider, OllamaProvider, RAGPipeline,
          loadFromText } from '@axil/ai'
 
 const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
-// or: new OllamaProvider({ model: 'llama3.2' })
+// or: new OllamaProvider({ model: 'llama3.2' })       — local, no API key
 // or: new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY })
 // or: new GeminiProvider({ apiKey: process.env.GOOGLE_API_KEY })
 
@@ -604,86 +624,22 @@ const response = await provider.complete({
   system:   'You are a helpful assistant.'
 })
 
-const stream = provider.stream({ messages, system })
-for await (const chunk of stream) { process.stdout.write(chunk.delta) }
-
 const rag = new RAGPipeline({ provider, vectorStore: new VectorStore() })
 
 await rag.index(loadFromText([
-  'AxilJS supports PostgreSQL MySQL and SQLite.',
+  'AxilJS supports PostgreSQL, MySQL and SQLite.',
   'The ORM provides migrations and a query builder.'
 ]))
 
 const answer = await rag.query('What databases does AxilJS support?')
-console.log(answer.response)
-console.log(answer.sources)
-
-const weatherTool = createTool({
-  name:        'get_weather',
-  description: 'Get weather for a city',
-  parameters: {
-    type: 'object',
-    properties: { city: { type: 'string', description: 'City name' } },
-    required: ['city']
-  },
-  handler: async ({ city }) => ({ city, temperature: '22°C' })
-})
 
 const agent = new Agent({
   provider,
-  tools:         [calculatorTool, currentDateTimeTool, weatherTool],
+  tools:         [calculatorTool, currentDateTimeTool],
   maxIterations: 10
 })
 
-const agentResult = await agent.run('What is 25 * 4 and what is the weather in Lahore?')
-console.log(agentResult.response)
-console.log(agentResult.steps)
-```
-
-### Multi-Tenancy
-
-```typescript
-import { multiTenancy, getTenant, auditLog } from '@axil/cloud'
-
-app.use(multiTenancy({
-  strategy:      'header',
-  headerName:    'x-tenant-id',
-  resolveTenant: async (id) => await db.findTenant(id)
-}))
-
-app.get('/dashboard', (req, res) => {
-  const tenant = getTenant(req)
-  res.json({ tenant: tenant.id, plan: tenant.plan })
-})
-
-auditLog({
-  action:   'user.login',
-  actor:    { id: user.id, type: 'user' },
-  tenantId: tenant.id,
-  metadata: { ip: req.ip },
-  success:  true
-})
-```
-
-### Feature Flags
-
-```typescript
-import { FeatureFlagManager } from '@axil/cloud'
-
-const flags = new FeatureFlagManager()
-
-flags.define({
-  name:              'new-checkout',
-  enabled:           true,
-  rolloutPercentage: 50,
-  allowedTenants:    ['tenant-beta']
-})
-
-const isEnabled = flags.isEnabled('new-checkout', {
-  tenantId:   'tenant-beta',
-  userId:     123,
-  percentage: 45
-})
+const result = await agent.run('What is 25 * 4 and what time is it?')
 ```
 
 ### Memory Management
@@ -696,37 +652,95 @@ const monitor = new MemoryMonitor({
   intervalMs:               30000,
   warnThresholdPercent:     70,
   criticalThresholdPercent: 85,
-  autoFix:                  true,
-  onLeak:     (leaks) => logger.warn('Leaks detected', { count: leaks.length }),
-  onCritical: (snap)  => logger.error('Critical memory', { mb: snap.heapUsedMb })
+  autoFix:                  true
 })
 
 monitor.start()
-
 app.use(memoryMiddleware({ leakThresholdMb: 50, exposeHeader: true }))
-
-const sessionCache = trackCache('sessions', new Map(), 10000)
-
-const result = await optimizer.optimize()
-console.log(`Freed: ${result.freedMb}MB`)
 ```
 
-### Server-Sent Events
+---
 
-```typescript
-import { createSSE, sseHeartbeat } from '@axil/core'
+## Architecture Examples
 
-app.get('/events', (req, res) => {
-  const sse      = createSSE(res)
-  const stopBeat = sseHeartbeat(sse, 15000)
+AxilJS supports any backend architecture. Three complete examples are included:
 
-  sse.send({ message: 'Connected' }, 'connect')
+### MVC — Blog Platform
 
-  const interval = setInterval(() => {
-    if (!sse.isOpen) { clearInterval(interval); stopBeat(); return }
-    sse.send({ data: 'live update', timestamp: Date.now() }, 'update')
-  }, 1000)
-})
+```
+examples/src/mvc/
+├── models/          # Data + business logic
+├── views/           # Response formatting
+├── controllers/     # Request handling
+└── routes/          # URL mapping
+```
+
+```bash
+axil run src/mvc/main.ts     # Hot reload on port 3001
+```
+
+```
+POST http://localhost:3001/api/auth/register
+POST http://localhost:3001/api/auth/login
+GET  http://localhost:3001/api/posts
+POST http://localhost:3001/api/posts          [auth]
+POST http://localhost:3001/api/posts/1/comments [auth]
+```
+
+---
+
+### Monolith — E-Commerce API with PostgreSQL
+
+```
+examples/src/monolith/
+├── services/        # AuthService, ProductService, CartService, OrderService
+├── routes/          # auth, products, cart, orders
+├── migrations/      # Database schema
+└── db.ts            # PostgreSQL connection (NeonDB compatible)
+```
+
+```bash
+axil run src/monolith/main.ts   # Hot reload on port 3002
+```
+
+```
+POST http://localhost:3002/api/auth/register
+POST http://localhost:3002/api/products        [admin]
+POST http://localhost:3002/api/cart/add        [auth]
+POST http://localhost:3002/api/orders/checkout [auth]
+GET  http://localhost:3002/api/orders          [auth]
+PATCH http://localhost:3002/api/orders/1/status [admin]
+```
+
+Features:
+- PostgreSQL with NeonDB support (SSL)
+- Automatic migrations (SERIAL for PostgreSQL, AUTOINCREMENT for SQLite)
+- In-memory cart with stock validation
+- Transactional checkout — stock reduced atomically
+- Paginated responses via built-in response manager
+- Soft delete for products
+- Role-based access (admin/customer)
+
+---
+
+### Hot Reload for All Examples
+
+```bash
+npm run dev        # Main server — all phases
+npm run dev:mvc    # MVC Blog — hot reload
+npm run dev:mono   # Monolith E-Commerce — hot reload
+```
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "dev":      "node ../packages/cli/dist/cli.js run",
+    "dev:mvc":  "node ../packages/cli/dist/cli.js run src/mvc/main.ts",
+    "dev:mono": "node ../packages/cli/dist/cli.js run src/monolith/main.ts"
+  }
+}
 ```
 
 ---
@@ -734,7 +748,6 @@ app.get('/events', (req, res) => {
 ## Deployment
 
 ```bash
-# Generate Docker + Kubernetes files
 axil deploy
 ```
 
@@ -746,20 +759,13 @@ deploy/
 ```
 
 ```bash
-# Build for production
 npm run build
-
-# Run production server
 node dist/main.js
+node --expose-gc dist/main.js  # Recommended — enables manual GC
 
-# With manual GC support (recommended)
-node --expose-gc dist/main.js
-
-# Docker
 docker build -t my-api .
 docker run -p 3000:3000 --env-file .env my-api
 
-# Kubernetes
 kubectl apply -f deploy/deployment.yaml
 ```
 
@@ -767,10 +773,10 @@ kubectl apply -f deploy/deployment.yaml
 
 ## Hot Reload Development
 
-`axil run` compiles TypeScript incrementally and restarts automatically on every file save.
-
 ```bash
-axil run
+axil run                        # Watch src/
+axil run src/mvc/main.ts        # Watch src/mvc/ with custom entry
+axil run src/monolith/main.ts   # Watch src/monolith/ with custom entry
 ```
 
 ```
@@ -783,7 +789,7 @@ axil run
 01:30:02 [axil run] Watching src/ for changes...
 
 # Save a file →
-01:31:15 [axil run] Changed: server.ts
+01:31:15 [axil run] Changed: controllers/PostController.ts
 01:31:15 [axil run] Compiled 1 file(s) in 287ms
 01:31:15 [axil run] Restarting (restart #1)
          ✓ Server running at http://localhost:3000
@@ -794,14 +800,11 @@ axil run
 ## Build From Source
 
 ```bash
-# Clone
 git clone https://github.com/SyntaxilitY/AxilJS.git
 cd AxilJS
 
-# Install workspace dependencies
 npm install
 
-# Build all packages in correct order
 cd packages/common        && npm run build
 cd ../config              && npm run build
 cd ../security            && npm run build
@@ -825,8 +828,6 @@ cd ../cli                 && npm run build
 ---
 
 ## What Gets Fixed Automatically
-
-AxilJS monitors and fixes memory issues on its own:
 
 | Issue | Detected | Auto Fixed |
 |---|---|---|
@@ -854,6 +855,10 @@ AxilJS monitors and fixes memory issues on its own:
 | AI Platform | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Memory Mgmt | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Cloud Deploy | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Response Manager | ✗ | ✗ | ✗ | ✗ | ✓ |
+| MVC Support | ✗ | Partial | ✓ | ✗ | ✓ |
+| Monolith Support | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Microservice Support | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Zero Config | ✗ | ✗ | ✗ | Partial | ✓ |
 
 ---
@@ -861,20 +866,23 @@ AxilJS monitors and fixes memory issues on its own:
 ## Roadmap
 
 ```
-Phase 1  ✅  Core HTTP server, router, middleware, CLI
-Phase 2  ✅  Config, security, package manager, SSE, static files
-Phase 3  ✅  ORM, authentication, validation, testing
-Phase 4  ✅  Events, WebSockets, queue, circuit breaker, observability
-Phase 5  ✅  AI platform — providers, RAG, agents, MCP
-Phase 6  ✅  Enterprise — multi-tenancy, audit, feature flags, cloud deploy
-Phase 7  ✅  Memory management — leak detection, GC, optimization
+Phase 1: Core HTTP server, router, middleware, CLI
+Phase 2: Config, security, package manager, SSE, static files
+Phase 3: ORM, authentication, validation, testing
+Phase 4: Events, WebSockets, queue, circuit breaker, observability
+Phase 5: AI platform — providers, RAG, agents, MCP
+Phase 6: Enterprise — multi-tenancy, audit, feature flags, cloud deploy
+Phase 7: Memory management — leak detection, GC, optimization
+Phase 8: Built-in SyntaxilitY response manager
+Phase 9: Architecture examples — MVC, Monolith (PostgreSQL/NeonDB)
+Phase 10: Hot reload with custom entry point support
 
 Upcoming
 ────────
-Phase 8     Official AxilJS package registry
-Phase 9     gRPC and native RPC support
-Phase 10    AxilJS Cloud (managed hosting)
-Phase 11    AxilJS Studio (visual admin panel)
+Phase 11    Microservice example with gRPC
+Phase 12    Official AxilJS package registry
+Phase 13    AxilJS Cloud (managed hosting)
+Phase 14    AxilJS Studio (visual admin panel)
 ```
 
 ---
@@ -882,7 +890,6 @@ Phase 11    AxilJS Studio (visual admin panel)
 ## Contributing
 
 ```bash
-# Clone
 git clone https://github.com/SyntaxilitY/AxilJS.git
 cd AxilJS
 
@@ -898,34 +905,6 @@ npm run build:all
 - Every new feature must have tests
 - No circular dependencies between packages
 - All PRs must build without errors
-
----
-
-## License
-
-```
-MIT License
-
-Copyright (c) 2025 Tariq Mehmood — SyntaxilitY
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the "Software"),
-to deal in the Software without restriction, including without limitation
-the rights to use, copy, modify, merge, publish, distribute, sublicense,
-and/or sell copies of the Software, and to permit persons to whom the
-Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
-```
 
 ---
 
