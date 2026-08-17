@@ -1,149 +1,284 @@
 /**
- * Entity decorators.
- * Mark classes as database entities and define their columns.
- *
- * Usage:
- *   @Entity('users')
- *   class User {
- *     @PrimaryKey()
- *     id: number
- *
- *     @Column({ type: 'string', length: 255 })
- *     name: string
- *
- *     @Column({ type: 'string', unique: true })
- *     email: string
- *
- *     @Column({ type: 'timestamp', default: 'CURRENT_TIMESTAMP' })
- *     createdAt: Date
- *   }
+ * AxilORM — All Decorators
+ * Trace ID: 992f2995fd8091f39f6f41f757fb766a
  */
 
-import { ColumnDefinition, EntityMetadata, ColumnType } from '../types';
+// ── Column Type ───────────────────────────────────────────────────────────
 
-// ─── Metadata Storage ──────────────────────────────────────────────────────────
+export type ColumnType =
+  | 'string'
+  | 'number'
+  | 'integer'
+  | 'bigint'
+  | 'float'
+  | 'decimal'
+  | 'boolean'
+  | 'date'
+  | 'datetime'
+  | 'timestamp'
+  | 'text'
+  | 'json'
+  | 'jsonb'
+  | 'uuid'
+  | 'enum'
 
-// Store entity metadata keyed by class constructor
-// This is our own metadata registry - no reflect-metadata required
-const entityRegistry = new Map<Function, EntityMetadata>();
+// ── Options ───────────────────────────────────────────────────────────────
 
-/**
- * Get entity metadata for a class.
- */
-export function getEntityMetadata(target: Function): EntityMetadata | undefined {
-  return entityRegistry.get(target);
+export interface ColumnOptions {
+  type?:          ColumnType
+  name?:          string
+  nullable?:      boolean
+  unique?:        boolean
+  default?:       unknown
+  length?:        number
+  precision?:     number
+  scale?:         number
 }
 
-/**
- * Get or create entity metadata (used internally by decorators).
- */
-function getOrCreateMetadata(target: Function): EntityMetadata {
+export interface PrimaryKeyOptions {
+  type?:          'integer' | 'bigint' | 'uuid' | 'string'
+  generated?:     boolean
+  autoIncrement?: boolean
+  name?:          string
+}
+
+export interface RelationOptions {
+  foreignKey?:    string
+  pivotTable?:    string
+  eager?:         boolean
+}
+
+export interface IndexOptions {
+  name?:          string
+  unique?:        boolean
+}
+
+// ── Metadata Interfaces ───────────────────────────────────────────────────
+
+export interface ColumnMeta {
+  propertyKey:    string
+  columnName:     string
+  type:           ColumnType
+  nullable:       boolean
+  unique:         boolean
+  default?:       unknown
+  length?:        number
+  precision?:     number
+  scale?:         number
+  isPrimary:      boolean
+  isGenerated:    boolean
+}
+
+export interface RelationMeta {
+  type:           'hasOne' | 'hasMany' | 'belongsTo' | 'manyToMany'
+  propertyKey:    string
+  target:         () => Function
+  foreignKey:     string
+  pivotTable?:    string
+  eager:          boolean
+}
+
+export interface IndexMeta {
+  name:           string
+  columns:        string[]
+  unique:         boolean
+}
+
+export interface EntityMeta {
+  tableName:      string
+  primaryKey:     string
+  columns:        Map<string, ColumnMeta>
+  relations:      Map<string, RelationMeta>
+  indexes:        IndexMeta[]
+}
+
+// Backward compat
+export type EntityMetadata = EntityMeta
+
+// ── Decorator return type (avoids PropertyDecorator conflict) ─────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type PropDecorator = (target: any, propertyKey: string | symbol) => void
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ClassDeco    = (target: any) => void
+
+// ── Registry ─────────────────────────────────────────────────────────────
+
+export const entityRegistry = new Map<Function, EntityMeta>()
+
+export function getOrCreateMeta(target: Function): EntityMeta {
   if (!entityRegistry.has(target)) {
     entityRegistry.set(target, {
-      tableName: target.name.toLowerCase() + 's', // Default: ClassName → classnames
-      columns: new Map(),
-      primaryKey: 'id'
-    });
+      tableName:  '',
+      primaryKey: 'id',
+      columns:    new Map<string, ColumnMeta>(),
+      relations:  new Map<string, RelationMeta>(),
+      indexes:    []
+    })
   }
-  return entityRegistry.get(target)!;
+  return entityRegistry.get(target)!
 }
 
-// ─── @Entity Decorator ────────────────────────────────────────────────────────
-
-/**
- * Mark a class as a database entity.
- * The tableName maps this class to a database table.
- *
- * @param tableName  Database table name (default: lowercase class name + 's')
- */
-export function Entity(tableName?: string): ClassDecorator {
-  return (target: Function) => {
-    const metadata = getOrCreateMetadata(target);
-
-    if (tableName) {
-      metadata.tableName = tableName;
-    }
-
-    entityRegistry.set(target, metadata);
-  };
+export function getEntityMetadata(target: Function): EntityMeta | undefined {
+  return entityRegistry.get(target)
 }
 
-// ─── @PrimaryKey Decorator ────────────────────────────────────────────────────
-
-/**
- * Mark a property as the primary key.
- * Defaults to auto-incrementing integer.
- */
-export function PrimaryKey(options: {
-  type?: ColumnType;
-  autoIncrement?: boolean;
-} = {}): PropertyDecorator {
-  return (target: Object, propertyKey: string | symbol) => {
-    const metadata = getOrCreateMetadata(target.constructor);
-    const name = String(propertyKey);
-
-    metadata.primaryKey = name;
-    metadata.columns.set(name, {
-      name,
-      type: options.type || 'integer',
-      primary: true,
-      autoIncrement: options.autoIncrement ?? true,
-      nullable: false
-    });
-  };
+export function getAllEntities(): Map<Function, EntityMeta> {
+  return entityRegistry
 }
 
-// ─── @Column Decorator ────────────────────────────────────────────────────────
+// ── @Entity ───────────────────────────────────────────────────────────────
 
-/**
- * Mark a property as a database column.
- */
-export function Column(options: Partial<ColumnDefinition> & { type: ColumnType }): PropertyDecorator {
-  return (target: Object, propertyKey: string | symbol) => {
-    const metadata = getOrCreateMetadata(target.constructor);
-    const name = String(propertyKey);
-
-    metadata.columns.set(name, {
-      name,
-      nullable: true, // Default: allow null
-      ...options
-    });
-  };
+export function Entity(tableName?: string): ClassDeco {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any): void => {
+    const meta     = getOrCreateMeta(target as Function)
+    meta.tableName = tableName ?? (target as Function).name.toLowerCase() + 's'
+  }
 }
 
-// ─── Common Column Shortcuts ──────────────────────────────────────────────────
+// ── @PrimaryKey ───────────────────────────────────────────────────────────
 
-/**
- * @CreatedAt - Automatically set to current timestamp on insert.
- */
-export function CreatedAt(): PropertyDecorator {
+export function PrimaryKey(options: PrimaryKeyOptions = {}): PropDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any, propertyKey: string | symbol): void => {
+    const key        = String(propertyKey)
+    const ctor       = (typeof target === 'function' ? target : target?.constructor) as Function
+    const meta       = getOrCreateMeta(ctor)
+    const isGenerated = options.generated ?? options.autoIncrement ?? true
+
+    meta.primaryKey = key
+    meta.columns.set(key, {
+      propertyKey:  key,
+      columnName:   options.name ?? key,
+      type:         options.type ?? 'integer',
+      nullable:     false,
+      unique:       true,
+      isPrimary:    true,
+      isGenerated
+    })
+  }
+}
+
+// ── @Column ───────────────────────────────────────────────────────────────
+
+export function Column(options: ColumnOptions = {}): PropDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any, propertyKey: string | symbol): void => {
+    const key  = String(propertyKey)
+    const ctor = (typeof target === 'function' ? target : target?.constructor) as Function
+    const meta = getOrCreateMeta(ctor)
+
+    meta.columns.set(key, {
+      propertyKey:  key,
+      columnName:   options.name      ?? key,
+      type:         options.type      ?? 'string',
+      nullable:     options.nullable  ?? false,
+      unique:       options.unique    ?? false,
+      default:      options.default,
+      length:       options.length,
+      precision:    options.precision,
+      scale:        options.scale,
+      isPrimary:    false,
+      isGenerated:  false
+    })
+  }
+}
+
+// ── Timestamp shortcuts ───────────────────────────────────────────────────
+
+export function CreatedAt(): PropDecorator {
   return Column({
-    type: 'timestamp',
+    type:     'timestamp',
+    name:     'created_at',
     nullable: false,
-    default: 'CURRENT_TIMESTAMP'
-  });
+    default:  'CURRENT_TIMESTAMP'
+  })
 }
 
-/**
- * @UpdatedAt - Automatically updated to current timestamp on update.
- */
-export function UpdatedAt(): PropertyDecorator {
+export function UpdatedAt(): PropDecorator {
   return Column({
-    type: 'timestamp',
+    type:     'timestamp',
+    name:     'updated_at',
     nullable: true
-  });
+  })
 }
 
-/**
- * @DeletedAt - For soft deletes. NULL means not deleted.
- */
-export function DeletedAt(): PropertyDecorator {
+export function DeletedAt(): PropDecorator {
   return Column({
-    type: 'timestamp',
+    type:     'timestamp',
+    name:     'deleted_at',
     nullable: true
-  });
+  })
 }
 
-// ─── Export Registry ──────────────────────────────────────────────────────────
+// ── Relations ─────────────────────────────────────────────────────────────
 
-export { entityRegistry };
+function makeRelation(
+  relationType: 'hasOne' | 'hasMany' | 'belongsTo' | 'manyToMany'
+) {
+  return function (
+    targetFactory: () => Function,
+    options:        RelationOptions = {}
+  ): PropDecorator {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (instance: any, propertyKey: string | symbol): void => {
+      const key  = String(propertyKey)
+      const ctor = (typeof instance === 'function'
+        ? instance
+        : instance?.constructor) as Function
+      const meta = getOrCreateMeta(ctor)
+
+      meta.relations.set(key, {
+        type:        relationType,
+        propertyKey: key,
+        target:      targetFactory,
+        foreignKey:  options.foreignKey ?? '',
+        pivotTable:  options.pivotTable,
+        eager:       options.eager      ?? false
+      })
+    }
+  }
+}
+
+export const HasOne     = makeRelation('hasOne')
+export const HasMany    = makeRelation('hasMany')
+export const BelongsTo  = makeRelation('belongsTo')
+export const ManyToMany = makeRelation('manyToMany')
+
+// ── @Index ────────────────────────────────────────────────────────────────
+
+export function Index(options: IndexOptions = {}): PropDecorator {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any, propertyKey: string | symbol): void => {
+    const key  = String(propertyKey)
+    const ctor = (typeof target === 'function'
+      ? target
+      : target?.constructor) as Function
+    const meta = getOrCreateMeta(ctor)
+
+    meta.indexes.push({
+      name:    options.name   ?? `idx_${key}`,
+      columns: [key],
+      unique:  options.unique ?? false
+    })
+  }
+}
+
+// ── @CompositeIndex ───────────────────────────────────────────────────────
+
+export function CompositeIndex(
+  columns: string[],
+  options: IndexOptions = {}
+): ClassDeco {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any): void => {
+    const meta = getOrCreateMeta(target as Function)
+    meta.indexes.push({
+      name:    options.name   ?? `idx_${columns.join('_')}`,
+      columns,
+      unique:  options.unique ?? false
+    })
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/cli",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "AxilJS CLI — axil create, run, build, test, deploy, doctor",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,7 +13,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.2.1"
+    "@axiljs/common": "^0.2.2"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

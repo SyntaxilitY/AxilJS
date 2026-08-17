@@ -1,61 +1,84 @@
 /**
- * Entity decorators.
- * Mark classes as database entities and define their columns.
- *
- * Usage:
- *   @Entity('users')
- *   class User {
- *     @PrimaryKey()
- *     id: number
- *
- *     @Column({ type: 'string', length: 255 })
- *     name: string
- *
- *     @Column({ type: 'string', unique: true })
- *     email: string
- *
- *     @Column({ type: 'timestamp', default: 'CURRENT_TIMESTAMP' })
- *     createdAt: Date
- *   }
+ * AxilORM — All Decorators
+ * Trace ID: 992f2995fd8091f39f6f41f757fb766a
  */
-import { ColumnDefinition, EntityMetadata, ColumnType } from '../types';
-declare const entityRegistry: Map<Function, EntityMetadata>;
-/**
- * Get entity metadata for a class.
- */
-export declare function getEntityMetadata(target: Function): EntityMetadata | undefined;
-/**
- * Mark a class as a database entity.
- * The tableName maps this class to a database table.
- *
- * @param tableName  Database table name (default: lowercase class name + 's')
- */
-export declare function Entity(tableName?: string): ClassDecorator;
-/**
- * Mark a property as the primary key.
- * Defaults to auto-incrementing integer.
- */
-export declare function PrimaryKey(options?: {
+export type ColumnType = 'string' | 'number' | 'integer' | 'bigint' | 'float' | 'decimal' | 'boolean' | 'date' | 'datetime' | 'timestamp' | 'text' | 'json' | 'jsonb' | 'uuid' | 'enum';
+export interface ColumnOptions {
     type?: ColumnType;
+    name?: string;
+    nullable?: boolean;
+    unique?: boolean;
+    default?: unknown;
+    length?: number;
+    precision?: number;
+    scale?: number;
+}
+export interface PrimaryKeyOptions {
+    type?: 'integer' | 'bigint' | 'uuid' | 'string';
+    generated?: boolean;
     autoIncrement?: boolean;
-}): PropertyDecorator;
-/**
- * Mark a property as a database column.
- */
-export declare function Column(options: Partial<ColumnDefinition> & {
+    name?: string;
+}
+export interface RelationOptions {
+    foreignKey?: string;
+    pivotTable?: string;
+    eager?: boolean;
+}
+export interface IndexOptions {
+    name?: string;
+    unique?: boolean;
+}
+export interface ColumnMeta {
+    propertyKey: string;
+    columnName: string;
     type: ColumnType;
-}): PropertyDecorator;
-/**
- * @CreatedAt - Automatically set to current timestamp on insert.
- */
-export declare function CreatedAt(): PropertyDecorator;
-/**
- * @UpdatedAt - Automatically updated to current timestamp on update.
- */
-export declare function UpdatedAt(): PropertyDecorator;
-/**
- * @DeletedAt - For soft deletes. NULL means not deleted.
- */
-export declare function DeletedAt(): PropertyDecorator;
-export { entityRegistry };
+    nullable: boolean;
+    unique: boolean;
+    default?: unknown;
+    length?: number;
+    precision?: number;
+    scale?: number;
+    isPrimary: boolean;
+    isGenerated: boolean;
+}
+export interface RelationMeta {
+    type: 'hasOne' | 'hasMany' | 'belongsTo' | 'manyToMany';
+    propertyKey: string;
+    target: () => Function;
+    foreignKey: string;
+    pivotTable?: string;
+    eager: boolean;
+}
+export interface IndexMeta {
+    name: string;
+    columns: string[];
+    unique: boolean;
+}
+export interface EntityMeta {
+    tableName: string;
+    primaryKey: string;
+    columns: Map<string, ColumnMeta>;
+    relations: Map<string, RelationMeta>;
+    indexes: IndexMeta[];
+}
+export type EntityMetadata = EntityMeta;
+type PropDecorator = (target: any, propertyKey: string | symbol) => void;
+type ClassDeco = (target: any) => void;
+export declare const entityRegistry: Map<Function, EntityMeta>;
+export declare function getOrCreateMeta(target: Function): EntityMeta;
+export declare function getEntityMetadata(target: Function): EntityMeta | undefined;
+export declare function getAllEntities(): Map<Function, EntityMeta>;
+export declare function Entity(tableName?: string): ClassDeco;
+export declare function PrimaryKey(options?: PrimaryKeyOptions): PropDecorator;
+export declare function Column(options?: ColumnOptions): PropDecorator;
+export declare function CreatedAt(): PropDecorator;
+export declare function UpdatedAt(): PropDecorator;
+export declare function DeletedAt(): PropDecorator;
+export declare const HasOne: (targetFactory: () => Function, options?: RelationOptions) => PropDecorator;
+export declare const HasMany: (targetFactory: () => Function, options?: RelationOptions) => PropDecorator;
+export declare const BelongsTo: (targetFactory: () => Function, options?: RelationOptions) => PropDecorator;
+export declare const ManyToMany: (targetFactory: () => Function, options?: RelationOptions) => PropDecorator;
+export declare function Index(options?: IndexOptions): PropDecorator;
+export declare function CompositeIndex(columns: string[], options?: IndexOptions): ClassDeco;
+export {};
 //# sourceMappingURL=entity.d.ts.map
