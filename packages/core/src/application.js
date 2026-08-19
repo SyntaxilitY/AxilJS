@@ -232,20 +232,23 @@ class Application {
             });
         });
     }
+    getServer() {
+        return this.server;
+    }
     /**
-     * Print startup information banner.
-     */
+   * Print startup information banner.
+   */
     printBanner(port, host) {
         const env = this.config.env || 'development';
         console.log('');
-        console.log('\x1b[36m\x1b[1m ██████╗ ███████╗███████╗████████╗     ██╗███████╗\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██╔══██╗██╔════╝██╔════╝╚══██╔══╝     ██║██╔════╝\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██████╔╝█████╗  ███████╗   ██║        ██║███████╗\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██╔══██╗██╔══╝  ╚════██║   ██║   ██   ██║╚════██║\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ██║  ██║███████╗███████║   ██║   ╚█████╔╝███████║\x1b[0m');
-        console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝    ╚════╝ ╚══════╝\x1b[0m');
+        console.log('\x1b[36m\x1b[1m  █████╗ ██╗  ██╗██╗██╗          ██╗███████╗\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██╔══██╗╚██╗██╔╝██║██║          ██║██╔════╝\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ███████║ ╚███╔╝ ██║██║          ██║███████╗\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██╔══██║ ██╔██╗ ██║██║     ██   ██║╚════██║\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║\x1b[0m');
+        console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝\x1b[0m');
         console.log('');
-        console.log(`\x1b[1m @axiljsJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`);
+        console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`);
         console.log('');
         console.log(`  \x1b[32m✓\x1b[0m Server running`);
         console.log(`  \x1b[32m✓\x1b[0m http://${host}:${port}`);

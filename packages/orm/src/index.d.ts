@@ -1,5 +1,6 @@
 /**
- * @axiljs/orm - Public API
+ * @axiljs/orm — Public API
+ * Trace ID: 992f2995fd8091f39f6f41f757fb766a
  */
 export { ConnectionManager, createConnection } from './connection/connection-manager';
 export { BaseDriver } from './connection/base-driver';
@@ -7,9 +8,17 @@ export type { TransactionContext } from './connection/base-driver';
 export { SQLiteDriver } from './connection/sqlite-driver';
 export { PostgresDriver } from './connection/postgres-driver';
 export { MySQLDriver } from './connection/mysql-driver';
-export { Entity, PrimaryKey, Column, CreatedAt, UpdatedAt, DeletedAt, getEntityMetadata } from './decorators/entity';
+export { Entity, PrimaryKey, Column, CreatedAt, UpdatedAt, DeletedAt, HasOne, HasMany, BelongsTo, ManyToMany, Index, CompositeIndex, getEntityMetadata, getAllEntities, entityRegistry } from './decorators/entity';
+export type { ColumnType, ColumnOptions, PrimaryKeyOptions, RelationOptions, IndexOptions, ColumnMeta, RelationMeta, IndexMeta, EntityMeta, EntityMetadata } from './decorators/entity';
+export { QueryBuilder as ModelQueryBuilder } from './query/query-builder';
 export { QueryBuilder } from './query-builder/query-builder';
 export { BaseRepository } from './repository/base-repository';
+export { BaseModel } from './model/base-model';
+export { getEntityMeta, getOrCreateMeta } from './model/model-metadata';
+export { Schema, TableBuilder } from './schema/schema-builder';
+export { Transaction, TransactionScope } from './transaction/transaction-manager';
+export { ViewManager } from './views/view-manager';
+export { ProcedureManager } from './procedures/procedure-manager';
 export { MigrationRunner } from './migrations/migration-runner';
 export type { Migration } from './migrations/migration-runner';
 export * from './types';

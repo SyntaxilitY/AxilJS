@@ -1,6 +1,6 @@
 {
   "name": "axiljs",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -26,7 +26,8 @@
     "build:cloud": "cd packages/cloud        && npm run build",
     "build:cli": "cd packages/cli          && npm run build",
     "build:memory": "cd packages/memory       && npm run build",
-    "build:all": "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory",
+    "build:studio": "cd packages/studio       && npm run build",
+    "build:all": "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory && npm run build:studio",
     "dev": "npm run dev  --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",

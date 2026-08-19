@@ -8,6 +8,7 @@
  *   app.get('/users', listUsers)
  *   await app.listen()
  */
+import { Server } from 'http';
 import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axiljs/common';
 import { Router } from './router/router';
 export declare class Application {
@@ -69,9 +70,10 @@ export declare class Application {
      * Stop the HTTP server gracefully.
      */
     close(): Promise<void>;
+    getServer(): Server | null;
     /**
-     * Print startup information banner.
-     */
+   * Print startup information banner.
+   */
     private printBanner;
 }
 //# sourceMappingURL=application.d.ts.map

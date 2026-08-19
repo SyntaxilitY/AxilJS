@@ -41,7 +41,8 @@ const descriptions = {
   'cloud':         'AxilJS enterprise — multi-tenancy, audit logs, feature flags, deployment',
   'memory':        'AxilJS memory leak detection, GC optimization, and monitoring',
   'pm':            'AxilJS package manager with lock file and checksum verification',
-  'cli':           'AxilJS CLI — axil create, run, build, test, deploy, doctor'
+  'cli':           'AxilJS CLI — axil create, run, build, test, deploy, doctor',
+  'studio':        'Browser-based dev studio that opens automatically when axil run is used'
 }
 
 const packages = fs.readdirSync(PACKAGES_DIR)

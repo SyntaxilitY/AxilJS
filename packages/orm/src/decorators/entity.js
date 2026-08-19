@@ -1,134 +1,165 @@
 "use strict";
 /**
- * Entity decorators.
- * Mark classes as database entities and define their columns.
- *
- * Usage:
- *   @Entity('users')
- *   class User {
- *     @PrimaryKey()
- *     id: number
- *
- *     @Column({ type: 'string', length: 255 })
- *     name: string
- *
- *     @Column({ type: 'string', unique: true })
- *     email: string
- *
- *     @Column({ type: 'timestamp', default: 'CURRENT_TIMESTAMP' })
- *     createdAt: Date
- *   }
+ * AxilORM — All Decorators
+ * Trace ID: 992f2995fd8091f39f6f41f757fb766a
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.entityRegistry = void 0;
+exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.entityRegistry = void 0;
+exports.getOrCreateMeta = getOrCreateMeta;
 exports.getEntityMetadata = getEntityMetadata;
+exports.getAllEntities = getAllEntities;
 exports.Entity = Entity;
 exports.PrimaryKey = PrimaryKey;
 exports.Column = Column;
 exports.CreatedAt = CreatedAt;
 exports.UpdatedAt = UpdatedAt;
 exports.DeletedAt = DeletedAt;
-// ─── Metadata Storage ──────────────────────────────────────────────────────────
-// Store entity metadata keyed by class constructor
-// This is our own metadata registry - no reflect-metadata required
-const entityRegistry = new Map();
-exports.entityRegistry = entityRegistry;
-/**
- * Get entity metadata for a class.
- */
-function getEntityMetadata(target) {
-    return entityRegistry.get(target);
-}
-/**
- * Get or create entity metadata (used internally by decorators).
- */
-function getOrCreateMetadata(target) {
-    if (!entityRegistry.has(target)) {
-        entityRegistry.set(target, {
-            tableName: target.name.toLowerCase() + 's', // Default: ClassName → classnames
+exports.Index = Index;
+exports.CompositeIndex = CompositeIndex;
+// ── Registry ─────────────────────────────────────────────────────────────
+exports.entityRegistry = new Map();
+function getOrCreateMeta(target) {
+    if (!exports.entityRegistry.has(target)) {
+        exports.entityRegistry.set(target, {
+            tableName: '',
+            primaryKey: 'id',
             columns: new Map(),
-            primaryKey: 'id'
+            relations: new Map(),
+            indexes: []
         });
     }
-    return entityRegistry.get(target);
+    return exports.entityRegistry.get(target);
 }
-// ─── @Entity Decorator ────────────────────────────────────────────────────────
-/**
- * Mark a class as a database entity.
- * The tableName maps this class to a database table.
- *
- * @param tableName  Database table name (default: lowercase class name + 's')
- */
+function getEntityMetadata(target) {
+    return exports.entityRegistry.get(target);
+}
+function getAllEntities() {
+    return exports.entityRegistry;
+}
+// ── @Entity ───────────────────────────────────────────────────────────────
 function Entity(tableName) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (target) => {
-        const metadata = getOrCreateMetadata(target);
-        if (tableName) {
-            metadata.tableName = tableName;
-        }
-        entityRegistry.set(target, metadata);
+        const meta = getOrCreateMeta(target);
+        meta.tableName = tableName ?? target.name.toLowerCase() + 's';
     };
 }
-// ─── @PrimaryKey Decorator ────────────────────────────────────────────────────
-/**
- * Mark a property as the primary key.
- * Defaults to auto-incrementing integer.
- */
+// ── @PrimaryKey ───────────────────────────────────────────────────────────
 function PrimaryKey(options = {}) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (target, propertyKey) => {
-        const metadata = getOrCreateMetadata(target.constructor);
-        const name = String(propertyKey);
-        metadata.primaryKey = name;
-        metadata.columns.set(name, {
-            name,
-            type: options.type || 'integer',
-            primary: true,
-            autoIncrement: options.autoIncrement ?? true,
-            nullable: false
+        const key = String(propertyKey);
+        const ctor = (typeof target === 'function' ? target : target?.constructor);
+        const meta = getOrCreateMeta(ctor);
+        const isGenerated = options.generated ?? options.autoIncrement ?? true;
+        meta.primaryKey = key;
+        meta.columns.set(key, {
+            propertyKey: key,
+            columnName: options.name ?? key,
+            type: options.type ?? 'integer',
+            nullable: false,
+            unique: true,
+            isPrimary: true,
+            isGenerated
         });
     };
 }
-// ─── @Column Decorator ────────────────────────────────────────────────────────
-/**
- * Mark a property as a database column.
- */
-function Column(options) {
+// ── @Column ───────────────────────────────────────────────────────────────
+function Column(options = {}) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (target, propertyKey) => {
-        const metadata = getOrCreateMetadata(target.constructor);
-        const name = String(propertyKey);
-        metadata.columns.set(name, {
-            name,
-            nullable: true, // Default: allow null
-            ...options
+        const key = String(propertyKey);
+        const ctor = (typeof target === 'function' ? target : target?.constructor);
+        const meta = getOrCreateMeta(ctor);
+        meta.columns.set(key, {
+            propertyKey: key,
+            columnName: options.name ?? key,
+            type: options.type ?? 'string',
+            nullable: options.nullable ?? false,
+            unique: options.unique ?? false,
+            default: options.default,
+            length: options.length,
+            precision: options.precision,
+            scale: options.scale,
+            isPrimary: false,
+            isGenerated: false
         });
     };
 }
-// ─── Common Column Shortcuts ──────────────────────────────────────────────────
-/**
- * @CreatedAt - Automatically set to current timestamp on insert.
- */
+// ── Timestamp shortcuts ───────────────────────────────────────────────────
 function CreatedAt() {
     return Column({
         type: 'timestamp',
+        name: 'created_at',
         nullable: false,
         default: 'CURRENT_TIMESTAMP'
     });
 }
-/**
- * @UpdatedAt - Automatically updated to current timestamp on update.
- */
 function UpdatedAt() {
     return Column({
         type: 'timestamp',
+        name: 'updated_at',
         nullable: true
     });
 }
-/**
- * @DeletedAt - For soft deletes. NULL means not deleted.
- */
 function DeletedAt() {
     return Column({
         type: 'timestamp',
+        name: 'deleted_at',
         nullable: true
     });
+}
+// ── Relations ─────────────────────────────────────────────────────────────
+function makeRelation(relationType) {
+    return function (targetFactory, options = {}) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return (instance, propertyKey) => {
+            const key = String(propertyKey);
+            const ctor = (typeof instance === 'function'
+                ? instance
+                : instance?.constructor);
+            const meta = getOrCreateMeta(ctor);
+            meta.relations.set(key, {
+                type: relationType,
+                propertyKey: key,
+                target: targetFactory,
+                foreignKey: options.foreignKey ?? '',
+                pivotTable: options.pivotTable,
+                eager: options.eager ?? false
+            });
+        };
+    };
+}
+exports.HasOne = makeRelation('hasOne');
+exports.HasMany = makeRelation('hasMany');
+exports.BelongsTo = makeRelation('belongsTo');
+exports.ManyToMany = makeRelation('manyToMany');
+// ── @Index ────────────────────────────────────────────────────────────────
+function Index(options = {}) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (target, propertyKey) => {
+        const key = String(propertyKey);
+        const ctor = (typeof target === 'function'
+            ? target
+            : target?.constructor);
+        const meta = getOrCreateMeta(ctor);
+        meta.indexes.push({
+            name: options.name ?? `idx_${key}`,
+            columns: [key],
+            unique: options.unique ?? false
+        });
+    };
+}
+// ── @CompositeIndex ───────────────────────────────────────────────────────
+function CompositeIndex(columns, options = {}) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (target) => {
+        const meta = getOrCreateMeta(target);
+        meta.indexes.push({
+            name: options.name ?? `idx_${columns.join('_')}`,
+            columns,
+            unique: options.unique ?? false
+        });
+    };
 }
 //# sourceMappingURL=entity.js.map

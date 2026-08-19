@@ -155,8 +155,8 @@ class Installer {
         if (!(0, fs_1.existsSync)((0, path_1.join)(packageDir, 'package.json'))) {
             (0, fs_1.writeFileSync)((0, path_1.join)(packageDir, 'package.json'), JSON.stringify({
                 name: packageName,
-                _@axiljsjs_installed: true,
-                _@axiljsjs_note: 'Installed by @axiljsJS PM'
+                _axiljs_installed: true,
+                _axiljs_note: 'Installed by @axiljsJS PM'
             }, null, 2));
         }
     }

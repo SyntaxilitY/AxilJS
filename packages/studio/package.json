@@ -1,0 +1,50 @@
+{
+  "name": "@axiljs/studio",
+  "version": "0.2.3",
+  "description": "AxilJS CLI — axil create, run, build, test, deploy, doctor",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "axil": "dist/cli.js",
+    "axiljs": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@axiljs/common": "^0.2.3"
+  },
+  "optionalDependencies": {
+    "@axiljs/studio": "^0.2.3"
+  },
+  "devDependencies": {
+    "@axiljs/studio": "^0.2.3",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "keywords": [
+    "axiljs",
+    "backend",
+    "javascript",
+    "typescript",
+    "nodejs"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

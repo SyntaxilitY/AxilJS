@@ -5,15 +5,20 @@
  */
 
 import { spawn, ChildProcess, execSync } from 'child_process'
-import { watch, existsSync, mkdirSync }  from 'fs'
-import { join, resolve, relative }       from 'path'
+import { watch, existsSync, mkdirSync, readFileSync } from 'fs'
+import { join, relative }                from 'path'
+
+// ── State ─────────────────────────────────────────────────────────────────────
 
 let serverProcess: ChildProcess | null = null
 let restartTimer:  ReturnType<typeof setTimeout> | null = null
 let isCompiling:   boolean = false
 let startCount:    number  = 0
+let studioInstance: any    = null
 
 const changedFiles: Set<string> = new Set()
+
+// ── Colors ────────────────────────────────────────────────────────────────────
 
 const C = {
   reset:  '\x1b[0m',
@@ -25,6 +30,8 @@ const C = {
   cyan:   '\x1b[36m',
   gray:   '\x1b[90m'
 }
+
+// ── Logging ───────────────────────────────────────────────────────────────────
 
 function log(msg: string): void {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false })
@@ -41,6 +48,32 @@ function logSuccess(msg: string): void {
   console.log(`${C.gray}${time}${C.reset} ${C.green}[axil run]${C.reset} ${msg}`)
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Read a value from the project .env file.
+ * Returns undefined if the file or key does not exist.
+ */
+function readEnvValue(cwd: string, key: string): string | undefined {
+  const envPath = join(cwd, '.env')
+  if (!existsSync(envPath)) return undefined
+
+  const content = readFileSync(envPath, 'utf-8')
+  const match   = content.match(new RegExp(`^${key}=(.+)$`, 'm'))
+  return match ? match[1].trim() : undefined
+}
+
+/**
+ * Read the app port from .env PORT= or fall back to 3000.
+ */
+function readAppPort(cwd: string): number {
+  const raw = readEnvValue(cwd, 'PORT')
+  const n   = raw ? parseInt(raw, 10) : NaN
+  return Number.isNaN(n) ? 3000 : n
+}
+
+// ── Compiler ──────────────────────────────────────────────────────────────────
+
 function compile(cwd: string): boolean {
   const start = Date.now()
 
@@ -52,19 +85,21 @@ function compile(cwd: string): boolean {
 
     const duration = Date.now() - start
     logSuccess(
-      `Compiled ${C.bold}${changedFiles.size > 0 ? changedFiles.size + ' file(s)' : 'project'}${C.reset}${C.green} in ${C.bold}${duration}ms${C.reset}`
+      `Compiled ${C.bold}${
+        changedFiles.size > 0 ? changedFiles.size + ' file(s)' : 'project'
+      }${C.reset}${C.green} in ${C.bold}${duration}ms${C.reset}`
     )
 
     changedFiles.clear()
     return true
   } catch (error: any) {
-    const duration = Date.now() - start
-    const output   = error.stdout?.toString() || ''
-    const stderr   = error.stderr?.toString() || ''
+    const duration    = Date.now() - start
+    const output      = error.stdout?.toString() ?? ''
+    const stderr      = error.stderr?.toString() ?? ''
+    const errorOutput = output || stderr
 
     logError(`Compilation failed in ${duration}ms`)
 
-    const errorOutput = output || stderr
     if (errorOutput) {
       errorOutput.split('\n').forEach((line: string) => {
         if (line.includes('error TS')) {
@@ -80,6 +115,8 @@ function compile(cwd: string): boolean {
     return false
   }
 }
+
+// ── Entry point detection ─────────────────────────────────────────────────────
 
 function findEntryPoint(cwd: string): string | null {
   const candidates = [
@@ -98,19 +135,22 @@ function findEntryPoint(cwd: string): string | null {
   return null
 }
 
+// ── Server lifecycle ──────────────────────────────────────────────────────────
+
 async function startServer(cwd: string): Promise<void> {
+  // Kill existing process if running
   if (serverProcess) {
     serverProcess.kill('SIGTERM')
 
-    await new Promise<void>(resolve => {
+    await new Promise<void>(done => {
       const timer = setTimeout(() => {
         if (serverProcess) serverProcess.kill('SIGKILL')
-        resolve()
+        done()
       }, 2000)
 
       serverProcess!.once('exit', () => {
         clearTimeout(timer)
-        resolve()
+        done()
       })
     })
 
@@ -120,7 +160,7 @@ async function startServer(cwd: string): Promise<void> {
   const entry = findEntryPoint(cwd)
 
   if (!entry) {
-    logError('Could not find entry point.')
+    logError('Could not find entry point (dist/main.js, dist/server.js, dist/index.js).')
     return
   }
 
@@ -130,17 +170,20 @@ async function startServer(cwd: string): Promise<void> {
   if (startCount === 1) {
     log(`Starting ${C.bold}${relEntry}${C.reset}`)
   } else {
-    log(`Restarting ${C.bold}${relEntry}${C.reset} ${C.gray}(restart #${startCount - 1})${C.reset}`)
+    log(
+      `Restarting ${C.bold}${relEntry}${C.reset} ` +
+      `${C.gray}(restart #${startCount - 1})${C.reset}`
+    )
   }
 
   serverProcess = spawn('node', [entry], {
     cwd,
-    stdio:  'inherit',
+    stdio: 'inherit',
     env: {
       ...process.env,
-      NODE_ENV:          process.env.NODE_ENV || 'development',
-      FORCE_COLOR:       '1',
-      NODE_NO_WARNINGS:  '1'
+      NODE_ENV:         process.env.NODE_ENV ?? 'development',
+      FORCE_COLOR:      '1',
+      NODE_NO_WARNINGS: '1'
     }
   })
 
@@ -150,9 +193,13 @@ async function startServer(cwd: string): Promise<void> {
 
   serverProcess.on('exit', (code, signal) => {
     if (signal === 'SIGTERM' || signal === 'SIGKILL') return
-    if (code !== 0 && code !== null) logError(`Server exited with code ${code}`)
+    if (code !== 0 && code !== null) {
+      logError(`Server exited with code ${code}`)
+    }
   })
 }
+
+// ── File watcher ──────────────────────────────────────────────────────────────
 
 function watchFiles(cwd: string): void {
   const srcDir = join(cwd, 'src')
@@ -184,20 +231,19 @@ function watchFiles(cwd: string): void {
         files.forEach(f => console.log(`  ${C.gray}→ ${f}${C.reset}`))
       }
 
-      const success = compile(cwd)
-
-      if (success) {
-        await startServer(cwd)
-      }
+      const ok = compile(cwd)
+      if (ok) await startServer(cwd)
 
       isCompiling = false
     }, 150)
   })
 }
 
+// ── Project validation ────────────────────────────────────────────────────────
+
 function validateProject(cwd: string): boolean {
   if (!existsSync(join(cwd, 'package.json'))) {
-    logError('No package.json found.')
+    logError('No package.json found. Are you inside an AxilJS project?')
     return false
   }
   if (!existsSync(join(cwd, 'tsconfig.json'))) {
@@ -211,6 +257,130 @@ function validateProject(cwd: string): boolean {
   return true
 }
 
+// ── Studio ────────────────────────────────────────────────────────────────────
+
+async function startStudio(cwd: string, appPort: number): Promise<any> {
+  try {
+    // Use require() so TypeScript does not attempt to resolve
+    // @axiljs/studio at compile time. Studio is optional — if it
+    // is not installed the catch block silently skips it.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const studioModule = (() => {
+      try {
+        return require('@axiljs/studio')
+      } catch {
+        return null
+      }
+    })()
+
+    if (!studioModule) {
+      return null
+    }
+
+    const { StudioServer } = studioModule
+
+    // ── App name ───────────────────────────────────────────────────
+    const pkgPath = join(cwd, 'package.json')
+    const appName = existsSync(pkgPath)
+      ? (JSON.parse(readFileSync(pkgPath, 'utf-8')).name as string) ?? 'axiljs-app'
+      : 'axiljs-app'
+
+    // ── Database config from .env ──────────────────────────────────
+    let dbDriver: string | undefined
+    let dbFile:   string | undefined
+    let dbUrl:    string | undefined
+
+    const rawUrl  = readEnvValue(cwd, 'DATABASE_URL')
+    const rawFile = readEnvValue(cwd, 'DATABASE_FILENAME')
+
+    if (rawUrl) {
+      dbUrl = rawUrl
+      if (dbUrl.startsWith('postgres'))    dbDriver = 'postgres'
+      else if (dbUrl.startsWith('mysql'))  dbDriver = 'mysql'
+    }
+
+    if (rawFile) {
+      dbDriver = 'sqlite'
+      dbFile   = rawFile
+    }
+
+    // ── Start Studio on appPort + 1 ────────────────────────────────
+    const studioPort = appPort + 1
+
+    const studio = new StudioServer({
+      port:     studioPort,
+      host:     '127.0.0.1',
+      appPort,
+      appName,
+      dbDriver,
+      dbFile,
+      dbUrl,
+      enableQR: true
+    })
+
+    await studio.start()
+
+    log(
+      `Studio  ${C.bold}http://localhost:${studioPort}${C.reset} ` +
+      `${C.gray}(auto-opened in browser)${C.reset}`
+    )
+
+    return studio
+
+  } catch (err: any) {
+    log(`${C.yellow}Studio unavailable:${C.reset} ${err.message}`)
+    return null
+  }
+}
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+
+function setupShutdown(studio: any): void {
+  // Guard against registering the handler multiple times
+  // (can happen if runDev is called programmatically)
+  process.removeAllListeners('SIGINT')
+  process.removeAllListeners('SIGTERM')
+
+  async function shutdown(signal: string): Promise<void> {
+    console.log('')
+    log(`${signal} received — shutting down...`)
+
+    // 1. Stop Studio
+    if (studio) {
+      try {
+        await studio.stop()
+      } catch {
+        // Best effort
+      }
+    }
+
+    // 2. Kill app server
+    if (serverProcess) {
+      serverProcess.kill('SIGTERM')
+
+      await new Promise<void>(done => {
+        const timer = setTimeout(() => {
+          serverProcess?.kill('SIGKILL')
+          done()
+        }, 3000)
+
+        serverProcess!.once('exit', () => {
+          clearTimeout(timer)
+          done()
+        })
+      })
+    }
+
+    console.log('')
+    process.exit(0)
+  }
+
+  process.on('SIGINT',  () => { void shutdown('SIGINT')  })
+  process.on('SIGTERM', () => { void shutdown('SIGTERM') })
+}
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
 export async function runDev(): Promise<void> {
   const cwd = process.cwd()
 
@@ -221,46 +391,33 @@ export async function runDev(): Promise<void> {
 
   if (!validateProject(cwd)) process.exit(1)
 
+  // Ensure dist/ exists so tsc has somewhere to write
   const distDir = join(cwd, 'dist')
   if (!existsSync(distDir)) mkdirSync(distDir, { recursive: true })
 
+  // ── Initial compile ────────────────────────────────────────────────
   log('Initial compilation...')
   const success = compile(cwd)
 
   if (!success) {
     logError('Fix compilation errors then save a file to retry.')
     watchFiles(cwd)
-    setupShutdown()
+    setupShutdown(null)
     return
   }
 
+  // ── Read port before starting anything ────────────────────────────
+  const appPort = readAppPort(cwd)
+
+  // ── Start app server ───────────────────────────────────────────────
   await startServer(cwd)
+
+  // ── Start Studio (optional, non-blocking) ─────────────────────────
+  studioInstance = await startStudio(cwd, appPort)
+
+  // ── Watch for changes ──────────────────────────────────────────────
   watchFiles(cwd)
-  setupShutdown()
-}
 
-function setupShutdown(): void {
-  process.on('SIGINT', async () => {
-    console.log('')
-    log('Shutting down...')
-
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM')
-
-      await new Promise<void>(resolve => {
-        const timer = setTimeout(() => {
-          serverProcess?.kill('SIGKILL')
-          resolve()
-        }, 3000)
-
-        serverProcess!.once('exit', () => {
-          clearTimeout(timer)
-          resolve()
-        })
-      })
-    }
-
-    console.log('')
-    process.exit(0)
-  })
+  // ── Register shutdown handlers with studio reference ───────────────
+  setupShutdown(studioInstance)
 }

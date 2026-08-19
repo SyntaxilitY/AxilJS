@@ -78,10 +78,10 @@ async function runErrorHandlers(error, handlers, req, res) {
         if (index >= handlers.length) {
             // No more error handlers - send default error response if not sent
             if (!res.sent) {
-                const statusCode = currentError instanceof common_1.@axiljsError
+                const statusCode = currentError instanceof common_1.axilError
                     ? currentError.statusCode
                     : 500;
-                const code = currentError instanceof common_1.@axiljsError
+                const code = currentError instanceof common_1.axilError
                     ? currentError.code
                     : 'INTERNAL_ERROR';
                 // In production, don't expose internal error messages

@@ -3,8 +3,8 @@
  * Wraps Node.js IncomingMessage and provides a clean API.
  */
 import { IncomingMessage } from 'http';
-import { @axiljsRequest, HttpMethod, RouteParams, QueryParams } from '@axiljs/common';
-export declare class Request implements @axiljsRequest {
+import { axilRequest, HttpMethod, RouteParams, QueryParams } from '@axiljs/common';
+export declare class Request implements axilRequest {
     raw: IncomingMessage;
     method: HttpMethod;
     url: string;

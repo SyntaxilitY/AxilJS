@@ -1,15 +1,7 @@
 /**
  * Migration Runner.
- * Manages database schema changes in a versioned, repeatable way.
- *
- * How it works:
- *   1. Migrations are TypeScript files in src/migrations/
- *   2. Each file exports an up() and down() function
- *   3. The runner tracks which migrations have run (in _migrations table)
- *   4. Running migrations applies pending ones in order
- *   5. Rolling back reverses the last batch
- *
- * Migration file naming: 001_create_users.ts, 002_add_email_index.ts
+ * Manages database schema changes.
+ * Supports PostgreSQL, MySQL, and SQLite parameter styles.
  */
 import { BaseDriver, TransactionContext } from '../connection/base-driver';
 export interface Migration {
@@ -19,32 +11,15 @@ export interface Migration {
 export declare class MigrationRunner {
     private driver;
     private migrationsDir;
+    private driverType;
     constructor(driver: BaseDriver, migrationsDir?: string);
-    /**
-     * Ensure the _migrations tracking table exists.
-     * Called automatically before any migration operation.
-     */
+    /** Parameter placeholder: $1 for postgres, ? for others */
+    private p;
     private ensureMigrationsTable;
-    /**
-     * Get all migration files from the migrations directory.
-     * Sorted by filename for deterministic order.
-     */
     private getMigrationFiles;
-    /**
-     * Get migrations that have already been run from the database.
-     */
     private getExecutedMigrations;
-    /**
-     * Run all pending migrations.
-     */
     up(): Promise<void>;
-    /**
-     * Roll back the last batch of migrations.
-     */
     down(): Promise<void>;
-    /**
-     * Show migration status.
-     */
     status(): Promise<void>;
 }
 //# sourceMappingURL=migration-runner.d.ts.map

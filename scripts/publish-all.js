@@ -13,7 +13,7 @@ const fs   = require('fs')
 const ORDER = [
   'common', 'config', 'security', 'pm', 'orm', 'auth',
   'validation', 'core', 'testing', 'events', 'websocket',
-  'queue', 'circuit', 'observability', 'ai', 'cloud', 'memory', 'cli'
+  'queue', 'circuit', 'observability', 'ai', 'cloud', 'memory', 'cli', 'studio'
 ]
 
 const PACKAGES_DIR = path.join(__dirname, '..', 'packages')
