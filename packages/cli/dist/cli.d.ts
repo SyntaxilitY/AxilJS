@@ -9,7 +9,7 @@
  *   axil build            Build for production
  *   axil test             Run tests
  *   axil deploy           Generate Docker + K8s files
- *   axil install           Install packages
+ *   axil install          Install packages
  *   axil doctor           Diagnose project
  */
 export {};

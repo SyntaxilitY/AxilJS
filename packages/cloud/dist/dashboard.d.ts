@@ -1,9 +1,5 @@
-/**
- * Monitoring Dashboard.
- * Simple HTML dashboard showing live metrics, logs, and health.
- * Served at /dashboard.
- */
 import { RouteHandler } from '@axiljs/common';
-import { MetricsRegistry } from '@axiljs/observability';
-export declare function createDashboard(registry: MetricsRegistry): RouteHandler;
+import type { DashboardOptions } from './types';
+export type { DashboardOptions };
+export declare function createDashboard(options?: DashboardOptions): RouteHandler;
 //# sourceMappingURL=dashboard.d.ts.map

@@ -1,41 +1,25 @@
 /**
  * Feature Flags System.
- * Runtime feature toggles with tenant/user scoping.
  *
- * Supports:
- *   - Global flags
- *   - Tenant-specific overrides
- *   - User-specific overrides
- *   - Percentage rollouts
- *   - Scheduled activation
+ * Runtime feature toggles with deterministic, identity-based rollout.
  */
-export interface FeatureFlag {
-    name: string;
-    enabled: boolean;
-    description?: string;
-    rolloutPercentage?: number;
-    allowedTenants?: string[];
-    allowedUsers?: (string | number)[];
-    expiresAt?: string;
-}
+import type { FeatureFlag, FeatureFlagContext } from './types';
+export type { FeatureFlag, FeatureFlagContext };
 export declare class FeatureFlagManager {
     private flags;
     /**
-     * Define or update a feature flag.
+     * Create or update a feature flag.
      */
-    define(flag: FeatureFlag): void;
+    define(flag: Omit<FeatureFlag, 'rolloutPercentage'> & {
+        rolloutPercentage?: number;
+    }): void;
     /**
-     * Check if a feature is enabled for this context.
+     * Evaluate whether a flag is active for the given context.
      */
-    isEnabled(name: string, context?: {
-        tenantId?: string;
-        userId?: string | number;
-        percentage?: number;
-    }): boolean;
-    /**
-     * Get all flags (for admin UI).
-     */
+    isEnabled(name: string, context?: FeatureFlagContext): boolean;
+    get(name: string): FeatureFlag | undefined;
     getAll(): FeatureFlag[];
+    remove(name: string): boolean;
 }
 export declare const featureFlags: FeatureFlagManager;
 //# sourceMappingURL=feature-flags.d.ts.map

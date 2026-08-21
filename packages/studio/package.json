@@ -1,7 +1,7 @@
 {
   "name": "@axiljs/studio",
-  "version": "0.2.3",
-  "description": "AxilJS CLI — axil create, run, build, test, deploy, doctor",
+  "version": "0.2.8",
+  "description": "Browser-based dev studio that opens automatically when axil run is used",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -13,14 +13,16 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.2.3"
+    "@axiljs/common": "^0.2.8",
+    "qrcode": "^1.5.4"
   },
   "optionalDependencies": {
-    "@axiljs/studio": "^0.2.3"
+    "@axiljs/studio": "^0.2.8"
   },
   "devDependencies": {
-    "@axiljs/studio": "^0.2.3",
+    "@axiljs/studio": "^0.2.8",
     "@types/node": "^26.2.0",
+    "@types/qrcode": "^1.5.6",
     "typescript": "^7.0.2"
   },
   "publishConfig": {
@@ -28,7 +30,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
   },
   "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
   "bugs": {

@@ -1,25 +1,21 @@
 /**
- * AxilJS Response — wraps Node.js ServerResponse.
+ * AxilJS Response
  *
- * Includes SyntaxilitY API Response Manager built-in.
- * Every response method automatically formats as:
+ * Wraps Node.js ServerResponse and provides:
  *
- *   {
- *     "status": 200,
- *     "code": "HTTP_200_OK",
- *     "message": "...",
- *     "data": { ... }
- *   }
+ * 1. Core HTTP response methods
+ * 2. AxilJS convenience response methods
+ * 3. SyntaxilitY API Response Manager compatible methods
+ * 4. Pagination helpers
  *
- * Developer just calls:
- *   res.success(data, 'message')
- *   res.created(data)
- *   res.paginated(items, total, page, limit)
- *   res.notFound('User not found')
- *   res.unauthorized()
- *   res.forbidden()
+ * Standard response format:
  *
- * No import needed. No configuration. Built into the framework.
+ * {
+ *   status: 200,
+ *   code: "HTTP_200_OK",
+ *   message: "Request successful",
+ *   data: {}
+ * }
  */
 import { ServerResponse } from 'http';
 import { axilResponse } from '@axiljs/common';
@@ -36,79 +32,45 @@ export declare class Response implements axilResponse {
     send(data: Buffer | string): void;
     redirect(url: string, code?: number): void;
     /**
-     * Internal method — sends a standardized JSON response.
-     * All SyntaxilitY response methods use this internally.
+     * Internal response formatter.
+     *
+     * All standardized response methods use this method.
      */
     private sendResponse;
     /**
      * 200 OK
      *
      * res.success(users, 'Users fetched')
-     *
-     * → { status: 200, code: "HTTP_200_OK", message: "Users fetched", data: [...] }
      */
-    success(data: unknown, message?: string): void;
+    success(data?: unknown, message?: string): void;
     /**
      * 201 Created
      *
-     * res.created(newUser, 'User created')
-     *
-     * → { status: 201, code: "HTTP_201_CREATED", message: "User created", data: {...} }
+     * res.created(user, 'User created')
      */
-    created(data: unknown, message?: string): void;
+    created(data?: unknown, message?: string): void;
     /**
      * 204 No Content
-     *
-     * res.noContent()
-     *
-     * → { status: 204, code: "HTTP_204_NO_CONTENT", message: "No content", data: {} }
      */
     noContent(message?: string): void;
     /**
-     * 200 OK with pagination — uses SyntaxilitY PaginationHelper format.
-     *
-     * res.paginated(users, 42, 1, 10, 'Users fetched')
-     *
-     * → {
-     *     status: 200,
-     *     code: "HTTP_200_OK",
-     *     message: "Users fetched",
-     *     data: {
-     *       metadata: [...],
-     *       pagination: {
-     *         total: 42,
-     *         page: 1,
-     *         limit: 10,
-     *         totalPages: 5,
-     *         hasNextPage: true,
-     *         hasPrevPage: false
-     *       }
-     *     }
-     *   }
+     * Paginated response.
      */
     paginated(data: unknown[], total: number, page: number, limit: number, message?: string): void;
     /**
      * 400 Bad Request
-     *
-     * res.badRequest('Invalid input')
      */
     badRequest(message?: string, data?: unknown): void;
     /**
      * 401 Unauthorized
-     *
-     * res.unauthorized('Invalid token')
      */
     unauthorized(message?: string, data?: unknown): void;
     /**
      * 403 Forbidden
-     *
-     * res.forbidden('Admin access required')
      */
     forbidden(message?: string, data?: unknown): void;
     /**
      * 404 Not Found
-     *
-     * res.notFound('User not found')
      */
     notFound(message?: string, data?: unknown): void;
     /**
@@ -121,8 +83,6 @@ export declare class Response implements axilResponse {
     notAcceptable(message?: string, data?: unknown): void;
     /**
      * 409 Conflict
-     *
-     * res.conflict('Email already exists')
      */
     conflict(message?: string, data?: unknown): void;
     /**
@@ -130,36 +90,123 @@ export declare class Response implements axilResponse {
      */
     unsupportedMediaType(message?: string, data?: unknown): void;
     /**
-     * 422 Unprocessable Entity — Validation errors
-     *
-     * res.validationError('Validation failed')
+     * 422 Unprocessable Entity
      */
     validationError(message?: string, data?: unknown): void;
     /**
      * 429 Too Many Requests
-     *
-     * res.tooManyRequests('Rate limit exceeded')
      */
     tooManyRequests(message?: string, data?: unknown): void;
     /**
      * 500 Internal Server Error
-     *
-     * res.serverError('Database connection failed')
      */
     serverError(message?: string, data?: unknown): void;
     /**
      * 503 Service Unavailable
-     *
-     * res.serviceUnavailable('Service down for maintenance')
      */
     serviceUnavailable(message?: string, data?: unknown): void;
     /**
+     * HTTP 200 OK
+     *
+     * SyntaxilitY compatible:
+     *
+     * res.HTTP_200_OK(data, message)
+     */
+    HTTP_200_OK(data?: unknown, message?: string): void;
+    /**
+     * HTTP 201 Created
+     *
+     * res.HTTP_201_CREATED(data, message)
+     */
+    HTTP_201_CREATED(data?: unknown, message?: string): void;
+    /**
+     * HTTP 400 Bad Request
+     *
+     * res.HTTP_400_BAD_REQUEST(message, data)
+     */
+    HTTP_400_BAD_REQUEST(message?: string, data?: unknown): void;
+    /**
+     * HTTP 401 Unauthorized
+     *
+     * res.HTTP_401_UNAUTHORIZED(message, data)
+     */
+    HTTP_401_UNAUTHORIZED(message?: string, data?: unknown): void;
+    /**
+     * HTTP 403 Forbidden
+     *
+     * res.HTTP_403_FORBIDDEN(message, data)
+     */
+    HTTP_403_FORBIDDEN(message?: string, data?: unknown): void;
+    /**
+     * HTTP 404 Not Found
+     *
+     * res.HTTP_404_NOT_FOUND(message, data)
+     */
+    HTTP_404_NOT_FOUND(message?: string, data?: unknown): void;
+    /**
+     * HTTP 409 Conflict
+     *
+     * res.HTTP_409_CONFLICT(message, data)
+     */
+    HTTP_409_CONFLICT(message?: string, data?: unknown): void;
+    /**
+     * HTTP 500 Internal Server Error
+     *
+     * res.HTTP_500_INTERNAL_SERVER_ERROR(message, data)
+     */
+    HTTP_500_INTERNAL_SERVER_ERROR(message?: string, data?: unknown): void;
+    /**
+     * HTTP 503 Service Unavailable
+     *
+     * res.HTTP_503_SERVICE_UNAVAILABLE(message, data)
+     */
+    HTTP_503_SERVICE_UNAVAILABLE(message?: string, data?: unknown): void;
+    /**
+     * HTTP 204 No Content
+     *
+     * res.HTTP_204_NO_CONTENT(message, data)
+     */
+    HTTP_204_NO_CONTENT(message?: string, data?: unknown): void;
+    /**
+     * HTTP 405 Method Not Allowed
+     *
+     * res.HTTP_405_METHOD_NOT_ALLOWED(message, data)
+     */
+    HTTP_405_METHOD_NOT_ALLOWED(message?: string, data?: unknown): void;
+    /**
+     * HTTP 406 Not Acceptable
+     *
+     * res.HTTP_406_NOT_ACCEPTABLE(message, data)
+     */
+    HTTP_406_NOT_ACCEPTABLE(message?: string, data?: unknown): void;
+    /**
+     * HTTP 415 Unsupported Media Type
+     *
+     * res.HTTP_415_UNSUPPORTED_MEDIA_TYPE(message, data)
+     */
+    HTTP_415_UNSUPPORTED_MEDIA_TYPE(message?: string, data?: unknown): void;
+    /**
+     * HTTP 429 Too Many Requests
+     *
+     * res.HTTP_429_TOO_MANY_REQUESTS(message, data)
+     */
+    HTTP_429_TOO_MANY_REQUESTS(message?: string, data?: unknown): void;
+    /**
+     * HTTP 422 Unprocessable Entity
+     *
+     * res.HTTP_422_UNPROCESSABLE_ENTITY(message, data)
+     */
+    HTTP_422_UNPROCESSABLE_ENTITY(message?: string, data?: unknown): void;
+    /**
      * Extract pagination params from request query string.
      *
-     * const { page, limit, skip } = Response.getPaginationParams(req)
+     * ?page=2&limit=20
      *
-     * ?page=2&limit=20 → { page: 2, limit: 20, skip: 20 }
-     * no params        → { page: 1, limit: 100, skip: 0 }
+     * {
+     *   page: 2,
+     *   limit: 20,
+     *   skip: 20
+     * }
      */
     static getPaginationParams(req: {
         query: Record<string, string | string[] | undefined>;

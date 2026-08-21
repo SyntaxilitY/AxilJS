@@ -1,45 +1,26 @@
 /**
  * Multi-Tenancy Middleware.
- * Isolates data and configuration per tenant.
- * Supports header, subdomain, or JWT-based tenant resolution.
  *
- * Usage:
- *   app.use(multiTenancy({ strategy: 'header' }))
- *   // req.locals.tenant = { id: 'acme-corp', name: 'Acme Corp' }
+ * Resolves the current tenant from the incoming request via header,
+ * subdomain, JWT claim, or a caller-supplied custom function.
+ *
+ * Guarantees:
+ *   • Tenant ID is validated before any downstream lookup.
+ *   • Suspended / archived tenants are rejected with 403.
+ *   • Tenant context is attached to `req.locals.tenant`.
+ *   • Works safely in multi-instance deployments (no process state).
  */
 import { MiddlewareFn } from '@axiljs/common';
-export type TenantResolutionStrategy = 'header' | 'subdomain' | 'jwt';
-export interface Tenant {
-    id: string;
-    name: string;
-    plan?: 'free' | 'pro' | 'enterprise';
-    [key: string]: unknown;
-}
-export interface MultiTenancyOptions {
-    strategy?: TenantResolutionStrategy;
-    headerName?: string;
-    resolveTenant?: (tenantId: string) => Promise<Tenant | null>;
-    required?: boolean;
-}
-/**
- * Create multi-tenancy middleware.
- *
- * Usage:
- *   app.use(multiTenancy({ strategy: 'header' }))
- *   app.use(multiTenancy({ strategy: 'subdomain' }))
- *   app.use(multiTenancy({
- *     strategy: 'header',
- *     resolveTenant: async (id) => await db.findTenant(id)
- *   }))
- */
+import type { Tenant, TenantContext, MultiTenancyOptions, TenantResolutionStrategy } from './types';
+export type { Tenant, TenantContext, MultiTenancyOptions, TenantResolutionStrategy };
 export declare function multiTenancy(options?: MultiTenancyOptions): MiddlewareFn;
 /**
- * Get current tenant from request locals.
- * Throws UnauthorizedError if no tenant is present.
- *
- * Usage:
- *   const tenant = getTenant(req)
- *   console.log(tenant.id)
+ * Retrieve the full `Tenant` from request locals.
+ * Throws if multi-tenancy middleware has not run.
  */
 export declare function getTenant(req: any): Tenant;
+/**
+ * Shorthand: retrieve only the tenant ID string.
+ */
+export declare function getTenantId(req: any): string;
 //# sourceMappingURL=multi-tenancy.d.ts.map

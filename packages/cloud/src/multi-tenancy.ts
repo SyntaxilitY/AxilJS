@@ -1,137 +1,164 @@
 /**
  * Multi-Tenancy Middleware.
- * Isolates data and configuration per tenant.
- * Supports header, subdomain, or JWT-based tenant resolution.
  *
- * Usage:
- *   app.use(multiTenancy({ strategy: 'header' }))
- *   // req.locals.tenant = { id: 'acme-corp', name: 'Acme Corp' }
+ * Resolves the current tenant from the incoming request via header,
+ * subdomain, JWT claim, or a caller-supplied custom function.
+ *
+ * Guarantees:
+ *   • Tenant ID is validated before any downstream lookup.
+ *   • Suspended / archived tenants are rejected with 403.
+ *   • Tenant context is attached to `req.locals.tenant`.
+ *   • Works safely in multi-instance deployments (no process state).
  */
 
 import { MiddlewareFn, UnauthorizedError } from '@axiljs/common';
+import type {
+  Tenant,
+  TenantContext,
+  MultiTenancyOptions,
+  TenantResolutionStrategy,
+} from './types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// Re-export for convenience
+export type { Tenant, TenantContext, MultiTenancyOptions, TenantResolutionStrategy };
 
-export type TenantResolutionStrategy = 'header' | 'subdomain' | 'jwt';
-
-export interface Tenant {
-  id:    string;
-  name:  string;
-  plan?: 'free' | 'pro' | 'enterprise';
-  [key: string]: unknown;
-}
-
-export interface MultiTenancyOptions {
-  // Strategy to determine tenant (default: 'header')
-  strategy?: TenantResolutionStrategy;
-
-  // Header name when using 'header' strategy (default: 'x-tenant-id')
-  headerName?: string;
-
-  // Resolve tenant from ID — database lookup, cache, etc.
-  // Default: returns a simple object with the ID
-  resolveTenant?: (tenantId: string) => Promise<Tenant | null>;
-
-  // Whether a tenant is required (default: true)
-  required?: boolean;
-}
-
-// ─── multiTenancy ─────────────────────────────────────────────────────────────
+// ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
- * Create multi-tenancy middleware.
+ * Default tenant-ID validator.
+ * Allows 2–64 chars: lowercase alphanumerics and hyphens,
+ * must start and end with an alphanumeric.
  *
- * Usage:
- *   app.use(multiTenancy({ strategy: 'header' }))
- *   app.use(multiTenancy({ strategy: 'subdomain' }))
- *   app.use(multiTenancy({
- *     strategy: 'header',
- *     resolveTenant: async (id) => await db.findTenant(id)
- *   }))
+ * Override via `options.validateTenantId` for UUIDs or other formats.
  */
+const DEFAULT_TENANT_ID_RE = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/;
+
+function defaultValidate(id: string): boolean {
+  return DEFAULT_TENANT_ID_RE.test(id);
+}
+
+// ─── Middleware ───────────────────────────────────────────────────────────────
+
 export function multiTenancy(options: MultiTenancyOptions = {}): MiddlewareFn {
   const {
     strategy       = 'header',
     headerName     = 'x-tenant-id',
-    resolveTenant  = async (id: string) => ({ id, name: `Tenant ${id}` }),
-    required       = true
+    resolveTenant  = async (id: string): Promise<Tenant> => ({
+      id,
+      name: `Tenant ${id}`,
+      status: 'active',
+    }),
+    validateTenantId = defaultValidate,
+    required       = true,
+    customResolver,
   } = options;
 
-  return async (req, res, next) => {
-    let tenantId: string | null = null;
+  return async (req: any, res: any, next: (err?: Error) => void) => {
+    try {
+      // ── 1. Extract raw tenant ID ────────────────────────────────────
+      let tenantId: string | null = null;
 
-    switch (strategy) {
+      switch (strategy) {
+        case 'header':
+          tenantId = (req.headers[headerName.toLowerCase()] as string) ?? null;
+          break;
 
-      case 'header':
-        // Read tenant ID from a request header
-        tenantId = (req.headers[headerName] as string) || null;
-        break;
+        case 'subdomain': {
+          const host = (req.headers['host'] as string) ?? '';
+          const segments = host.split('.');
+          // Require at least "tenant.example.com" (3 segments) to avoid
+          // treating "localhost" or "example.com" as a tenant.
+          tenantId = segments.length >= 3 ? segments[0] : null;
+          break;
+        }
 
-      case 'subdomain': {
-        // Extract first subdomain segment from Host header
-        const host = req.headers['host'] as string || '';
-        const parts = host.split('.');
-        // Only treat it as a subdomain if host has at least 2 segments
-        tenantId = parts.length >= 2 ? (parts[0] || null) : null;
-        break;
+        case 'jwt':
+          tenantId = req.locals?.user?.tenantId ?? null;
+          break;
+
+        case 'custom':
+          if (!customResolver) {
+            return next(new Error('customResolver is required when strategy is "custom"'));
+          }
+          tenantId = await customResolver(req);
+          break;
       }
 
-      case 'jwt':
-        // Extract tenantId from JWT payload (already decoded by authenticate())
-        tenantId = (req.locals as any)?.user?.tenantId || null;
-        break;
-    }
+      // ── 2. Handle missing tenant ────────────────────────────────────
+      if (!tenantId) {
+        if (required) {
+          return next(
+            new UnauthorizedError(
+              `Tenant identification required (strategy: ${strategy}).`
+            )
+          );
+        }
+        return next();
+      }
 
-    // No tenant identified
-    if (!tenantId) {
-      if (required) {
+      // ── 3. Validate format ──────────────────────────────────────────
+      if (!validateTenantId(tenantId)) {
         return next(
-          new UnauthorizedError(
-            `Tenant identification required. ` +
-            `Send the ${headerName} header.`
-          )
+          new UnauthorizedError(`Malformed tenant identifier: "${tenantId}".`)
         );
       }
-      return next();
-    }
 
-    // Resolve tenant object
-    try {
+      // ── 4. Resolve full tenant object ───────────────────────────────
       const tenant = await resolveTenant(tenantId);
 
-      if (!tenant && required) {
-        return next(new UnauthorizedError(`Invalid tenant: ${tenantId}`));
+      if (!tenant) {
+        if (required) {
+          return next(new UnauthorizedError(`Unknown tenant: "${tenantId}".`));
+        }
+        return next();
       }
 
-      // Attach to request locals
-      (req.locals as any).tenant = tenant || { id: tenantId, name: 'Unknown' };
+      // ── 5. Reject suspended / archived tenants ──────────────────────
+      if (tenant.status === 'suspended') {
+        return next(
+          new UnauthorizedError(`Tenant "${tenantId}" is suspended.`)
+        );
+      }
+      if (tenant.status === 'archived') {
+        return next(
+          new UnauthorizedError(`Tenant "${tenantId}" has been archived.`)
+        );
+      }
+
+      // ── 6. Attach context ───────────────────────────────────────────
+      if (!req.locals) req.locals = {};
+      (req.locals as any).tenant = tenant;
+      (req.locals as any).tenantContext = {
+        tenant,
+        resolvedBy: strategy,
+      } satisfies TenantContext;
 
       next();
-    } catch (error) {
-      next(error instanceof Error ? error : new Error(String(error)));
+    } catch (err) {
+      next(err instanceof Error ? err : new Error(String(err)));
     }
   };
 }
 
-// ─── getTenant ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Get current tenant from request locals.
- * Throws UnauthorizedError if no tenant is present.
- *
- * Usage:
- *   const tenant = getTenant(req)
- *   console.log(tenant.id)
+ * Retrieve the full `Tenant` from request locals.
+ * Throws if multi-tenancy middleware has not run.
  */
 export function getTenant(req: any): Tenant {
-  const tenant = (req.locals as any)?.tenant as Tenant | undefined;
-
+  const tenant = req.locals?.tenant as Tenant | undefined;
   if (!tenant) {
     throw new UnauthorizedError(
-      'No tenant context. ' +
-      'Make sure multiTenancy() middleware is applied.'
+      'No tenant context — ensure multiTenancy() middleware is applied.'
     );
   }
-
   return tenant;
+}
+
+/**
+ * Shorthand: retrieve only the tenant ID string.
+ */
+export function getTenantId(req: any): string {
+  return getTenant(req).id;
 }

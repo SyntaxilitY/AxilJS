@@ -9,30 +9,123 @@
  *   axil build            Build for production
  *   axil test             Run tests
  *   axil deploy           Generate Docker + K8s files
- *   axil install           Install packages
+ *   axil install          Install packages
  *   axil doctor           Diagnose project
  */
 
-import { createProject }    from './commands/create'
-import { runDev }           from './commands/run'
-import { buildProject }     from './commands/build'
-import { installPackages }  from './commands/install'
-import { runDoctor }        from './commands/doctor'
-import { runTests }         from './commands/test'
-import { deploy }           from './commands/deploy'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-const args    = process.argv.slice(2)
+import { createProject }   from './commands/create'
+import { runDev }          from './commands/run'
+import { buildProject }    from './commands/build'
+import { installPackages } from './commands/install'
+import { runDoctor }       from './commands/doctor'
+import { runTests }        from './commands/test'
+import { deploy }          from './commands/deploy'
+
+// ============================================================================
+// CLI PACKAGE METADATA
+// ============================================================================
+
+interface PackageMetadata {
+  name?: string
+  version?: string
+  description?: string
+  author?: string | {
+    name?: string
+    email?: string
+    url?: string
+  }
+  homepage?: string
+  repository?: string | {
+    type?: string
+    url?: string
+  }
+}
+
+/**
+ * Dynamically load metadata from the CLI package.json.
+ *
+ * Runtime structure:
+ *
+ * packages/cli/
+ * ├── package.json
+ * └── dist/
+ *     └── cli.js
+ *
+ * This avoids hardcoding the CLI version.
+ */
+function loadPackageMetadata(): PackageMetadata {
+  try {
+    const packageJsonPath = join(
+      __dirname,
+      '..',
+      'package.json'
+    )
+
+    const packageJson = readFileSync(
+      packageJsonPath,
+      'utf-8'
+    )
+
+    return JSON.parse(packageJson) as PackageMetadata
+  } catch {
+    return {
+      name: '@axiljs/cli',
+      version: 'unknown',
+      description: 'AxilJS CLI',
+      author: 'SyntaxilitY'
+    }
+  }
+}
+
+const packageMetadata = loadPackageMetadata()
+
+const CLI_NAME =
+  packageMetadata.name || '@axiljs/cli'
+
+const CLI_VERSION =
+  packageMetadata.version || 'unknown'
+
+const CLI_DESCRIPTION =
+  packageMetadata.description ||
+  'The JavaScript Backend That Finally Rests.'
+
+const CLI_AUTHOR =
+  typeof packageMetadata.author === 'string'
+    ? packageMetadata.author
+    : packageMetadata.author?.name ||
+      'SyntaxilitY'
+
+// ============================================================================
+// CLI ARGUMENTS
+// ============================================================================
+
+const args = process.argv.slice(2)
 const command = args[0]
+
+// ============================================================================
+// MAIN
+// ============================================================================
 
 async function main(): Promise<void> {
   switch (command) {
     case 'create': {
       const name = args[1]
+
       if (!name) {
-        console.error('\x1b[31mError:\x1b[0m Please provide a project name.')
-        console.error('  Usage: axil create <project-name>')
+        console.error(
+          '\x1b[31mError:\x1b[0m Please provide a project name.'
+        )
+
+        console.error(
+          '  Usage: axil create <project-name>'
+        )
+
         process.exit(1)
       }
+
       await createProject(name)
       break
     }
@@ -49,14 +142,29 @@ async function main(): Promise<void> {
 
     case 'install':
     case 'i': {
-      const isDev    = args.includes('-D') || args.includes('--dev')
-      const packages = args.slice(1).filter(a => a !== '-D' && a !== '--dev')
-      await installPackages(packages, isDev)
+      const isDev =
+        args.includes('-D') ||
+        args.includes('--dev')
+
+      const packages = args
+        .slice(1)
+        .filter(
+          argument =>
+            argument !== '-D' &&
+            argument !== '--dev'
+        )
+
+      await installPackages(
+        packages,
+        isDev
+      )
+
       break
     }
 
     case 'test': {
       const pattern = args[1]
+
       await runTests(pattern)
       break
     }
@@ -71,11 +179,22 @@ async function main(): Promise<void> {
       break
     }
 
+    // ========================================================================
+    // VERSION
+    // ========================================================================
+
     case '--version':
     case '-v': {
-      console.log('AxilJS v0.1.0')
+      console.log(
+        `${CLI_NAME} v${CLI_VERSION}`
+      )
+
       break
     }
+
+    // ========================================================================
+    // HELP
+    // ========================================================================
 
     case '--help':
     case '-h':
@@ -84,18 +203,32 @@ async function main(): Promise<void> {
       break
     }
 
+    // ========================================================================
+    // UNKNOWN COMMAND
+    // ========================================================================
+
     default: {
-      console.error(`\x1b[31mError:\x1b[0m Unknown command '${command}'`)
-      console.error('Run \x1b[1maxil --help\x1b[0m for available commands.')
+      console.error(
+        `\x1b[31mError:\x1b[0m Unknown command '${command}'`
+      )
+
+      console.error(
+        'Run \x1b[1maxil --help\x1b[0m for available commands.'
+      )
+
       process.exit(1)
     }
   }
 }
 
+// ============================================================================
+// HELP
+// ============================================================================
+
 function printHelp(): void {
   console.log(`
-\x1b[36m\x1b[1mAxilJS\x1b[0m v0.1.0 — Developed by SyntaxilitY
-The JavaScript Backend That Finally Rests.
+\x1b[36m\x1b[1mAxilJS\x1b[0m v${CLI_VERSION} — Developed by ${CLI_AUTHOR}
+${CLI_DESCRIPTION}
 
 \x1b[1mUsage:\x1b[0m
   axil <command> [options]
@@ -125,7 +258,20 @@ The JavaScript Backend That Finally Rests.
 `)
 }
 
+// ============================================================================
+// ERROR HANDLING
+// ============================================================================
+
 main().catch(error => {
-  console.error('\x1b[31m[AxilJS]\x1b[0m Fatal error:', error.message)
+  const message =
+    error instanceof Error
+      ? error.message
+      : String(error)
+
+  console.error(
+    '\x1b[31m[AxilJS]\x1b[0m Fatal error:',
+    message
+  )
+
   process.exit(1)
 })

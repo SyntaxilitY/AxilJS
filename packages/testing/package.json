@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/testing",
-  "version": "0.2.3",
+  "version": "0.2.8",
   "description": "AxilJS test runner, assertions, and HTTP test client",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,8 +9,8 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.2.3",
-    "@axiljs/core": "^0.2.3"
+    "@axiljs/common": "^0.2.8",
+    "@axiljs/core": "^0.2.8"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
   },
   "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
   "bugs": {

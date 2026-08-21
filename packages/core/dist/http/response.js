@@ -1,26 +1,22 @@
 "use strict";
 /**
- * AxilJS Response — wraps Node.js ServerResponse.
+ * AxilJS Response
  *
- * Includes SyntaxilitY API Response Manager built-in.
- * Every response method automatically formats as:
+ * Wraps Node.js ServerResponse and provides:
  *
- *   {
- *     "status": 200,
- *     "code": "HTTP_200_OK",
- *     "message": "...",
- *     "data": { ... }
- *   }
+ * 1. Core HTTP response methods
+ * 2. AxilJS convenience response methods
+ * 3. SyntaxilitY API Response Manager compatible methods
+ * 4. Pagination helpers
  *
- * Developer just calls:
- *   res.success(data, 'message')
- *   res.created(data)
- *   res.paginated(items, total, page, limit)
- *   res.notFound('User not found')
- *   res.unauthorized()
- *   res.forbidden()
+ * Standard response format:
  *
- * No import needed. No configuration. Built into the framework.
+ * {
+ *   status: 200,
+ *   code: "HTTP_200_OK",
+ *   message: "Request successful",
+ *   data: {}
+ * }
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Response = void 0;
@@ -33,9 +29,9 @@ class Response {
         this.statusCode = 200;
         this.sent = false;
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // CORE METHODS — unchanged from original
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ============================================================================
+    // CORE HTTP METHODS
+    // ============================================================================
     status(code) {
         this.statusCode = code;
         this.raw.statusCode = code;
@@ -73,7 +69,9 @@ class Response {
     send(data) {
         if (this.sent)
             return;
-        const buffer = typeof data === 'string' ? Buffer.from(data) : data;
+        const buffer = typeof data === 'string'
+            ? Buffer.from(data)
+            : data;
         this.raw.setHeader('Content-Length', buffer.length);
         this.raw.end(buffer);
         this.sent = true;
@@ -81,16 +79,19 @@ class Response {
     redirect(url, code = 302) {
         if (this.sent)
             return;
-        this.raw.writeHead(code, { Location: url });
+        this.raw.writeHead(code, {
+            Location: url
+        });
         this.raw.end();
         this.sent = true;
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SYNTAXILITY API RESPONSE MANAGER — built into the framework
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ============================================================================
+    // INTERNAL STANDARD RESPONSE HANDLER
+    // ============================================================================
     /**
-     * Internal method — sends a standardized JSON response.
-     * All SyntaxilitY response methods use this internally.
+     * Internal response formatter.
+     *
+     * All standardized response methods use this method.
      */
     sendResponse(statusCode, code, message, data = {}) {
         if (this.sent)
@@ -108,58 +109,33 @@ class Response {
         this.raw.end(body);
         this.sent = true;
     }
-    // ── Success Responses ───────────────────────────────────────────────────────
+    // ============================================================================
+    // AXILJS CONVENIENCE METHODS
+    // ============================================================================
     /**
      * 200 OK
      *
      * res.success(users, 'Users fetched')
-     *
-     * → { status: 200, code: "HTTP_200_OK", message: "Users fetched", data: [...] }
      */
-    success(data, message = 'Request successful') {
+    success(data = {}, message = 'Request successful') {
         this.sendResponse(200, 'HTTP_200_OK', message, data);
     }
     /**
      * 201 Created
      *
-     * res.created(newUser, 'User created')
-     *
-     * → { status: 201, code: "HTTP_201_CREATED", message: "User created", data: {...} }
+     * res.created(user, 'User created')
      */
-    created(data, message = 'Resource created successfully') {
+    created(data = {}, message = 'Resource created successfully') {
         this.sendResponse(201, 'HTTP_201_CREATED', message, data);
     }
     /**
      * 204 No Content
-     *
-     * res.noContent()
-     *
-     * → { status: 204, code: "HTTP_204_NO_CONTENT", message: "No content", data: {} }
      */
     noContent(message = 'No content') {
         this.sendResponse(204, 'HTTP_204_NO_CONTENT', message);
     }
     /**
-     * 200 OK with pagination — uses SyntaxilitY PaginationHelper format.
-     *
-     * res.paginated(users, 42, 1, 10, 'Users fetched')
-     *
-     * → {
-     *     status: 200,
-     *     code: "HTTP_200_OK",
-     *     message: "Users fetched",
-     *     data: {
-     *       metadata: [...],
-     *       pagination: {
-     *         total: 42,
-     *         page: 1,
-     *         limit: 10,
-     *         totalPages: 5,
-     *         hasNextPage: true,
-     *         hasPrevPage: false
-     *       }
-     *     }
-     *   }
+     * Paginated response.
      */
     paginated(data, total, page, limit, message = 'Request successful') {
         const paginatedData = {
@@ -175,35 +151,26 @@ class Response {
         };
         this.sendResponse(200, 'HTTP_200_OK', message, paginatedData);
     }
-    // ── Error Responses ─────────────────────────────────────────────────────────
     /**
      * 400 Bad Request
-     *
-     * res.badRequest('Invalid input')
      */
     badRequest(message = 'Bad request', data = {}) {
         this.sendResponse(400, 'HTTP_400_BAD_REQUEST', message, data);
     }
     /**
      * 401 Unauthorized
-     *
-     * res.unauthorized('Invalid token')
      */
     unauthorized(message = 'Unauthorized access', data = {}) {
         this.sendResponse(401, 'HTTP_401_UNAUTHORIZED', message, data);
     }
     /**
      * 403 Forbidden
-     *
-     * res.forbidden('Admin access required')
      */
     forbidden(message = 'Permission denied', data = {}) {
         this.sendResponse(403, 'HTTP_403_FORBIDDEN', message, data);
     }
     /**
      * 404 Not Found
-     *
-     * res.notFound('User not found')
      */
     notFound(message = 'Resource not found', data = {}) {
         this.sendResponse(404, 'HTTP_404_NOT_FOUND', message, data);
@@ -222,8 +189,6 @@ class Response {
     }
     /**
      * 409 Conflict
-     *
-     * res.conflict('Email already exists')
      */
     conflict(message = 'Resource conflict', data = {}) {
         this.sendResponse(409, 'HTTP_409_CONFLICT', message, data);
@@ -235,53 +200,177 @@ class Response {
         this.sendResponse(415, 'HTTP_415_UNSUPPORTED_MEDIA_TYPE', message, data);
     }
     /**
-     * 422 Unprocessable Entity — Validation errors
-     *
-     * res.validationError('Validation failed')
+     * 422 Unprocessable Entity
      */
     validationError(message = 'Unprocessable entity', data = {}) {
         this.sendResponse(422, 'HTTP_422_UNPROCESSABLE_ENTITY', message, data);
     }
     /**
      * 429 Too Many Requests
-     *
-     * res.tooManyRequests('Rate limit exceeded')
      */
     tooManyRequests(message = 'Too many requests', data = {}) {
         this.sendResponse(429, 'HTTP_429_TOO_MANY_REQUESTS', message, data);
     }
     /**
      * 500 Internal Server Error
-     *
-     * res.serverError('Database connection failed')
      */
     serverError(message = 'Internal server error', data = {}) {
         this.sendResponse(500, 'HTTP_500_INTERNAL_SERVER_ERROR', message, data);
     }
     /**
      * 503 Service Unavailable
-     *
-     * res.serviceUnavailable('Service down for maintenance')
      */
     serviceUnavailable(message = 'Service unavailable', data = {}) {
         this.sendResponse(503, 'HTTP_503_SERVICE_UNAVAILABLE', message, data);
     }
-    // ═══════════════════════════════════════════════════════════════════════════
-    // PAGINATION HELPER — static method for extracting page/limit from request
-    // ═══════════════════════════════════════════════════════════════════════════
+    // ============================================================================
+    // SYNTAXILITY API RESPONSE MANAGER COMPATIBILITY METHODS
+    // ============================================================================
+    /**
+     * HTTP 200 OK
+     *
+     * SyntaxilitY compatible:
+     *
+     * res.HTTP_200_OK(data, message)
+     */
+    HTTP_200_OK(data = {}, message = 'Request successful') {
+        this.sendResponse(200, 'HTTP_200_OK', message, data);
+    }
+    /**
+     * HTTP 201 Created
+     *
+     * res.HTTP_201_CREATED(data, message)
+     */
+    HTTP_201_CREATED(data = {}, message = 'Resource created successfully') {
+        this.sendResponse(201, 'HTTP_201_CREATED', message, data);
+    }
+    /**
+     * HTTP 400 Bad Request
+     *
+     * res.HTTP_400_BAD_REQUEST(message, data)
+     */
+    HTTP_400_BAD_REQUEST(message = 'Bad request', data = {}) {
+        this.sendResponse(400, 'HTTP_400_BAD_REQUEST', message, data);
+    }
+    /**
+     * HTTP 401 Unauthorized
+     *
+     * res.HTTP_401_UNAUTHORIZED(message, data)
+     */
+    HTTP_401_UNAUTHORIZED(message = 'Unauthorized access', data = {}) {
+        this.sendResponse(401, 'HTTP_401_UNAUTHORIZED', message, data);
+    }
+    /**
+     * HTTP 403 Forbidden
+     *
+     * res.HTTP_403_FORBIDDEN(message, data)
+     */
+    HTTP_403_FORBIDDEN(message = 'Permission denied', data = {}) {
+        this.sendResponse(403, 'HTTP_403_FORBIDDEN', message, data);
+    }
+    /**
+     * HTTP 404 Not Found
+     *
+     * res.HTTP_404_NOT_FOUND(message, data)
+     */
+    HTTP_404_NOT_FOUND(message = 'Resource not found', data = {}) {
+        this.sendResponse(404, 'HTTP_404_NOT_FOUND', message, data);
+    }
+    /**
+     * HTTP 409 Conflict
+     *
+     * res.HTTP_409_CONFLICT(message, data)
+     */
+    HTTP_409_CONFLICT(message = 'Resource conflict', data = {}) {
+        this.sendResponse(409, 'HTTP_409_CONFLICT', message, data);
+    }
+    /**
+     * HTTP 500 Internal Server Error
+     *
+     * res.HTTP_500_INTERNAL_SERVER_ERROR(message, data)
+     */
+    HTTP_500_INTERNAL_SERVER_ERROR(message = 'Internal server error', data = {}) {
+        this.sendResponse(500, 'HTTP_500_INTERNAL_SERVER_ERROR', message, data);
+    }
+    /**
+     * HTTP 503 Service Unavailable
+     *
+     * res.HTTP_503_SERVICE_UNAVAILABLE(message, data)
+     */
+    HTTP_503_SERVICE_UNAVAILABLE(message = 'Service unavailable', data = {}) {
+        this.sendResponse(503, 'HTTP_503_SERVICE_UNAVAILABLE', message, data);
+    }
+    /**
+     * HTTP 204 No Content
+     *
+     * res.HTTP_204_NO_CONTENT(message, data)
+     */
+    HTTP_204_NO_CONTENT(message = 'No content', data = {}) {
+        this.sendResponse(204, 'HTTP_204_NO_CONTENT', message, data);
+    }
+    /**
+     * HTTP 405 Method Not Allowed
+     *
+     * res.HTTP_405_METHOD_NOT_ALLOWED(message, data)
+     */
+    HTTP_405_METHOD_NOT_ALLOWED(message = 'Method not allowed', data = {}) {
+        this.sendResponse(405, 'HTTP_405_METHOD_NOT_ALLOWED', message, data);
+    }
+    /**
+     * HTTP 406 Not Acceptable
+     *
+     * res.HTTP_406_NOT_ACCEPTABLE(message, data)
+     */
+    HTTP_406_NOT_ACCEPTABLE(message = 'Not acceptable', data = {}) {
+        this.sendResponse(406, 'HTTP_406_NOT_ACCEPTABLE', message, data);
+    }
+    /**
+     * HTTP 415 Unsupported Media Type
+     *
+     * res.HTTP_415_UNSUPPORTED_MEDIA_TYPE(message, data)
+     */
+    HTTP_415_UNSUPPORTED_MEDIA_TYPE(message = 'Unsupported media type', data = {}) {
+        this.sendResponse(415, 'HTTP_415_UNSUPPORTED_MEDIA_TYPE', message, data);
+    }
+    /**
+     * HTTP 429 Too Many Requests
+     *
+     * res.HTTP_429_TOO_MANY_REQUESTS(message, data)
+     */
+    HTTP_429_TOO_MANY_REQUESTS(message = 'Too many requests', data = {}) {
+        this.sendResponse(429, 'HTTP_429_TOO_MANY_REQUESTS', message, data);
+    }
+    /**
+     * HTTP 422 Unprocessable Entity
+     *
+     * res.HTTP_422_UNPROCESSABLE_ENTITY(message, data)
+     */
+    HTTP_422_UNPROCESSABLE_ENTITY(message = 'Unprocessable entity', data = {}) {
+        this.sendResponse(422, 'HTTP_422_UNPROCESSABLE_ENTITY', message, data);
+    }
+    // ============================================================================
+    // PAGINATION HELPER
+    // ============================================================================
     /**
      * Extract pagination params from request query string.
      *
-     * const { page, limit, skip } = Response.getPaginationParams(req)
+     * ?page=2&limit=20
      *
-     * ?page=2&limit=20 → { page: 2, limit: 20, skip: 20 }
-     * no params        → { page: 1, limit: 100, skip: 0 }
+     * {
+     *   page: 2,
+     *   limit: 20,
+     *   skip: 20
+     * }
      */
     static getPaginationParams(req) {
         const page = parseInt(String(req.query.page || '1'), 10) || 1;
         const limit = parseInt(String(req.query.limit || '100'), 10) || 100;
         const skip = (page - 1) * limit;
-        return { page, limit, skip };
+        return {
+            page,
+            limit,
+            skip
+        };
     }
 }
 exports.Response = Response;

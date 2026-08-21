@@ -1,4 +1,3 @@
-
 ```
  █████╗ ██╗  ██╗██╗██╗     ██╗████████╗██╗   ██╗     ██╗███████╗
 ██╔══██╗╚██╗██╔╝██║██║     ██║╚══██╔══╝╚██╗ ██╔╝     ██║██╔════╝
@@ -24,6 +23,7 @@
 [Getting Started](#-getting-started) •
 [Why AxilJS](#-why-axiljs) •
 [Packages](#-packages) •
+[ORM Studio](#-orm-studio) •
 [Architecture Examples](#-architecture-examples) •
 [CLI](#-cli) •
 [Roadmap](#-roadmap) •
@@ -46,7 +46,7 @@ Every other tool gives you one layer. AxilJS gives you everything:
 One install → HTTP server + ORM + Auth + Validation + Testing
            + Events + WebSockets + Queue + Observability
            + AI Platform + Cloud Deploy + Memory Management
-           + Built-in Response Manager
+           + Built-in Response Manager + ORM Studio
 ```
 
 No assembling 40 packages from 40 different teams.
@@ -87,7 +87,7 @@ Synt  +  axil  +  itY  +  JS
 
 ```bash
 # Install CLI globally
-npm install @axiljs/core @axiljs/config @axiljs/security @axiljs/auth @axiljs/validation @axiljs/orm @axiljs/events @axiljs/websocket @axiljs/queue @axiljs/circuit @axiljs/observability @axiljs/ai @axiljs/cloud @axiljs/memory @axiljs/common
+npm install @axiljs/core @axiljs/config @axiljs/security @axiljs/auth @axiljs/validation @axiljs/orm @axiljs/events @axiljs/websocket @axiljs/queue @axiljs/circuit @axiljs/observability @axiljs/ai @axiljs/cloud @axiljs/memory @axiljs/common @axiljs/studio
 
 npm install -D typescript @types/node ts-node
 
@@ -105,6 +105,8 @@ axil run
 ```
 
 Your API is running at `http://localhost:3000`.
+
+**ORM Studio automatically opens at `http://localhost:3001`** — no extra commands needed.
 
 That is it. No configuration files. No boilerplate.
 
@@ -144,7 +146,7 @@ my-api/
 
 ```bash
 axil create <name>        # Create a new project
-axil run                  # Start dev server with hot reload
+axil run                  # Start dev server with hot reload + Studio
 axil run src/mvc/main.ts  # Hot reload with custom entry point
 axil build                # Compile TypeScript for production
 axil test [pattern]       # Run test files
@@ -180,6 +182,9 @@ ANTHROPIC_API_KEY=
 GOOGLE_API_KEY=
 OLLAMA_MODEL=llama3.2
 OLLAMA_URL=http://localhost:11434
+
+# Studio (optional)
+STUDIO_NO_OPEN=0          # Set to 1 to disable auto-open browser
 ```
 
 ---
@@ -206,7 +211,84 @@ All packages live under the `@axiljs` scope and work together out of the box.
 | `@axiljs/cloud` | Multi-tenancy, audit logs, feature flags, deploy |
 | `@axiljs/memory` | Memory leak detection, GC, optimization |
 | `@axiljs/pm` | Package manager with lock file and checksums |
+| `@axiljs/studio` | **Browser-based developer dashboard (ORM Studio)** |
 | `@axiljs/cli` | CLI — all `axil` commands |
+
+---
+
+## ORM Studio
+
+**ORM Studio** is a browser-based developer dashboard that launches **automatically** when you run `axil run`. It provides a complete visual interface for your running AxilJS application.
+
+<Callout type="info">
+  Studio runs on `appPort + 1`. If your app is on port `3000`, Studio opens at `http://localhost:3001`.
+</Callout>
+
+### Features
+
+| Panel | Description |
+|-------|-------------|
+| **API Explorer** | Browse every HTTP route with method badges, path params, middleware tags, and built-in Try It Out panel |
+| **Database Browser** | Inspect tables, columns, types, constraints, and browse paginated row data |
+| **SQL Query Editor** | Run SELECT queries directly against your database with syntax highlighting |
+| **Realtime Monitor** | Connect to WebSocket endpoints and watch live SSE streams |
+| **Export Collections** | Download Postman, Insomnia, and OpenAPI 3.0 collections |
+| **QR Code Access** | Scan QR codes to open your app or Studio on any device on the same network |
+
+### Database Support
+
+Studio auto-detects your database from `.env` and connects independently in **read-only mode**:
+
+| Environment Variable | Database |
+|---------------------|----------|
+| `DATABASE_FILENAME=./dev.db` | SQLite (read-only) |
+| `DATABASE_URL=postgres://...` | PostgreSQL |
+| `DATABASE_URL=mysql://...` | MySQL |
+
+### Usage
+
+```bash
+axil run
+
+ AxilJS development server
+ ─────────────────────────────────────
+
+12:00:01 [axil run] Compiled project in 850ms
+12:00:01 [axil run] Starting dist/main.js
+12:00:01 [AxilJS]   Server listening on http://localhost:3000
+12:00:02 [AxilJS Studio] http://localhost:3001  ← Opens automatically
+```
+
+### Try It Out
+
+Every route in the API Explorer has a built-in **Try It Out** panel:
+
+```
+URL           http://localhost:3000/users/1
+Authorization Bearer your-token-here
+Body          { "name": "John Doe" }
+
+[ Send ]
+```
+
+After sending, you see status badges, response time, and pretty-printed JSON.
+
+### Export Collections
+
+Generate and download API collections from discovered routes:
+
+- **Postman Collection v2.1** — Import directly into Postman with folders, variables, and sample bodies
+- **Insomnia Collection** — Full workspace export with environments
+- **OpenAPI 3.0.3** — Compatible with Swagger UI, Redoc, and code generators
+
+### QR Code Access
+
+Two QR codes are generated automatically:
+
+- **App QR** — Scan to open your API on mobile devices (`http://localhost:3000`)
+- **Studio QR** — Scan to open the dashboard on tablets (`http://localhost:3001`)
+
+Requires devices to be on the same network.
 
 ---
 
@@ -788,6 +870,7 @@ axil run src/monolith/main.ts   # Watch src/monolith/ with custom entry
 01:30:00 [axil run] Initial compilation...
 01:30:02 [axil run] Compiled project in 1842ms
          ✓ Server running at http://localhost:3000
+         ✓ Studio running at http://localhost:3001
 01:30:02 [axil run] Watching src/ for changes...
 
 # Save a file →
@@ -795,6 +878,7 @@ axil run src/monolith/main.ts   # Watch src/monolith/ with custom entry
 01:31:15 [axil run] Compiled 1 file(s) in 287ms
 01:31:15 [axil run] Restarting (restart #1)
          ✓ Server running at http://localhost:3000
+         ✓ Studio running at http://localhost:3001
 ```
 
 ---
@@ -824,6 +908,7 @@ cd ../observability       && npm run build
 cd ../ai                  && npm run build
 cd ../cloud               && npm run build
 cd ../memory              && npm run build
+cd ../studio              && npm run build
 cd ../cli                 && npm run build
 ```
 
@@ -858,6 +943,7 @@ cd ../cli                 && npm run build
 | Memory Mgmt | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Cloud Deploy | ✗ | ✗ | ✗ | ✗ | ✓ |
 | Response Manager | ✗ | ✗ | ✗ | ✗ | ✓ |
+| **ORM Studio** | ✗ | ✗ | ✗ | ✗ | **✓** |
 | MVC Support | ✗ | Partial | ✓ | ✗ | ✓ |
 | Monolith Support | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Microservice Support | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -878,13 +964,23 @@ Phase 7: Memory management — leak detection, GC, optimization
 Phase 8: Built-in SyntaxilitY response manager
 Phase 9: Architecture examples — MVC, Monolith (PostgreSQL/NeonDB)
 Phase 10: Hot reload with custom entry point support
+Phase 11: Microservice example with gRPC
+Phase 12: Official AxilJS package registry
+
+Current
+────────
+Phase 13: ORM Studio — Browser-based developer dashboard ✅
+         ├── API Explorer with Try It Out
+         ├── Database Browser (SQLite, PostgreSQL, MySQL)
+         ├── SQL Query Editor (read-only)
+         ├── Realtime Monitor (WebSocket + SSE)
+         ├── Export Collections (Postman, Insomnia, OpenAPI)
+         └── QR Code Access
 
 Upcoming
 ────────
-Phase 11    Microservice example with gRPC
-Phase 12    Official AxilJS package registry
-Phase 13    AxilJS Cloud (managed hosting)
-Phase 14    AxilJS Studio (visual admin panel)
+Phase 14: AxilJS Cloud (managed hosting)
+Phase 15: AI-powered code generation from Studio
 ```
 
 ---

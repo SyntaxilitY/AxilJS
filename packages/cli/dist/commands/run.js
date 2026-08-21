@@ -1,14 +1,14 @@
 "use strict";
 /**
  * axil run
- * Development server with hot reload.
- * Watches src/ for TypeScript changes → recompiles → restarts.
+ * Development server with hot reload and automatic Studio launcher.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDev = runDev;
 const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const path_1 = require("path");
+const url_1 = require("url");
 // ── State ─────────────────────────────────────────────────────────────────────
 let serverProcess = null;
 let restartTimer = null;
@@ -41,10 +41,6 @@ function logSuccess(msg) {
     console.log(`${C.gray}${time}${C.reset} ${C.green}[axil run]${C.reset} ${msg}`);
 }
 // ── Helpers ───────────────────────────────────────────────────────────────────
-/**
- * Read a value from the project .env file.
- * Returns undefined if the file or key does not exist.
- */
 function readEnvValue(cwd, key) {
     const envPath = (0, path_1.join)(cwd, '.env');
     if (!(0, fs_1.existsSync)(envPath))
@@ -53,13 +49,103 @@ function readEnvValue(cwd, key) {
     const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
     return match ? match[1].trim() : undefined;
 }
-/**
- * Read the app port from .env PORT= or fall back to 3000.
- */
 function readAppPort(cwd) {
     const raw = readEnvValue(cwd, 'PORT');
     const n = raw ? parseInt(raw, 10) : NaN;
     return Number.isNaN(n) ? 3000 : n;
+}
+// ── Dynamic Studio Loader ─────────────────────────────────────────────────────
+async function loadStudioClass(cwd) {
+    const dynamicImport = new Function('specifier', 'return import(specifier)');
+    // 1. Try standard package name
+    try {
+        const mod = typeof require !== 'undefined'
+            ? require('@axiljs/studio')
+            : await dynamicImport('@axiljs/studio');
+        if (mod.StudioServer)
+            return mod.StudioServer;
+        if (mod.default?.StudioServer)
+            return mod.default.StudioServer;
+    }
+    catch { }
+    // 2. Try project-local node_modules
+    try {
+        const localPath = (0, path_1.join)(cwd, 'node_modules', '@axiljs', 'studio', 'dist', 'index.js');
+        if ((0, fs_1.existsSync)(localPath)) {
+            const mod = typeof require !== 'undefined'
+                ? require(localPath)
+                : await dynamicImport((0, url_1.pathToFileURL)(localPath).href);
+            if (mod.StudioServer)
+                return mod.StudioServer;
+            if (mod.default?.StudioServer)
+                return mod.default.StudioServer;
+        }
+    }
+    catch { }
+    // 3. Try monorepo sibling directory (packages/studio/dist/index.js)
+    try {
+        const currentDir = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
+        const monorepoPath = (0, path_1.resolve)(currentDir, '..', '..', '..', 'studio', 'dist', 'index.js');
+        if ((0, fs_1.existsSync)(monorepoPath)) {
+            const mod = typeof require !== 'undefined'
+                ? require(monorepoPath)
+                : await dynamicImport((0, url_1.pathToFileURL)(monorepoPath).href);
+            if (mod.StudioServer)
+                return mod.StudioServer;
+            if (mod.default?.StudioServer)
+                return mod.default.StudioServer;
+        }
+    }
+    catch { }
+    return null;
+}
+async function startStudio(cwd, appPort) {
+    try {
+        const StudioServer = await loadStudioClass(cwd);
+        if (!StudioServer) {
+            log(`${C.yellow}[Studio]${C.reset} @axiljs/studio not detected. Studio skipped.`);
+            return null;
+        }
+        const pkgPath = (0, path_1.join)(cwd, 'package.json');
+        const appName = (0, fs_1.existsSync)(pkgPath)
+            ? JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8')).name ?? 'axiljs-app'
+            : 'axiljs-app';
+        let dbDriver;
+        let dbFile;
+        let dbUrl;
+        const rawUrl = readEnvValue(cwd, 'DATABASE_URL');
+        const rawFile = readEnvValue(cwd, 'DATABASE_FILENAME');
+        if (rawUrl) {
+            dbUrl = rawUrl;
+            if (dbUrl.startsWith('postgres') || dbUrl.startsWith('postgresql')) {
+                dbDriver = 'postgres';
+            }
+            else if (dbUrl.startsWith('mysql')) {
+                dbDriver = 'mysql';
+            }
+        }
+        if (rawFile) {
+            dbDriver = 'sqlite';
+            dbFile = rawFile;
+        }
+        const studioPort = appPort + 1;
+        const studio = new StudioServer({
+            port: studioPort,
+            host: '127.0.0.1',
+            appPort,
+            appName,
+            dbDriver,
+            dbFile,
+            dbUrl,
+            enableQR: true
+        });
+        await studio.start();
+        return studio;
+    }
+    catch (err) {
+        log(`${C.yellow}[Studio error]${C.reset} ${err.message}`);
+        return null;
+    }
 }
 // ── Compiler ──────────────────────────────────────────────────────────────────
 function compile(cwd) {
@@ -95,7 +181,7 @@ function compile(cwd) {
         return false;
     }
 }
-// ── Entry point detection ─────────────────────────────────────────────────────
+// ── Entry Point Finder ────────────────────────────────────────────────────────
 function findEntryPoint(cwd) {
     const candidates = [
         (0, path_1.join)(cwd, 'dist', 'main.js'),
@@ -111,9 +197,8 @@ function findEntryPoint(cwd) {
     }
     return null;
 }
-// ── Server lifecycle ──────────────────────────────────────────────────────────
+// ── App Server Process ────────────────────────────────────────────────────────
 async function startServer(cwd) {
-    // Kill existing process if running
     if (serverProcess) {
         serverProcess.kill('SIGTERM');
         await new Promise(done => {
@@ -131,7 +216,7 @@ async function startServer(cwd) {
     }
     const entry = findEntryPoint(cwd);
     if (!entry) {
-        logError('Could not find entry point (dist/main.js, dist/server.js, dist/index.js).');
+        logError('Could not find entry point (dist/main.js).');
         return;
     }
     startCount++;
@@ -164,7 +249,7 @@ async function startServer(cwd) {
         }
     });
 }
-// ── File watcher ──────────────────────────────────────────────────────────────
+// ── Watcher ───────────────────────────────────────────────────────────────────
 function watchFiles(cwd) {
     const srcDir = (0, path_1.join)(cwd, 'src');
     if (!(0, fs_1.existsSync)(srcDir)) {
@@ -199,10 +284,10 @@ function watchFiles(cwd) {
         }, 150);
     });
 }
-// ── Project validation ────────────────────────────────────────────────────────
+// ── Validation ────────────────────────────────────────────────────────────────
 function validateProject(cwd) {
     if (!(0, fs_1.existsSync)((0, path_1.join)(cwd, 'package.json'))) {
-        logError('No package.json found. Are you inside an AxilJS project?');
+        logError('No package.json found.');
         return false;
     }
     if (!(0, fs_1.existsSync)((0, path_1.join)(cwd, 'tsconfig.json'))) {
@@ -215,88 +300,19 @@ function validateProject(cwd) {
     }
     return true;
 }
-// ── Studio ────────────────────────────────────────────────────────────────────
-async function startStudio(cwd, appPort) {
-    try {
-        // Use require() so TypeScript does not attempt to resolve
-        // @axiljs/studio at compile time. Studio is optional — if it
-        // is not installed the catch block silently skips it.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const studioModule = (() => {
-            try {
-                return require('@axiljs/studio');
-            }
-            catch {
-                return null;
-            }
-        })();
-        if (!studioModule) {
-            return null;
-        }
-        const { StudioServer } = studioModule;
-        // ── App name ───────────────────────────────────────────────────
-        const pkgPath = (0, path_1.join)(cwd, 'package.json');
-        const appName = (0, fs_1.existsSync)(pkgPath)
-            ? JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8')).name ?? 'axiljs-app'
-            : 'axiljs-app';
-        // ── Database config from .env ──────────────────────────────────
-        let dbDriver;
-        let dbFile;
-        let dbUrl;
-        const rawUrl = readEnvValue(cwd, 'DATABASE_URL');
-        const rawFile = readEnvValue(cwd, 'DATABASE_FILENAME');
-        if (rawUrl) {
-            dbUrl = rawUrl;
-            if (dbUrl.startsWith('postgres'))
-                dbDriver = 'postgres';
-            else if (dbUrl.startsWith('mysql'))
-                dbDriver = 'mysql';
-        }
-        if (rawFile) {
-            dbDriver = 'sqlite';
-            dbFile = rawFile;
-        }
-        // ── Start Studio on appPort + 1 ────────────────────────────────
-        const studioPort = appPort + 1;
-        const studio = new StudioServer({
-            port: studioPort,
-            host: '127.0.0.1',
-            appPort,
-            appName,
-            dbDriver,
-            dbFile,
-            dbUrl,
-            enableQR: true
-        });
-        await studio.start();
-        log(`Studio  ${C.bold}http://localhost:${studioPort}${C.reset} ` +
-            `${C.gray}(auto-opened in browser)${C.reset}`);
-        return studio;
-    }
-    catch (err) {
-        log(`${C.yellow}Studio unavailable:${C.reset} ${err.message}`);
-        return null;
-    }
-}
-// ── Graceful shutdown ─────────────────────────────────────────────────────────
+// ── Shutdown ──────────────────────────────────────────────────────────────────
 function setupShutdown(studio) {
-    // Guard against registering the handler multiple times
-    // (can happen if runDev is called programmatically)
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
     async function shutdown(signal) {
         console.log('');
         log(`${signal} received — shutting down...`);
-        // 1. Stop Studio
         if (studio) {
             try {
                 await studio.stop();
             }
-            catch {
-                // Best effort
-            }
+            catch { }
         }
-        // 2. Kill app server
         if (serverProcess) {
             serverProcess.kill('SIGTERM');
             await new Promise(done => {
@@ -316,7 +332,7 @@ function setupShutdown(studio) {
     process.on('SIGINT', () => { void shutdown('SIGINT'); });
     process.on('SIGTERM', () => { void shutdown('SIGTERM'); });
 }
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Main Entry ────────────────────────────────────────────────────────────────
 async function runDev() {
     const cwd = process.cwd();
     console.log('');
@@ -325,11 +341,9 @@ async function runDev() {
     console.log('');
     if (!validateProject(cwd))
         process.exit(1);
-    // Ensure dist/ exists so tsc has somewhere to write
     const distDir = (0, path_1.join)(cwd, 'dist');
     if (!(0, fs_1.existsSync)(distDir))
         (0, fs_1.mkdirSync)(distDir, { recursive: true });
-    // ── Initial compile ────────────────────────────────────────────────
     log('Initial compilation...');
     const success = compile(cwd);
     if (!success) {
@@ -338,15 +352,14 @@ async function runDev() {
         setupShutdown(null);
         return;
     }
-    // ── Read port before starting anything ────────────────────────────
     const appPort = readAppPort(cwd);
-    // ── Start app server ───────────────────────────────────────────────
+    // 1. Start App Server
     await startServer(cwd);
-    // ── Start Studio (optional, non-blocking) ─────────────────────────
+    // 2. Start Studio
     studioInstance = await startStudio(cwd, appPort);
-    // ── Watch for changes ──────────────────────────────────────────────
+    // 3. Watch for changes
     watchFiles(cwd);
-    // ── Register shutdown handlers with studio reference ───────────────
+    // 4. Register graceful shutdown
     setupShutdown(studioInstance);
 }
 //# sourceMappingURL=run.js.map

@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/pm",
-  "version": "0.2.3",
+  "version": "0.2.8",
   "description": "AxilJS package manager with lock file and checksum verification",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
   },
   "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
   "bugs": {

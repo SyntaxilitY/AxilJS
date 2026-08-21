@@ -1,36 +1,25 @@
 {
   "name": "@axiljs/cloud",
-  "version": "0.2.3",
+  "version": "0.2.8",
   "description": "AxilJS enterprise — multi-tenancy, audit logs, feature flags, deployment",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ --ext .ts",
+    "clean": "rimraf dist coverage deploy"
   },
-  "dependencies": {
-    "@axiljs/common": "^0.2.3",
-    "@axiljs/core": "^0.2.3",
-    "@axiljs/events": "^0.2.3",
-    "@axiljs/observability": "^0.2.3"
-  },
-  "devDependencies": {
-    "@types/node": "^26.2.0",
-    "typescript": "^7.0.2"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/SyntaxilitY/AxilJS.git"
-  },
-  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
-  "bugs": {
-    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
-  },
-  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
-  "license": "MIT",
   "keywords": [
     "axiljs",
     "backend",
@@ -38,6 +27,27 @@
     "typescript",
     "nodejs"
   ],
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "peerDependencies": {
+    "@axiljs/common": "^0.2.8",
+    "@axiljs/events": "^0.2.8"
+  },
+  "devDependencies": {
+    "@axiljs/common": "^0.2.8",
+    "@axiljs/events": "^0.2.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
   "files": [
     "dist",
     "README.md"

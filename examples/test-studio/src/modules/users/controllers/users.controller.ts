@@ -25,7 +25,8 @@ export class UsersController {
 
   async list(_req: Request, res: Response): Promise<void> {
     const users = await this.usersService.findAll()
-    res.success({ data: users, total: users.length }, 'Users retrieved successfully')
+    // res.success({ data: users, total: users.length }, 'Users retrieved successfully')
+    res.HTTP_200_OK(users, 'Users retrieved successfully');
   }
 
   async getById(req: Request, res: Response): Promise<void> {
