@@ -1,0 +1,40 @@
+{
+  "name": "@axiljs/decorator",
+  "version": "0.2.8",
+  "description": "Semantic decorators for AxilJS — describe behavior, not framework architecture.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "axiljs",
+    "decorator",
+    "semantic",
+    "backend",
+    "typescript",
+    "metadata"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}
