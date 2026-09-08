@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/studio",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "Browser-based dev studio that opens automatically when axil run is used",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,14 +13,14 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.2.8",
+    "@axiljs/common": "^0.3.0",
     "qrcode": "^1.5.4"
   },
   "optionalDependencies": {
-    "@axiljs/studio": "^0.2.8"
+    "@axiljs/studio": "^0.3.0"
   },
   "devDependencies": {
-    "@axiljs/studio": "^0.2.8",
+    "@axiljs/studio": "^0.3.0",
     "@types/node": "^26.2.0",
     "@types/qrcode": "^1.5.6",
     "typescript": "^7.0.2"

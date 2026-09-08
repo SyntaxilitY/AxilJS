@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/validation",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "AxilJS schema-based request validation",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,7 +9,7 @@
     "dev": "tsc --watch"
   },
   "dependencies": {
-    "@axiljs/common": "^0.2.8"
+    "@axiljs/common": "^0.3.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

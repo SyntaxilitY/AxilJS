@@ -1,6 +1,6 @@
 {
   "name": "axil-examples",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "AxilJS examples — all phases",
   "scripts": {
     "dev": "npx tsx watch src/server.ts",
@@ -11,24 +11,24 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@axiljs/ai": "^0.2.8",
-    "@axiljs/auth": "^0.2.8",
-    "@axiljs/circuit": "^0.2.8",
-    "@axiljs/cloud": "^0.2.8",
-    "@axiljs/common": "^0.2.8",
-    "@axiljs/config": "^0.2.8",
-    "@axiljs/core": "^0.2.8",
-    "@axiljs/events": "^0.2.8",
-    "@axiljs/memory": "^0.2.8",
-    "@axiljs/observability": "^0.2.8",
-    "@axiljs/orm": "^0.2.8",
-    "@axiljs/queue": "^0.2.8",
-    "@axiljs/security": "^0.2.8",
-    "@axiljs/validation": "^0.2.8",
-    "@axiljs/websocket": "^0.2.8"
+    "@axiljs/ai": "^0.3.0",
+    "@axiljs/auth": "^0.3.0",
+    "@axiljs/circuit": "^0.3.0",
+    "@axiljs/cloud": "^0.3.0",
+    "@axiljs/common": "^0.3.0",
+    "@axiljs/config": "^0.3.0",
+    "@axiljs/core": "^0.3.0",
+    "@axiljs/events": "^0.3.0",
+    "@axiljs/memory": "^0.3.0",
+    "@axiljs/observability": "^0.3.0",
+    "@axiljs/orm": "^0.3.0",
+    "@axiljs/queue": "^0.3.0",
+    "@axiljs/security": "^0.3.0",
+    "@axiljs/validation": "^0.3.0",
+    "@axiljs/websocket": "^0.3.0"
   },
   "devDependencies": {
-    "@axiljs/cli": "^0.2.8",
+    "@axiljs/cli": "^0.3.0",
     "@types/node": "^26.2.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
