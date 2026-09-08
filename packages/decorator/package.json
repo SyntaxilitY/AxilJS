@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/decorator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Semantic decorators for AxilJS — describe behavior, not framework architecture.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
