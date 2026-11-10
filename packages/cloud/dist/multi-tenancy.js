@@ -16,6 +16,25 @@ exports.multiTenancy = multiTenancy;
 exports.getTenant = getTenant;
 exports.getTenantId = getTenantId;
 const common_1 = require("@axiljs/common");
+// ─── Host helpers ────────────────────────────────────────────────────────────
+/** Strip an optional :port (handles bracketed IPv6 like "[::1]:3000"). */
+function stripPort(host) {
+    const h = host.trim();
+    if (h.startsWith('[')) {
+        const end = h.indexOf(']');
+        return end === -1 ? h : h.slice(0, end + 1);
+    }
+    const colon = h.indexOf(':');
+    // More than one colon without brackets: bare IPv6, no port
+    if (colon !== -1 && h.indexOf(':', colon + 1) === -1)
+        return h.slice(0, colon);
+    return h;
+}
+function isIpAddress(hostname) {
+    if (hostname.startsWith('[') || hostname.includes(':'))
+        return true; // IPv6
+    return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+}
 // ─── Validation ──────────────────────────────────────────────────────────────
 /**
  * Default tenant-ID validator.
@@ -44,8 +63,14 @@ function multiTenancy(options = {}) {
                     tenantId = req.headers[headerName.toLowerCase()] ?? null;
                     break;
                 case 'subdomain': {
-                    const host = req.headers['host'] ?? '';
-                    const segments = host.split('.');
+                    const hostHeader = req.headers['host'] ?? '';
+                    const hostname = stripPort(hostHeader);
+                    // IP-address hosts (e.g. 10.0.0.5, [::1]) never carry a tenant
+                    if (isIpAddress(hostname)) {
+                        tenantId = null;
+                        break;
+                    }
+                    const segments = hostname.split('.');
                     // Require at least "tenant.example.com" (3 segments) to avoid
                     // treating "localhost" or "example.com" as a tenant.
                     tenantId = segments.length >= 3 ? segments[0] : null;

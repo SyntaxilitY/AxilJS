@@ -52,11 +52,25 @@ export { QueryBuilder as ModelQueryBuilder } from './query/query-builder'
 // ── Query Builder (original — used by BaseRepository) ────────────────────
 export { QueryBuilder } from './query-builder/query-builder'
 
+// ── Identifier safety (orderBy / where column validation) ────────────────
+export {
+  assertSafeIdentifier,
+  isSafeIdentifier,
+  assertSortDirection,
+  UnsafeIdentifierError
+} from './query/identifier'
+
+// ── Relations (eager loading) ─────────────────────────────────────────────
+export { eagerLoad }                  from './relations/eager-loader'
+export type { EagerLoadOptions }      from './relations/eager-loader'
+
 // ── Repository ────────────────────────────────────────────────────────────
 export { BaseRepository } from './repository/base-repository'
+export type { FindOptions } from './repository/base-repository'
 
 // ── BaseModel (new class-based ORM) ──────────────────────────────────────
 export { BaseModel }                    from './model/base-model'
+export type { ModelFindOptions }        from './model/base-model'
 export { getEntityMeta, getOrCreateMeta } from './model/model-metadata'
 
 // ── Schema Builder ────────────────────────────────────────────────────────

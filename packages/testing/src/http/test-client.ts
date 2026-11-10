@@ -1,6 +1,6 @@
 /**
  * HTTP test client.
- * Makes requests to a running @axiljsJS application in tests.
+ * Makes requests to a running AxilJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:
@@ -33,8 +33,10 @@ export interface TestResponse {
 // ─── Test Request Builder ─────────────────────────────────────────────────────
 
 class TestRequest {
+  // Keys are lowercase so set('Content-Type', ...) overrides the default
+  // instead of sending two content-type headers
   private _headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'content-type': 'application/json'
   };
   private _body: unknown;
 
@@ -78,11 +80,13 @@ class TestRequest {
    * Make the request awaitable.
    * Allows: const res = await client.get('/users')
    */
-  then(
-    resolve: (res: TestResponse) => void,
-    reject: (err: Error) => void
-  ): void {
-    this.execute().then(resolve).catch(reject);
+  then<TResult1 = TestResponse, TResult2 = never>(
+    resolve?: ((res: TestResponse) => TResult1 | PromiseLike<TResult1>) | null,
+    reject?: ((err: any) => TResult2 | PromiseLike<TResult2>) | null
+  ): Promise<TResult1 | TResult2> {
+    // Return the promise so `.then(cb)` without a reject handler doesn't
+    // cause an unhandled rejection and `.then().catch()` chains work
+    return this.execute().then(resolve, reject);
   }
 
   /**
@@ -140,8 +144,18 @@ class TestRequest {
    */
   private makeRequest(port: number): Promise<TestResponse> {
     return new Promise((resolve, reject) => {
-      const bodyStr =
-        this._body !== undefined ? JSON.stringify(this._body) : '';
+      // Strings and Buffers are sent as-is when a non-JSON content-type is
+      // set (form bodies, plain text, XML…); everything else is JSON-encoded.
+      const contentType = this._headers['content-type'] || '';
+      const isJson = /\bjson\b/i.test(contentType);
+      let bodyStr: string | Buffer = '';
+      if (this._body !== undefined) {
+        if (!isJson && (typeof this._body === 'string' || Buffer.isBuffer(this._body))) {
+          bodyStr = this._body as string | Buffer;
+        } else {
+          bodyStr = JSON.stringify(this._body);
+        }
+      }
 
       const headers: Record<string, string> = { ...this._headers };
 
@@ -163,8 +177,10 @@ class TestRequest {
         (res: IncomingMessage) => {
           let data = '';
 
-          res.on('data', (chunk: Buffer) => {
-            data += chunk.toString();
+          // Stream decoding keeps multi-byte UTF-8 chars split across chunks intact
+          res.setEncoding('utf8');
+          res.on('data', (chunk: string) => {
+            data += chunk;
           });
 
           res.on('end', () => {

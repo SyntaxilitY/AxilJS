@@ -118,8 +118,8 @@ export interface ColumnDefinition {
   references?: {
     table: string;
     column: string;
-    onDelete?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
-    onUpdate?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
+    onDelete?: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION';
+    onUpdate?: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION';
   };
 }
 
@@ -153,7 +153,10 @@ export type WhereOperator =
   | 'NOT IN'
   | 'IS NULL'
   | 'IS NOT NULL'
-  | 'BETWEEN';
+  | 'BETWEEN'
+  | 'NOT BETWEEN'
+  | 'NOT LIKE'
+  | '<>';
 
 export interface WhereCondition {
   column: string;
@@ -161,6 +164,10 @@ export interface WhereCondition {
   value?: unknown;
   // For BETWEEN: [min, max]
   values?: unknown[];
+  // How this condition joins the previous one (default AND)
+  conjunction?: 'AND' | 'OR';
+  // Parenthesised sub-conditions — where(qb => ...)
+  group?: WhereCondition[];
 }
 
 // ─── Order By ─────────────────────────────────────────────────────────────────

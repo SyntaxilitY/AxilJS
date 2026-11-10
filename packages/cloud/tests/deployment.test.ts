@@ -9,7 +9,7 @@ describe('Deployment Manifest Generator', () => {
     replicas: 4,
     domain: 'payments.axiljs.io',
     env: {
-      DATABASE_URL: 'postgresql://neondb_owner:npg_Cht0cBTzoDi2@ep-spring-silence-azxw55ks-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+      DATABASE_URL: 'postgres://user:password@localhost:5432/axiljs',
       NODE_ENV: 'production',
     },
   };

@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Memory Middleware for @axiljsJS HTTP requests.
+ * Memory Middleware for AxilJS HTTP requests.
  * Attaches memory info to requests for debugging.
  * Flags requests that trigger significant memory increases.
  */
@@ -24,7 +24,8 @@ function memoryMiddleware(options = {}) {
             const after = (0, snapshot_1.takeSnapshot)();
             const heapDeltaMb = parseFloat(((after.heapUsed - before.heapUsed) / 1024 / 1024).toFixed(2));
             // Add memory header if configured
-            if (exposeHeader) {
+            // Headers cannot be set once sent (streamed / res.write() responses)
+            if (exposeHeader && !res.raw.headersSent) {
                 res.raw.setHeader('X-Memory-Usage', `${after.heapUsedMb}MB`);
                 if (heapDeltaMb > 0) {
                     res.raw.setHeader('X-Memory-Delta', `+${heapDeltaMb}MB`);
@@ -32,7 +33,7 @@ function memoryMiddleware(options = {}) {
             }
             // Flag suspicious memory increase
             if (heapDeltaMb > leakThresholdMb && logFlagged) {
-                console.warn(`\x1b[33m[@axiljsJS Memory]\x1b[0m ` +
+                console.warn(`\x1b[33m[AxilJS Memory]\x1b[0m ` +
                     `Request caused +${heapDeltaMb}MB heap increase: ` +
                     `${req.method} ${req.path} ` +
                     `\x1b[90m(threshold: ${leakThresholdMb}MB)\x1b[0m`);

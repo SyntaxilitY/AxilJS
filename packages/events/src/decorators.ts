@@ -28,14 +28,36 @@ interface EventHandlerMeta {
  *   async handleUserCreated(event: @axiljsEvent) { ... }
  */
 export function OnEvent(eventType: string) {
-  // Return a plain function — avoids MethodDecorator signature conflicts
-  return function (target: any, propertyKey: string | symbol): void {
+  // Return a plain function — avoids MethodDecorator signature conflicts.
+  // Legacy (experimentalDecorators): (prototype, propertyKey, descriptor)
+  // TC39 (TS 5+ standard decorators): (method, context)
+  return function (target: any, propertyKey: any, _descriptor?: any): void {
+    if (isTc39MethodContext(propertyKey)) {
+      const context = propertyKey;
+      const meta: EventHandlerMeta = { eventType, methodName: String(context.name) };
+      // TC39 decorators don't receive the prototype; record the handler on the
+      // instance when it's constructed (initializers run before the ctor body).
+      context.addInitializer(function (this: any) {
+        if (!Object.prototype.hasOwnProperty.call(this, EVENT_HANDLERS_KEY)) {
+          Object.defineProperty(this, EVENT_HANDLERS_KEY, {
+            value:        [],
+            writable:     true,
+            configurable: true,
+            enumerable:   false
+          });
+        }
+        this[EVENT_HANDLERS_KEY].push(meta);
+      });
+      return;
+    }
+
     const methodName = String(propertyKey);
 
     // Initialize the handlers array on the prototype
     if (!Object.prototype.hasOwnProperty.call(target, EVENT_HANDLERS_KEY)) {
       Object.defineProperty(target, EVENT_HANDLERS_KEY, {
-        value:        [],
+        // Copy handlers inherited from a parent class so they aren't lost
+        value:        [...(target[EVENT_HANDLERS_KEY] || [])],
         writable:     true,
         configurable: true,
         enumerable:   false
@@ -45,6 +67,19 @@ export function OnEvent(eventType: string) {
     const meta: EventHandlerMeta = { eventType, methodName };
     target[EVENT_HANDLERS_KEY].push(meta);
   };
+}
+
+function isTc39MethodContext(ctx: any): ctx is {
+  kind: string;
+  name: string | symbol;
+  addInitializer(fn: (this: any) => void): void;
+} {
+  return (
+    ctx !== null &&
+    typeof ctx === 'object' &&
+    ctx.kind === 'method' &&
+    typeof ctx.addInitializer === 'function'
+  );
 }
 
 // ─── registerEventHandlers ────────────────────────────────────────────────────
@@ -60,7 +95,11 @@ export function registerEventHandlers(
   bus: EventBus
 ): void {
   const proto = Object.getPrototypeOf(instance) as any;
-  const handlers: EventHandlerMeta[] = proto[EVENT_HANDLERS_KEY] || [];
+  // Legacy decorators store metadata on the prototype; TC39 decorators on the instance
+  const ownTc39: EventHandlerMeta[] = Object.prototype.hasOwnProperty.call(instance, EVENT_HANDLERS_KEY)
+    ? (instance as any)[EVENT_HANDLERS_KEY]
+    : [];
+  const handlers: EventHandlerMeta[] = [...(proto?.[EVENT_HANDLERS_KEY] || []), ...ownTc39];
 
   if (handlers.length === 0) return;
 
@@ -69,7 +108,7 @@ export function registerEventHandlers(
 
     if (typeof method !== 'function') {
       console.warn(
-        `[@axiljsJS Events] '${methodName}' is not a function on ` +
+        `[AxilJS Events] '${methodName}' is not a function on ` +
         `${instance.constructor.name}`
       );
       continue;
@@ -78,7 +117,7 @@ export function registerEventHandlers(
     bus.on(eventType, (event: axilEvent) => method.call(instance, event));
 
     console.log(
-      `\x1b[90m[@axiljsJS Events]\x1b[0m Registered: ` +
+      `\x1b[90m[AxilJS Events]\x1b[0m Registered: ` +
       `${instance.constructor.name}.${methodName} → '${eventType}'`
     );
   }

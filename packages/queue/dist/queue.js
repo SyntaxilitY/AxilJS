@@ -26,12 +26,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Queue = void 0;
 const events_1 = require("events");
 const job_1 = require("./job");
+const store_1 = require("./store");
 // ─── Queue ────────────────────────────────────────────────────────────────────
 class Queue extends events_1.EventEmitter {
     name;
-    jobs = [];
+    store;
     handlers = new Map();
     activeCount = 0;
+    activeRuns = new Map();
     pollTimer;
     running = false;
     options;
@@ -43,6 +45,7 @@ class Queue extends events_1.EventEmitter {
             pollIntervalMs: options.pollIntervalMs ?? 500,
             backoff: options.backoff ?? { type: 'exponential', delay: 1000 }
         };
+        this.store = options.store ?? new store_1.InMemoryQueueStore();
     }
     // ─── Job Registration ─────────────────────────────────────────────────────────
     /**
@@ -59,19 +62,12 @@ class Queue extends events_1.EventEmitter {
      *
      * @param jobName  Must match a registered handler
      * @param data     Job payload
-     * @param options  Job options (delay, retry, priority)
+     * @param options  Job options (delay, retry, priority, timeoutMs)
      */
     async add(jobName, data, options = {}) {
         const job = (0, job_1.createJob)(this.name, jobName, data, options);
-        // Insert maintaining priority order (higher priority first)
-        const insertAt = this.jobs.findIndex(j => j.priority < job.priority);
-        if (insertAt === -1) {
-            this.jobs.push(job);
-        }
-        else {
-            this.jobs.splice(insertAt, 0, job);
-        }
-        this.emit('added', job);
+        this.store.add(job);
+        this.safeEmit('added', job);
         return job;
     }
     /**
@@ -79,6 +75,38 @@ class Queue extends events_1.EventEmitter {
      */
     async addMany(jobName, dataArray, options = {}) {
         return Promise.all(dataArray.map(data => this.add(jobName, data, options)));
+    }
+    /**
+     * Cancel a job.
+     *   - pending/delayed → 'cancelled', never runs
+     *   - active          → 'cancelled', its AbortSignal fires, the result is
+     *                       discarded and it is not retried
+     * Emits 'cancelled'. Returns false if the job doesn't exist or already finished.
+     */
+    cancel(jobId) {
+        const job = this.store.get(jobId);
+        if (!job)
+            return false;
+        if (job.status === 'pending' || job.status === 'delayed') {
+            job.status = 'cancelled';
+            job.finishedAt = new Date();
+            this.store.update(job);
+            this.safeEmit('cancelled', job);
+            return true;
+        }
+        if (job.status === 'active') {
+            job.status = 'cancelled';
+            job.finishedAt = new Date();
+            this.store.update(job);
+            const run = this.activeRuns.get(job.id);
+            if (run) {
+                run.controller.abort(new Error(`Job '${job.name}' was cancelled`));
+                run.interrupt({ kind: 'cancelled' });
+            }
+            this.safeEmit('cancelled', job);
+            return true;
+        }
+        return false;
     }
     // ─── Queue Control ────────────────────────────────────────────────────────────
     /**
@@ -91,7 +119,7 @@ class Queue extends events_1.EventEmitter {
         this.pollTimer = setInterval(() => {
             this.processNext();
         }, this.options.pollIntervalMs);
-        console.log(`\x1b[36m[@axiljsJS Queue]\x1b[0m '${this.name}' started ` +
+        console.log(`\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' started ` +
             `(concurrency: ${this.options.concurrency})`);
     }
     /**
@@ -107,103 +135,177 @@ class Queue extends events_1.EventEmitter {
         while (this.activeCount > 0) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        console.log(`\x1b[36m[@axiljsJS Queue]\x1b[0m '${this.name}' stopped`);
+        console.log(`\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' stopped`);
     }
     // ─── Job Queries ──────────────────────────────────────────────────────────────
     /**
      * Get jobs by status.
      */
     getJobs(status) {
+        const jobs = this.store.list();
         if (!status)
-            return [...this.jobs];
-        return this.jobs.filter(j => j.status === status);
+            return jobs;
+        return jobs.filter(j => j.status === status);
     }
     /**
      * Get a specific job by ID.
      */
     getJob(id) {
-        return this.jobs.find(j => j.id === id);
+        return this.store.get(id);
     }
     /**
      * Get queue statistics.
      */
     getStats() {
+        const jobs = this.store.list();
         return {
-            pending: this.jobs.filter(j => j.status === 'pending').length,
-            active: this.jobs.filter(j => j.status === 'active').length,
-            completed: this.jobs.filter(j => j.status === 'completed').length,
-            failed: this.jobs.filter(j => j.status === 'failed').length,
-            delayed: this.jobs.filter(j => j.status === 'delayed').length
+            pending: jobs.filter(j => j.status === 'pending').length,
+            active: jobs.filter(j => j.status === 'active').length,
+            completed: jobs.filter(j => j.status === 'completed').length,
+            failed: jobs.filter(j => j.status === 'failed').length,
+            delayed: jobs.filter(j => j.status === 'delayed').length,
+            cancelled: jobs.filter(j => j.status === 'cancelled').length
         };
     }
     /**
-     * Remove completed and failed jobs (cleanup).
+     * Remove completed, failed and cancelled jobs (cleanup).
      */
     purge() {
-        this.jobs = this.jobs.filter(j => j.status !== 'completed' && j.status !== 'failed' && j.status !== 'cancelled');
+        for (const job of this.store.list()) {
+            if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+                // Keep cancelled jobs whose handler is still winding down tracked until it settles
+                if (this.activeRuns.has(job.id))
+                    continue;
+                this.store.remove(job.id);
+            }
+        }
     }
     // ─── Processing ───────────────────────────────────────────────────────────────
     /**
      * Pick the next ready job and process it.
      */
     processNext() {
-        if (!this.running)
-            return;
-        if (this.activeCount >= this.options.concurrency)
-            return;
-        const now = new Date();
-        // Find next pending job that's ready to run
-        const job = this.jobs.find(j => (j.status === 'pending' || j.status === 'delayed') &&
-            j.runAt <= now);
-        if (!job)
-            return;
-        // Check if we have a handler for this job
-        const handler = this.handlers.get(job.name);
-        if (!handler) {
-            job.status = 'failed';
-            job.error = `No handler registered for job '${job.name}'`;
-            this.emit('failed', job, new Error(job.error));
-            return;
+        // Fill all free concurrency slots on each tick (not just one)
+        while (this.running && this.activeCount < this.options.concurrency) {
+            const now = new Date();
+            // Find the highest-priority ready job (store order breaks ties)
+            let job;
+            for (const j of this.store.list()) {
+                if ((j.status === 'pending' || j.status === 'delayed') && j.runAt <= now) {
+                    if (!job || j.priority > job.priority)
+                        job = j;
+                }
+            }
+            if (!job)
+                return;
+            // Check if we have a handler for this job
+            const handler = this.handlers.get(job.name);
+            if (!handler) {
+                job.status = 'failed';
+                job.finishedAt = new Date();
+                job.error = `No handler registered for job '${job.name}'`;
+                this.store.update(job);
+                this.safeEmit('failed', job, new Error(job.error));
+                continue;
+            }
+            // Mark as active and process
+            job.status = 'active';
+            job.attempts++;
+            job.startedAt = new Date();
+            this.store.update(job);
+            this.activeCount++;
+            this.runJob(job, handler).finally(() => {
+                this.activeCount--;
+            });
         }
-        // Mark as active and process
-        job.status = 'active';
-        job.attempts++;
-        job.startedAt = new Date();
-        this.activeCount++;
-        this.runJob(job, handler).finally(() => {
-            this.activeCount--;
-        });
     }
     /**
      * Execute a job with error handling and retry logic.
+     * Listener exceptions never influence the job outcome.
      */
     async runJob(job, handler) {
-        try {
-            const result = await handler(job);
+        const outcome = await this.runAttempt(job, handler);
+        // cancel() already updated the job and emitted 'cancelled'
+        if (outcome.kind === 'cancelled' || job.status === 'cancelled')
+            return;
+        if (outcome.kind === 'ok') {
             job.status = 'completed';
             job.finishedAt = new Date();
-            job.result = result;
-            this.emit('completed', job, result);
+            job.result = outcome.result;
+            this.store.update(job);
+            this.safeEmit('completed', job, outcome.result);
+            return;
         }
-        catch (error) {
-            const err = error instanceof Error ? error : new Error(String(error));
-            // Should we retry?
-            if (job.attempts < job.maxAttempts) {
-                const backoffDelay = this.calculateBackoff(job.attempts);
-                job.status = 'delayed';
-                job.runAt = new Date(Date.now() + backoffDelay);
-                job.error = err.message;
-                this.emit('retry', job, err);
+        const err = outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
+        // Should we retry?
+        if (job.attempts < job.maxAttempts) {
+            const backoffDelay = this.calculateBackoff(job.attempts);
+            job.status = 'delayed';
+            job.runAt = new Date(Date.now() + backoffDelay);
+            job.error = err.message;
+            this.store.update(job);
+            this.safeEmit('retry', job, err);
+        }
+        else {
+            // All attempts exhausted
+            job.status = 'failed';
+            job.finishedAt = new Date();
+            job.error = err.message;
+            job.stack = err.stack;
+            this.store.update(job);
+            this.safeEmit('failed', job, err);
+        }
+    }
+    /**
+     * Run one attempt, racing the handler against timeout/cancellation.
+     * A handler that keeps running after a timeout/cancel is ignored
+     * (its signal is aborted so cooperative handlers can stop).
+     */
+    async runAttempt(job, handler) {
+        const controller = new AbortController();
+        let interrupt;
+        const interrupted = new Promise(resolve => { interrupt = resolve; });
+        this.activeRuns.set(job.id, { controller, interrupt });
+        let timer;
+        if (job.timeoutMs && job.timeoutMs > 0) {
+            timer = setTimeout(() => {
+                const error = new Error(`Job '${job.name}' timed out after ${job.timeoutMs}ms`);
+                error.name = 'JobTimeoutError';
+                controller.abort(error);
+                interrupt({ kind: 'timeout', error });
+            }, job.timeoutMs);
+        }
+        try {
+            const attempt = Promise.resolve()
+                .then(() => handler(job, { signal: controller.signal }))
+                .then((result) => ({ kind: 'ok', result }), (error) => ({ kind: 'error', error }));
+            return await Promise.race([attempt, interrupted]);
+        }
+        finally {
+            if (timer)
+                clearTimeout(timer);
+            this.activeRuns.delete(job.id);
+        }
+    }
+    /**
+     * Emit without letting listener exceptions (sync throws or rejected
+     * promises from async listeners) escape into the queue's control flow.
+     */
+    safeEmit(event, ...args) {
+        for (const listener of this.rawListeners(event)) {
+            try {
+                const ret = listener.apply(this, args);
+                if (ret && typeof ret.then === 'function') {
+                    ret.then(undefined, err => this.reportListenerError(event, err));
+                }
             }
-            else {
-                // All attempts exhausted
-                job.status = 'failed';
-                job.finishedAt = new Date();
-                job.error = err.message;
-                job.stack = err.stack;
-                this.emit('failed', job, err);
+            catch (err) {
+                this.reportListenerError(event, err);
             }
         }
+    }
+    reportListenerError(event, err) {
+        console.error(`\x1b[31m[AxilJS Queue]\x1b[0m '${this.name}' ${event} listener threw:`, err instanceof Error ? err.message : err);
     }
     /**
      * Calculate backoff delay for retry attempts.

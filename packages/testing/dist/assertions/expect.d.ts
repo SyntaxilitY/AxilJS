@@ -6,11 +6,15 @@
  *   expect(value).toBe(expected)
  *   expect(array).toHaveLength(3)
  *   expect(fn).toThrow()
- *   expect(promise).rejects.toThrow()
+ *   expect(obj).toMatchObject({ user: { name: 'Tariq' } })
+ *   expect(mockFn).toHaveBeenCalledWith('a', 1)
+ *   await expect(promise).resolves.toEqual({ ok: true })
+ *   await expect(promise).rejects.toThrow('boom')
  */
 export declare class AssertionError extends Error {
     constructor(message: string);
 }
+type ThrowExpectation = string | RegExp | Function | Error | undefined;
 declare class Assertions {
     private negated;
     private value;
@@ -23,8 +27,14 @@ declare class Assertions {
     /**
      * Assert that promises reject.
      * await expect(promise).rejects.toThrow()
+     * await expect(promise).rejects.toBeInstanceOf(NotFoundError)
      */
-    get rejects(): RejectAssertions;
+    get rejects(): AsyncAssertions;
+    /**
+     * Assert on the resolved value of a promise.
+     * await expect(promise).resolves.toEqual({ ok: true })
+     */
+    get resolves(): AsyncAssertions;
     /**
      * Check that two values are strictly equal (===).
      */
@@ -33,6 +43,10 @@ declare class Assertions {
      * Deep equality check (recursively compares objects and arrays).
      */
     toEqual(expected: unknown): void;
+    /**
+     * Check that an object contains (recursively) the given subset of properties.
+     */
+    toMatchObject(expected: object | object[]): void;
     /**
      * Check that value is truthy.
      */
@@ -54,6 +68,10 @@ declare class Assertions {
      */
     toBeDefined(): void;
     /**
+     * Check that value is NaN.
+     */
+    toBeNaN(): void;
+    /**
      * Check that value is an instance of a class.
      */
     toBeInstanceOf(cls: Function): void;
@@ -62,13 +80,19 @@ declare class Assertions {
      */
     toHaveLength(length: number): void;
     /**
-   * Check that array or string contains an item.
-   */
+     * Check that an array (or other iterable) contains an item (===),
+     * or that a string contains a substring.
+     */
     toContain(item: unknown): void;
     /**
-     * Check that object has a property.
+     * Check that an array (or iterable) contains an item that deep-equals `item`.
      */
-    toHaveProperty(key: string, value?: unknown): void;
+    toContainEqual(item: unknown): void;
+    /**
+     * Check that object has a property. `key` may be a path ("a.b[0].c")
+     * or an array of keys; when `value` is given it must deep-equal.
+     */
+    toHaveProperty(key: string | ReadonlyArray<string | number>, value?: unknown): void;
     /**
      * Check that string matches a pattern.
      */
@@ -76,24 +100,51 @@ declare class Assertions {
     /**
      * Numeric comparisons.
      */
-    toBeGreaterThan(n: number): void;
-    toBeLessThan(n: number): void;
-    toBeGreaterThanOrEqual(n: number): void;
-    toBeLessThanOrEqual(n: number): void;
+    toBeGreaterThan(n: number | bigint): void;
+    toBeLessThan(n: number | bigint): void;
+    toBeGreaterThanOrEqual(n: number | bigint): void;
+    toBeLessThanOrEqual(n: number | bigint): void;
     /**
-     * Check that a function throws.
+     * Floating point equality: |actual - expected| < 10^-numDigits / 2
+     * (numDigits defaults to 2).
      */
-    toThrow(message?: string): void;
+    toBeCloseTo(expected: number, numDigits?: number): void;
+    /**
+     * Check that a function throws. The optional expectation can be a
+     * message substring, a RegExp, an error class or an Error instance.
+     */
+    toThrow(expected?: ThrowExpectation): void;
+    private mockCalls;
+    /**
+     * Check that a mock function was called at least once.
+     */
+    toHaveBeenCalled(): void;
+    /**
+     * Check the exact number of calls.
+     */
+    toHaveBeenCalledTimes(times: number): void;
+    /**
+     * Check that at least one call received exactly these arguments (deep equal).
+     */
+    toHaveBeenCalledWith(...args: unknown[]): void;
+    /**
+     * Check the arguments of the most recent call (deep equal).
+     */
+    toHaveBeenLastCalledWith(...args: unknown[]): void;
     /**
      * Internal assertion helper with negation support.
      */
     private assert;
 }
-declare class RejectAssertions {
-    private promise;
-    constructor(promise: unknown);
-    toThrow(message?: string): Promise<void>;
-}
+type MatcherName = Exclude<keyof Assertions, 'not' | 'rejects' | 'resolves'>;
+/**
+ * Every matcher of expect(), but async: `await expect(p).resolves.toBe(1)`.
+ */
+export type AsyncAssertions = {
+    [K in MatcherName]: (...args: Parameters<Assertions[K]>) => Promise<void>;
+} & {
+    readonly not: AsyncAssertions;
+};
 /**
  * Create assertions for a value.
  *

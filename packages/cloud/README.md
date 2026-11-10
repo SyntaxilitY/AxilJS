@@ -254,7 +254,7 @@ Resolves and validates the current tenant from every incoming request.
 
 **Resolution strategies:**
 - `header` — from a configurable request header (default: `x-tenant-id`)
-- `subdomain` — from the first segment of the `Host` header
+- `subdomain` — from the first segment of the `Host` header (IP-address hosts are ignored)
 - `jwt` — from `req.locals.user.tenantId` (populated by `@axiljs/auth`)
 - `custom` — from a user-supplied resolver function
 
@@ -346,6 +346,7 @@ Generates production-grade Docker and Kubernetes manifests from a single configu
 - Resource requests and limits
 - Rolling update strategy
 - Readiness and liveness probes
+- The `version` label is quoted, so values like `1.0` stay strings
 
 ```typescript
 generateDeployment({
@@ -383,7 +384,10 @@ app.get('/dashboard', createDashboard({
 
 ### Rate Limiting
 
-Per-tenant sliding window rate limiter with configurable per-endpoint rules.
+Per-tenant rate limiter with configurable per-endpoint rules. Uses a fixed
+window by default; pass `algorithm: 'sliding'` for a sliding window counter
+(the previous window's count is weighted by how much of it still overlaps;
+rejected requests aren't counted).
 
 ```typescript
 app.use(tenantRateLimiter({
@@ -400,6 +404,9 @@ app.use(tenantRateLimiter({
 - `X-RateLimit-Remaining`
 - `X-RateLimit-Reset`
 - `X-RateLimit-Tenant`
+
+Over-limit requests never reach `next()`: the envelope response gets
+`status(429).json(...)`; otherwise the raw Node response is ended with `429`.
 
 ### Secrets Management
 
@@ -422,6 +429,8 @@ const key = SecretsManager.generateKey();
 ### Quota Management
 
 Track and enforce per-tenant resource limits with automatic period rollover.
+`daily` is a rolling 24 hours; `monthly` resets at the start of the next
+calendar month (UTC). Before this change `monthly` was a rolling 30 days.
 
 ```typescript
 quotas.configure({
@@ -623,7 +632,7 @@ app.listen(3000);
 
 ## Testing
 
-The `@axiljs/cloud` package ships with **37 tests across 11 test suites**, all passing.
+The `@axiljs/cloud` package ships with **54 tests across 12 test suites**, all passing.
 
 ```bash
 npm test
@@ -641,9 +650,10 @@ npm test
  ✓ tests/cache.test.ts             (3 tests)
  ✓ tests/correlation.test.ts       (2 tests)
  ✓ tests/e2e.test.ts               (2 tests)
+ ✓ tests/cloud-hardening.test.ts   (17 tests)
 
- Test Files  11 passed (11)
-      Tests  37 passed (37)
+ Test Files  12 passed (12)
+      Tests  54 passed (54)
 ```
 
 The suite covers:
@@ -652,7 +662,7 @@ The suite covers:
 - Tenant resolution across all strategies
 - Deterministic feature flag evaluation
 - Audit event emission and ordering
-- Rate-limit sliding window behaviour
+- Rate-limit fixed and sliding window behaviour, 429 for any response shape
 - Encryption round-trip integrity for secrets
 - Quota period rollover and warning events
 - Cache invalidation by tag

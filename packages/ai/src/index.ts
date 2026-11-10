@@ -1,6 +1,6 @@
 /**
  * @axiljs/ai - Public API
- * The complete @axiljsJS AI platform.
+ * The complete AxilJS AI platform.
  */
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,6 +19,9 @@ export type { AnthropicProviderOptions } from './providers/anthropic';
 export type { OllamaProviderOptions }    from './providers/ollama';
 export type { GeminiProviderOptions }    from './providers/gemini';
 
+// Error thrown for non-2xx provider responses (has .status, .body)
+export { AIHttpError } from './providers/http';
+
 // ─── Vector Store ─────────────────────────────────────────────────────────────
 
 export { VectorStore }          from './vector/vector-store';
@@ -26,7 +29,9 @@ export type {
   VectorDocument,
   SearchResult,
   SearchOptions,
-  VectorStoreOptions
+  VectorStoreOptions,
+  VectorStoreJSON,
+  SimilarityMetric
 } from './vector/vector-store';
 
 // ─── RAG ─────────────────────────────────────────────────────────────────────
@@ -47,7 +52,7 @@ export type { RawDocument }                        from './rag/document-loader';
 // ─── Agents ───────────────────────────────────────────────────────────────────
 
 export { Agent }      from './agents/agent';
-export { createTool, currentDateTimeTool, calculatorTool, jsonTool } from './agents/tool';
+export { createTool, currentDateTimeTool, calculatorTool, jsonTool, evaluateMathExpression } from './agents/tool';
 
 export type { AgentOptions, AgentResult, AgentStep } from './agents/agent';
 export type { Tool, ToolConfig }                     from './agents/tool';

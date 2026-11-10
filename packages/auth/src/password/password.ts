@@ -6,7 +6,23 @@
  * No external dependencies (no bcrypt needed).
  */
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { randomBytes, scrypt, timingSafeEqual, ScryptOptions } from 'crypto';
+
+// Async scrypt (runs on the libuv threadpool instead of blocking the
+// event loop like scryptSync did). Same inputs -> same output.
+function scryptAsync(
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: ScryptOptions
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scrypt(password, salt, keylen, options, (err, key) => {
+      if (err) reject(err);
+      else resolve(key);
+    });
+  });
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +57,7 @@ export async function hashPassword(password: string): Promise<string> {
 
   // Hash the password with scryptSync
   // Node.js scryptSync signature: (password, salt, keylen, options?)
-  const hash = scryptSync(
+  const hash = await scryptAsync(
     password,
     salt,
     KEY_LENGTH,
@@ -75,7 +91,7 @@ export async function verifyPassword(
     const storedHashBuffer = Buffer.from(hashHex, 'hex');
 
     // Hash the provided password with the same salt and options
-    const inputHash = scryptSync(
+    const inputHash = await scryptAsync(
       password,
       salt,
       KEY_LENGTH,

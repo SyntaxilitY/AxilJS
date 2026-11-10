@@ -21,13 +21,14 @@ const common_1 = require("@axiljs/common");
 /**
  * Extract token from request based on configured sources.
  */
-function extractToken(req, sources) {
+function extractToken(req, sources, cookieName = 'token', queryParam = 'token') {
     for (const source of sources) {
         switch (source) {
             case 'header': {
                 const authHeader = req.headers['authorization'];
-                if (authHeader?.startsWith('Bearer ')) {
-                    return authHeader.slice(7);
+                // Auth scheme is case-insensitive (RFC 7235 §2.1)
+                if (typeof authHeader === 'string' && /^bearer /i.test(authHeader)) {
+                    return authHeader.slice(7).trim();
                 }
                 break;
             }
@@ -39,13 +40,19 @@ function extractToken(req, sources) {
                     if (k)
                         cookies[k.trim()] = v?.trim() || '';
                 });
-                if (cookies['token'])
-                    return cookies['token'];
+                if (Object.prototype.hasOwnProperty.call(cookies, cookieName) && cookies[cookieName]) {
+                    return cookies[cookieName];
+                }
                 break;
             }
             case 'query': {
-                if (req.query?.token)
-                    return req.query.token;
+                // ?token=a&token=b yields an array - only accept a single string
+                const value = req.query && Object.prototype.hasOwnProperty.call(req.query, queryParam)
+                    ? req.query[queryParam]
+                    : undefined;
+                if (typeof value === 'string' && value) {
+                    return value;
+                }
                 break;
             }
         }
@@ -59,10 +66,10 @@ function extractToken(req, sources) {
  * @param options  Authentication options
  */
 function authenticate(jwt, options = {}) {
-    const { required = true, source = 'header' } = options;
+    const { required = true, source = 'header', cookieName, queryParam, audience, issuer } = options;
     const sources = Array.isArray(source) ? source : [source];
     return (req, res, next) => {
-        const token = extractToken(req, sources);
+        const token = extractToken(req, sources, cookieName, queryParam);
         if (!token) {
             if (required) {
                 return next(new common_1.UnauthorizedError('Authentication required. Provide a Bearer token.'));
@@ -71,7 +78,7 @@ function authenticate(jwt, options = {}) {
             return next();
         }
         try {
-            const payload = jwt.verify(token);
+            const payload = jwt.verify(token, { audience, issuer });
             // Attach user to request locals for use in handlers
             req.locals.user = {
                 id: payload.sub,

@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AxilJS Chat</title>
+  <style>
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6ea; --text: #1d232b; --muted: #6b7480;
+      --accent: #2f6fed; --accent-soft: #e8effd; --mine: #2f6fed; --danger: #c43d3d;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111418; --panel: #191d23; --line: #2a3038; --text: #e6e9ed; --muted: #8b95a1;
+        --accent: #6b9bff; --accent-soft: #1f2a3d; --mine: #6b9bff; --danger: #ff7a7a;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+      display: grid; grid-template-columns: 240px 1fr; grid-template-rows: 100%;
+    }
+    aside {
+      background: var(--panel); border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    .brand { padding: 16px; font-weight: 700; letter-spacing: .02em; border-bottom: 1px solid var(--line); }
+    .brand small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); margin-right: 6px; }
+    .status-dot.online { background: #2fb36d; }
+    .section { padding: 12px 16px 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    ul { list-style: none; margin: 0; padding: 0 8px; overflow-y: auto; }
+    li.room { padding: 6px 8px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; }
+    li.room:hover { background: var(--accent-soft); }
+    li.room.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    li.room .count { color: var(--muted); font-size: 12px; }
+    li.member { padding: 3px 8px; color: var(--muted); }
+    form.inline { display: flex; gap: 6px; padding: 8px 16px; }
+    input, button { font: inherit; color: inherit; }
+    input {
+      flex: 1; min-width: 0; padding: 7px 10px; border-radius: 6px;
+      border: 1px solid var(--line); background: var(--bg);
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    button {
+      padding: 7px 12px; border-radius: 6px; border: 0; cursor: pointer;
+      background: var(--accent); color: #fff; font-weight: 600;
+    }
+    button:disabled { opacity: .5; cursor: default; }
+    main { display: flex; flex-direction: column; min-height: 0; }
+    header {
+      padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+      display: flex; align-items: center; gap: 12px;
+    }
+    header h1 { font-size: 16px; margin: 0; flex: 1; }
+    header .nick { color: var(--muted); font-size: 13px; }
+    #messages { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .msg .meta { font-size: 12px; color: var(--muted); }
+    .msg .meta b { color: var(--text); margin-right: 6px; }
+    .msg.mine .meta b { color: var(--mine); }
+    .msg .text { white-space: pre-wrap; word-wrap: break-word; }
+    .notice { color: var(--muted); font-size: 13px; text-align: center; }
+    .notice.error { color: var(--danger); }
+    #typing { height: 20px; padding: 0 20px; color: var(--muted); font-size: 12px; font-style: italic; }
+    #composer { display: flex; gap: 8px; padding: 12px 20px 16px; background: var(--panel); border-top: 1px solid var(--line); }
+    .empty { margin: auto; text-align: center; color: var(--muted); }
+    @media (max-width: 640px) {
+      body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      aside { max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <div class="brand"><span id="dot" class="status-dot"></span>AxilJS Chat<small id="status">connecting…</small></div>
+    <div class="section">Your nickname</div>
+    <form class="inline" id="nick-form"><input id="nick" maxlength="24" placeholder="nickname" autocomplete="off"></form>
+    <div class="section">Rooms</div>
+    <ul id="rooms"></ul>
+    <form class="inline" id="join-form">
+      <input id="new-room" maxlength="32" placeholder="room name" autocomplete="off">
+      <button>Join</button>
+    </form>
+    <div class="section">In this room</div>
+    <ul id="members"></ul>
+  </aside>
+
+  <main>
+    <header>
+      <h1 id="title">No room selected</h1>
+      <span class="nick" id="who"></span>
+      <button id="leave" disabled>Leave</button>
+    </header>
+    <div id="messages"><div class="empty">Pick a nickname and join a room to start chatting.</div></div>
+    <div id="typing"></div>
+    <form id="composer">
+      <input id="text" placeholder="Message" autocomplete="off" disabled>
+      <button id="send" disabled>Send</button>
+    </form>
+  </main>
+
+  <script>
+    'use strict'
+
+    const $ = (id) => document.getElementById(id)
+    const state = {
+      ws: null,
+      nick: localStorage.getItem('axil-chat-nick') || 'guest-' + Math.random().toString(36).slice(2, 6),
+      room: null,
+      joined: new Set(),
+      typers: new Map(),
+      retry: 0,
+      maxLength: 500
+    }
+    $('nick').value = state.nick
+
+    // ── Connection ─────────────────────────────────────────────────────
+    function connect() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const ws = new WebSocket(proto + '//' + location.host + '/ws')
+      state.ws = ws
+
+      ws.onopen = () => {
+        state.retry = 0
+        setStatus(true, 'connected')
+        // Rejoin rooms after a reconnect
+        for (const room of state.joined) send({ type: 'join', room, nick: state.nick })
+      }
+      ws.onmessage = (event) => handle(JSON.parse(event.data))
+      ws.onclose = () => {
+        setStatus(false, 'reconnecting…')
+        const delay = Math.min(10000, 500 * 2 ** state.retry++)
+        setTimeout(connect, delay)
+      }
+    }
+
+    function send(message) {
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify(message))
+    }
+
+    function setStatus(online, text) {
+      $('dot').classList.toggle('online', online)
+      $('status').textContent = text
+    }
+
+    // ── Server messages ────────────────────────────────────────────────
+    function handle(msg) {
+      switch (msg.type) {
+        case 'welcome':
+          state.maxLength = msg.limits.maxMessageLength
+          $('text').maxLength = state.maxLength
+          break
+        case 'joined':
+          state.joined.add(msg.room)
+          state.nick = msg.nick
+          openRoom(msg.room)
+          clearMessages()
+          msg.history.forEach(addMessage)
+          notice('You joined #' + msg.room)
+          renderMembers(msg.members)
+          refreshRooms()
+          break
+        case 'left':
+          state.joined.delete(msg.room)
+          if (state.room === msg.room) openRoom(null)
+          refreshRooms()
+          break
+        case 'presence':
+          if (msg.room !== state.room) return refreshRooms()
+          notice(msg.nick + (msg.event === 'join' ? ' joined' : ' left'))
+          renderMembers(msg.members)
+          refreshRooms()
+          break
+        case 'message':
+          if (msg.room !== state.room) return
+          state.typers.delete(msg.nick)
+          renderTyping()
+          addMessage(msg)
+          break
+        case 'typing':
+          if (msg.room !== state.room) return
+          state.typers.set(msg.nick, Date.now())
+          renderTyping()
+          break
+        case 'error':
+          notice(msg.message + (msg.retryAfterMs ? ' (retry in ' + Math.ceil(msg.retryAfterMs / 1000) + 's)' : ''), true)
+          break
+      }
+    }
+
+    // ── Rendering ──────────────────────────────────────────────────────
+    function el(tag, className, text) {
+      const node = document.createElement(tag)
+      if (className) node.className = className
+      if (text !== undefined) node.textContent = text
+      return node
+    }
+
+    function clearMessages() { $('messages').replaceChildren() }
+
+    function scrollDown() {
+      const box = $('messages')
+      box.scrollTop = box.scrollHeight
+    }
+
+    function addMessage(m) {
+      const row = el('div', 'msg' + (m.nick === state.nick ? ' mine' : ''))
+      const meta = el('div', 'meta')
+      meta.append(el('b', '', m.nick), new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+      row.append(meta, el('div', 'text', m.text))
+      $('messages').append(row)
+      scrollDown()
+    }
+
+    function notice(text, isError) {
+      $('messages').querySelector('.empty')?.remove()
+      $('messages').append(el('div', 'notice' + (isError ? ' error' : ''), text))
+      scrollDown()
+    }
+
+    function renderMembers(members) {
+      $('members').replaceChildren(...members.map(n => el('li', 'member', n === state.nick ? n + ' (you)' : n)))
+    }
+
+    function renderTyping() {
+      const now = Date.now()
+      for (const [nick, at] of state.typers) if (now - at > 3000) state.typers.delete(nick)
+      const names = [...state.typers.keys()]
+      $('typing').textContent = names.length === 0 ? ''
+        : names.length === 1 ? names[0] + ' is typing…'
+        : names.join(', ') + ' are typing…'
+    }
+    setInterval(renderTyping, 1000)
+
+    function openRoom(room) {
+      state.room = room
+      state.typers.clear()
+      renderTyping()
+      $('title').textContent = room ? '#' + room : 'No room selected'
+      $('who').textContent = room ? 'as ' + state.nick : ''
+      $('leave').disabled = !room
+      $('text').disabled = !room
+      $('send').disabled = !room
+      if (!room) {
+        clearMessages()
+        $('messages').append(el('div', 'empty', 'Join a room to start chatting.'))
+        renderMembers([])
+      } else {
+        $('text').focus()
+      }
+    }
+
+    async function refreshRooms() {
+      try {
+        const res = await fetch('/rooms')
+        const body = await res.json()
+        const rooms = body.data
+        $('rooms').replaceChildren(...rooms.map(r => {
+          const li = el('li', 'room' + (r.name === state.room ? ' active' : ''))
+          li.append(el('span', '', '#' + r.name), el('span', 'count', String(r.members)))
+          li.onclick = () => join(r.name)
+          return li
+        }))
+      } catch {
+        // Offline: the list refreshes on the next event
+      }
+    }
+
+    // ── User actions ───────────────────────────────────────────────────
+    function join(room) {
+      room = room.trim().toLowerCase().replace(/\s+/g, '-')
+      if (!room) return
+      // Joining a room you are already in just switches to it (and reloads its history)
+      send({ type: 'join', room, nick: state.nick })
+    }
+
+    $('nick-form').onsubmit = (e) => {
+      e.preventDefault()
+      const nick = $('nick').value.trim()
+      if (!nick) return
+      state.nick = nick
+      localStorage.setItem('axil-chat-nick', nick)
+      $('who').textContent = state.room ? 'as ' + nick : ''
+    }
+    $('nick').onchange = () => $('nick-form').requestSubmit()
+
+    $('join-form').onsubmit = (e) => {
+      e.preventDefault()
+      join($('new-room').value)
+      $('new-room').value = ''
+    }
+
+    $('leave').onclick = () => { if (state.room) send({ type: 'leave', room: state.room }) }
+
+    $('composer').onsubmit = (e) => {
+      e.preventDefault()
+      const text = $('text').value.trim()
+      if (!text || !state.room) return
+      send({ type: 'message', room: state.room, text })
+      $('text').value = ''
+    }
+
+    let lastTyping = 0
+    $('text').oninput = () => {
+      const now = Date.now()
+      if (state.room && now - lastTyping > 1500) {
+        lastTyping = now
+        send({ type: 'typing', room: state.room })
+      }
+    }
+
+    connect()
+    refreshRooms()
+    setInterval(refreshRooms, 10000)
+  </script>
+</body>
+</html>

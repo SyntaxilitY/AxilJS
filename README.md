@@ -24,7 +24,7 @@
 [Why AxilJS](#-why-axiljs) •
 [Packages](#-packages) •
 [ORM Studio](#-orm-studio) •
-[Architecture Examples](#-architecture-examples) •
+[Templates & Examples](#templates--examples) •
 [CLI](#-cli) •
 [Roadmap](#-roadmap) •
 [Contributing](#-contributing)
@@ -145,15 +145,23 @@ my-api/
 ## CLI Commands
 
 ```bash
-axil create <name>        # Create a new project
+axil create <name>        # Create a new project (interactive on a TTY)
+axil create <name> --yes --db=sqlite --skip-install
+                          # Non-interactive: --yes/-y, --db=<none|sqlite|postgres|mysql>,
+                          # --auth/--no-auth, --ai, --ws, --queue, --skip-install, --force
+axil generate module products   # controller + service (+ migration); alias: axil g
+axil g controller|service|entity|migration <name>   # never overwrites without --force
+axil migrate [up|down|status]   # Run src/migrations with @axiljs/orm (reads .env)
 axil run                  # Start dev server with hot reload + Studio
-axil run src/mvc/main.ts  # Hot reload with custom entry point
+axil create shop --template rest-api   # Start from a template (see Templates & Examples)
 axil build                # Compile TypeScript for production
 axil test [pattern]       # Run test files
-axil deploy               # Generate Docker + Kubernetes files
+axil deploy               # Generate Docker + Kubernetes files (+ .dockerignore if missing)
+axil deploy --port=8080 --replicas=2 --force
 axil install [package]    # Install a package
 axil install -D [package] # Install as devDependency
 axil doctor               # Diagnose project issues
+axil <command> --help     # Usage for one command (never runs it)
 axil --version            # Show version
 ```
 
@@ -745,87 +753,33 @@ app.use(memoryMiddleware({ leakThresholdMb: 50, exposeHeader: true }))
 
 ---
 
-## Architecture Examples
+## Templates & Examples
 
-AxilJS supports any backend architecture. Three complete examples are included:
-
-### MVC — Blog Platform
-
-```
-examples/src/mvc/
-├── models/          # Data + business logic
-├── views/           # Response formatting
-├── controllers/     # Request handling
-└── routes/          # URL mapping
-```
+`axil create` can start from a complete, tested application instead of an empty scaffold:
 
 ```bash
-axil run src/mvc/main.ts     # Hot reload on port 3001
+axil create shop --template rest-api
+axil create chat -t realtime-chat
+axil create my-api                      # interactive: pick "Custom" or any template
 ```
 
-```
-POST http://localhost:3001/api/auth/register
-POST http://localhost:3001/api/auth/login
-GET  http://localhost:3001/api/posts
-POST http://localhost:3001/api/posts          [auth]
-POST http://localhost:3001/api/posts/1/comments [auth]
-```
+| Template | Port | What it shows |
+|---|---|---|
+| `minimal` | 3000 | Smallest useful API: routing, validation, errors, tests |
+| `rest-api` | 3001 | Bookstore API: SQLite ORM + migrations, JWT auth, RBAC, pagination, metrics |
+| `realtime-chat` | 3002 | WebSocket rooms, presence, history, event bus, browser client |
+| `background-jobs` | 3003 | Queue with retries/timeouts/cancel, cron scheduler, circuit breaker |
+| `ai-assistant` | 3004 | Chat + SSE streaming, RAG over Markdown docs, agent with tools |
+| `saas-api` | 3005 | Multi-tenancy, per-tenant rate limits, feature flags, quotas, audit, decorators |
 
----
-
-### Monolith — E-Commerce API with PostgreSQL
-
-```
-examples/src/monolith/
-├── services/        # AuthService, ProductService, CartService, OrderService
-├── routes/          # auth, products, cart, orders
-├── migrations/      # Database schema
-└── db.ts            # PostgreSQL connection (NeonDB compatible)
-```
+Every template is also committed, already generated, under [`examples/`](examples/). Each example has its own README with endpoints and run instructions, and a test suite that runs with `npm test`. Inside this monorepo they resolve `@axiljs/*` from the local packages:
 
 ```bash
-axil run src/monolith/main.ts   # Hot reload on port 3002
+cd examples/rest-api
+npm run build && npm test
 ```
 
-```
-POST http://localhost:3002/api/auth/register
-POST http://localhost:3002/api/products        [admin]
-POST http://localhost:3002/api/cart/add        [auth]
-POST http://localhost:3002/api/orders/checkout [auth]
-GET  http://localhost:3002/api/orders          [auth]
-PATCH http://localhost:3002/api/orders/1/status [admin]
-```
-
-Features:
-- PostgreSQL with NeonDB support (SSL)
-- Automatic migrations (SERIAL for PostgreSQL, AUTOINCREMENT for SQLite)
-- In-memory cart with stock validation
-- Transactional checkout — stock reduced atomically
-- Paginated responses via built-in response manager
-- Soft delete for products
-- Role-based access (admin/customer)
-
----
-
-### Hot Reload for All Examples
-
-```bash
-npm run dev        # Main server — all phases
-npm run dev:mvc    # MVC Blog — hot reload
-npm run dev:mono   # Monolith E-Commerce — hot reload
-```
-
-`package.json`:
-
-```json
-{
-  "scripts": {
-    "dev":      "node ../packages/cli/dist/cli.js run",
-    "dev:mvc":  "node ../packages/cli/dist/cli.js run src/mvc/main.ts",
-    "dev:mono": "node ../packages/cli/dist/cli.js run src/monolith/main.ts"
-  }
-}
-```
+A `--template` defines its own stack, so it can't be combined with `--db`, `--auth`, `--ai`, `--ws` or `--queue`. See `axil create --help` for the list.
 
 ---
 
@@ -858,9 +812,7 @@ kubectl apply -f deploy/deployment.yaml
 ## Hot Reload Development
 
 ```bash
-axil run                        # Watch src/
-axil run src/mvc/main.ts        # Watch src/mvc/ with custom entry
-axil run src/monolith/main.ts   # Watch src/monolith/ with custom entry
+axil run                        # Watch src/, restart on save
 ```
 
 ```

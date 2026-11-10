@@ -1,6 +1,6 @@
 /**
  * @axiljs/core - Public API
- * Everything a developer needs to build with @axiljsJS.
+ * Everything a developer needs to build with AxilJS.
  */
 
 // Main application class

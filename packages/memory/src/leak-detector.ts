@@ -15,7 +15,7 @@ import { LeakRecord, LeakType } from './types';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-// Track all timers registered through @axiljsJS
+// Track all timers registered through AxilJS
 const trackedTimers:    Set<ReturnType<typeof setTimeout>>  = new Set();
 const trackedIntervals: Set<ReturnType<typeof setInterval>> = new Set();
 
@@ -33,7 +33,7 @@ const trackedEmitters: Set<WeakRef<EventEmitter>> = new Set();
  *
  * Usage:
  *   const timer = trackTimer(setTimeout(() => doWork(), 5000))
- *   // @axiljsJS now knows about this timer and can clean it up
+ *   // AxilJS now knows about this timer and can clean it up
  */
 export function trackTimer(
   timer: ReturnType<typeof setTimeout>
@@ -96,7 +96,7 @@ export function trackCache<T extends Map<any, any> | Set<any>>(
 
 /**
  * Register an EventEmitter for listener leak detection.
- * Node.js warns at 10 listeners — @axiljsJS monitors and alerts.
+ * Node.js warns at 10 listeners — AxilJS monitors and alerts.
  *
  * Usage:
  *   trackEmitter(myEmitter, 'MyService')
@@ -157,7 +157,10 @@ async function checkEventListeners(
     }
 
     const name     = (emitter as any).__name || 'unnamed';
-    const maxListeners = emitter.getMaxListeners() || 10;
+    const maxListeners = emitter.getMaxListeners();
+
+    // 0 / Infinity means the app explicitly allowed unlimited listeners
+    if (maxListeners === 0 || maxListeners === Infinity) continue;
 
     // Check each event type
     const eventNames = emitter.eventNames();
@@ -190,7 +193,12 @@ function checkOrphanedTimers(autoFix: boolean): LeakRecord[] {
 
   // Check if timer count is excessive
   // Node.js does not expose a list of all active timers
-  // We check our tracked set for accumulation
+  // We check our tracked set for accumulation.
+  // First drop timers that already fired or were cleared without untrack —
+  // otherwise the registry itself grows forever and reports false leaks.
+  for (const t of trackedTimers)    if ((t as any)?._destroyed) trackedTimers.delete(t);
+  for (const t of trackedIntervals) if ((t as any)?._destroyed) trackedIntervals.delete(t);
+
   const timerCount    = trackedTimers.size;
   const intervalCount = trackedIntervals.size;
 

@@ -11,7 +11,7 @@ import { EventBus } from './event-bus';
  *   @OnEvent('user.created')
  *   async handleUserCreated(event: @axiljsEvent) { ... }
  */
-export declare function OnEvent(eventType: string): (target: any, propertyKey: string | symbol) => void;
+export declare function OnEvent(eventType: string): (target: any, propertyKey: any, _descriptor?: any) => void;
 /**
  * Register all @OnEvent decorated methods from an instance on the event bus.
  *

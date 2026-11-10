@@ -34,10 +34,15 @@ class EventBus {
     // Event history for replay/debugging (limited size)
     history = [];
     historyLimit = 1000;
+    // Listener-count warning threshold per event type (0/undefined = unlimited)
+    maxListeners;
+    // Event types already warned about (warn once per type, like Node's EventEmitter)
+    warnedTypes = new Set();
     constructor(options = {}) {
         this.middleware = options.middleware || [];
+        this.maxListeners = options.maxListeners ?? 0;
         this.onError = options.onError || ((error, event) => {
-            console.error(`\x1b[31m[@axiljsJS Events]\x1b[0m Handler error for '${event.type}':`, error.message);
+            console.error(`\x1b[31m[AxilJS Events]\x1b[0m Handler error for '${event.type}':`, error.message);
         });
     }
     // ─── Subscribe ───────────────────────────────────────────────────────────────
@@ -52,7 +57,9 @@ class EventBus {
         if (!this.handlers.has(eventType)) {
             this.handlers.set(eventType, []);
         }
-        this.handlers.get(eventType).push({ id, handler });
+        const list = this.handlers.get(eventType);
+        list.push({ id, handler });
+        this.checkMaxListeners(eventType, list.length);
         return {
             id,
             eventType,
@@ -65,7 +72,12 @@ class EventBus {
      */
     once(eventType, handler) {
         let subscription;
+        let fired = false;
         const wrappedHandler = async (event) => {
+            // Guard against concurrent emits that matched before unsubscribe ran
+            if (fired)
+                return;
+            fired = true;
             subscription.unsubscribe();
             await handler(event);
         };
@@ -169,6 +181,19 @@ class EventBus {
         return Array.from(this.handlers.keys());
     }
     /**
+     * Set the listener-count warning threshold (0 = unlimited).
+     */
+    setMaxListeners(n) {
+        this.maxListeners = n;
+        return this;
+    }
+    /**
+     * Get the listener-count warning threshold (0 = unlimited).
+     */
+    getMaxListeners() {
+        return this.maxListeners;
+    }
+    /**
      * Get handler count for an event type.
      */
     getHandlerCount(type) {
@@ -180,8 +205,25 @@ class EventBus {
     clear() {
         this.handlers.clear();
         this.history = [];
+        this.warnedTypes.clear();
     }
     // ─── Internal ────────────────────────────────────────────────────────────────
+    /**
+     * Warn (once per event type) when listener count exceeds maxListeners.
+     * Mirrors Node's EventEmitter: it is a leak hint, the listener is still added.
+     */
+    checkMaxListeners(eventType, count) {
+        if (!this.maxListeners || this.maxListeners <= 0)
+            return;
+        if (count <= this.maxListeners)
+            return;
+        if (this.warnedTypes.has(eventType))
+            return;
+        this.warnedTypes.add(eventType);
+        console.warn(`[AxilJS Events] Possible listener leak detected: ${count} listeners ` +
+            `added for '${eventType}' (maxListeners = ${this.maxListeners}). ` +
+            `Use bus.setMaxListeners() to increase the limit.`);
+    }
     /**
      * Find all handlers matching an event type.
      * Supports wildcard patterns: 'user.*', '*.created', '*'
@@ -210,7 +252,7 @@ class EventBus {
         // Convert pattern to regex
         // Replace * with regex wildcard (match anything except dots? No - match anything)
         const regexStr = pattern
-            .replace(/\./g, '\\.') // Escape dots
+            .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex specials (incl. dots)
             .replace(/\*/g, '.*'); // * → .*
         const regex = new RegExp(`^${regexStr}$`);
         return regex.test(type);

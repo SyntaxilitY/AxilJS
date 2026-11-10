@@ -64,7 +64,11 @@ export class HealthAggregator {
     const start = Date.now();
 
     return new Promise(resolve => {
+      let request: http.ClientRequest | undefined;
+
       const timer = setTimeout(() => {
+        // Abort the hung request so its socket doesn't linger
+        request?.destroy();
         resolve({
           name: svc.name,
           status: 'timeout',
@@ -75,7 +79,7 @@ export class HealthAggregator {
 
       const client = svc.url.startsWith('https') ? https : http;
 
-      const request = client.get(svc.url, { headers: svc.headers }, (res) => {
+      request = client.get(svc.url, { headers: svc.headers }, (res) => {
         clearTimeout(timer);
         const latency = Date.now() - start;
 

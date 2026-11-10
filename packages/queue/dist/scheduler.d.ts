@@ -21,6 +21,25 @@
  *   scheduler.start()
  */
 import { EventEmitter } from 'events';
+export interface ParsedCron {
+    minutes: number[];
+    hours: number[];
+    days: number[];
+    months: number[];
+    weekdays: number[];
+    daysRestricted?: boolean;
+    weekdaysRestricted?: boolean;
+}
+/**
+ * Parse a full 5-field cron expression string into arrays of valid values.
+ *
+ * @param expression  5-field cron string e.g. "0 9 * * 1-5"
+ */
+export declare function parseCron(expression: string): ParsedCron;
+/**
+ * Check whether a given Date matches a parsed cron schedule.
+ */
+export declare function matchesCron(date: Date, cron: ParsedCron): boolean;
 export interface ScheduledTask {
     id: string;
     name: string;
@@ -32,7 +51,8 @@ export interface ScheduledTask {
 }
 export declare class Scheduler extends EventEmitter {
     private tasks;
-    private timer?;
+    private alignTimer?;
+    private lastTickAt;
     private running;
     /**
      * Register a task to run on a cron schedule.
@@ -48,7 +68,8 @@ export declare class Scheduler extends EventEmitter {
     schedule(name: string, expression: string, handler: () => void | Promise<void>): this;
     /**
      * Start the scheduler.
-     * Aligns to the next minute boundary then checks every 60 seconds.
+     * Each tick is scheduled with setTimeout aligned to the next minute
+     * boundary (instead of setInterval), so timer drift never accumulates.
      */
     start(): void;
     /**
@@ -71,7 +92,11 @@ export declare class Scheduler extends EventEmitter {
      */
     getTasks(): ScheduledTask[];
     /**
-     * Check the current time against all task schedules.
+     * Arm a timer for the next minute boundary after the current one.
+     */
+    private scheduleNextTick;
+    /**
+     * Check the given time against all task schedules.
      * Called once per minute.
      */
     private tick;

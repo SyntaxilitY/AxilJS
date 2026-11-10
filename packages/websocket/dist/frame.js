@@ -23,6 +23,9 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OPCODES = void 0;
+exports.parseFrameHeader = parseFrameHeader;
+exports.isKnownOpcode = isKnownOpcode;
+exports.isControlOpcode = isControlOpcode;
 exports.parseFrame = parseFrame;
 exports.buildFrame = buildFrame;
 exports.buildCloseFrame = buildCloseFrame;
@@ -37,6 +40,55 @@ exports.OPCODES = {
     PING: 0x9,
     PONG: 0xA
 };
+/**
+ * Parse only the frame header (without waiting for the payload).
+ * Lets callers enforce limits on the declared length before buffering it.
+ * Returns null if the buffer doesn't contain a complete header yet.
+ */
+function parseFrameHeader(buffer) {
+    if (buffer.length < 2)
+        return null;
+    const firstByte = buffer[0];
+    const secondByte = buffer[1];
+    let payloadLength = secondByte & 0x7F;
+    let headerLength = 2;
+    if (payloadLength === 126) {
+        if (buffer.length < 4)
+            return null;
+        payloadLength = buffer.readUInt16BE(2);
+        headerLength = 4;
+    }
+    else if (payloadLength === 127) {
+        if (buffer.length < 10)
+            return null;
+        payloadLength = buffer.readUInt32BE(2) * 0x100000000 + buffer.readUInt32BE(6);
+        headerLength = 10;
+    }
+    const masked = (secondByte & 0x80) !== 0;
+    if (masked)
+        headerLength += 4;
+    return {
+        fin: (firstByte & 0x80) !== 0,
+        rsv: (firstByte & 0x70) >> 4,
+        opcode: firstByte & 0x0F,
+        masked,
+        payloadLength,
+        headerLength
+    };
+}
+/**
+ * Is this one of the opcodes defined by RFC 6455?
+ */
+function isKnownOpcode(opcode) {
+    return opcode === 0x0 || opcode === 0x1 || opcode === 0x2 ||
+        opcode === 0x8 || opcode === 0x9 || opcode === 0xA;
+}
+/**
+ * Is this a control frame opcode (close/ping/pong or reserved 0xB-0xF)?
+ */
+function isControlOpcode(opcode) {
+    return (opcode & 0x08) !== 0;
+}
 // ─── Frame Parser ─────────────────────────────────────────────────────────────
 /**
  * Parse a WebSocket frame from a Buffer.
@@ -63,10 +115,10 @@ function parseFrame(buffer) {
         headerLength = 4;
     }
     else if (payloadLength === 127) {
-        // Next 8 bytes are the actual payload length (we only support up to 32-bit here)
+        // Next 8 bytes are the actual payload length (high 32 bits + low 32 bits)
         if (buffer.length < 10)
             return null;
-        payloadLength = buffer.readUInt32BE(6); // Read last 4 bytes of 8-byte length
+        payloadLength = buffer.readUInt32BE(2) * 0x100000000 + buffer.readUInt32BE(6);
         headerLength = 10;
     }
     // Masking key (4 bytes if masked)
@@ -129,8 +181,8 @@ function buildFrame(data, opcode = exports.OPCODES.TEXT) {
     }
     else {
         frame[1] = 127;
-        frame.writeUInt32BE(0, 2); // High 32 bits (always 0 for us)
-        frame.writeUInt32BE(payloadLength, 6); // Low 32 bits
+        frame.writeUInt32BE(Math.floor(payloadLength / 0x100000000), 2); // High 32 bits
+        frame.writeUInt32BE(payloadLength >>> 0, 6); // Low 32 bits
     }
     // Copy payload
     payload.copy(frame, headerLength);

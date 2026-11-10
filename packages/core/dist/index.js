@@ -1,7 +1,7 @@
 "use strict";
 /**
  * @axiljs/core - Public API
- * Everything a developer needs to build with @axiljsJS.
+ * Everything a developer needs to build with AxilJS.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;

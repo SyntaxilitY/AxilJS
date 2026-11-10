@@ -3,6 +3,16 @@
  * Professional light theme with full features.
  */
 
+// Server-side escaping for values interpolated into the HTML markup
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 export function generateHTML(data: {
   appName:    string
   appUrl:     string
@@ -10,6 +20,8 @@ export function generateHTML(data: {
   qrDataUrl:  string
 }): string {
   const PAGE_SIZE = 50
+  // appName comes from package.json / config — never trust it as markup
+  const appName   = escapeHtml(data.appName)
 
   const scriptContent = `
     "use strict";
@@ -37,6 +49,13 @@ export function generateHTML(data: {
 
     function escAttr(s) {
       return String(s==null?"":s).replace(/&/g,"&amp;").replace(/'/g,"&#39;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    /* For values placed inside a single-quoted JS string in an inline handler
+       (onclick="fn('...')"): the HTML parser decodes &#39; back to a quote
+       before the JS runs, so escape for JS first, then for the attribute. */
+    function escJsAttr(s) {
+      return escAttr(String(s==null?"":s).replace(/\\\\/g,"\\\\\\\\").replace(/'/g,"\\\\'").replace(/\\r?\\n/g,"\\\\n"));
     }
 
     function timeStr() {
@@ -110,7 +129,7 @@ export function generateHTML(data: {
       var dbEl = document.getElementById("ov-db-list");
       if(dbEl) {
         dbEl.innerHTML = d.tables.length ? d.tables.slice(0,8).map(function(t){
-          return '<div class="ov-item" onclick="openTable(&#39;'+escAttr(t.name)+'&#39;)"><span class="ov-dot"></span><span class="ov-path">'+escHtml(t.name)+'</span><span class="ov-handler">'+(t.rowCount||0)+' rows</span></div>';
+          return '<div class="ov-item" onclick="openTable(&#39;'+escJsAttr(t.name)+'&#39;)"><span class="ov-dot"></span><span class="ov-path">'+escHtml(t.name)+'</span><span class="ov-handler">'+(t.rowCount||0)+' rows</span></div>';
         }).join("") : '<div class="empty-msg">No database connected</div>';
       }
 
@@ -174,7 +193,7 @@ export function generateHTML(data: {
         var isOpen = STATE.openGroups[group] !== false;
 
         return '<div class="route-group">'+
-          '<div class="rg-header" onclick="toggleGroup(&#39;'+escAttr(group)+'&#39;)">'+
+          '<div class="rg-header" onclick="toggleGroup(&#39;'+escJsAttr(group)+'&#39;)">'+
             '<span class="rg-dot"></span>'+
             '<span class="rg-name">'+escHtml(group)+'</span>'+
             '<span class="rg-count">'+rs.length+'</span>'+
@@ -328,7 +347,7 @@ export function generateHTML(data: {
 
       el.innerHTML = filtered.length ? filtered.map(function(t){
         var sel = STATE.selectedTable===t.name ? " tn-selected":"";
-        return '<div class="tn-item'+sel+'" onclick="openTable(&#39;'+escAttr(t.name)+'&#39;)"><span class="tn-name">'+escHtml(t.name)+'</span><span class="tn-count">'+(t.rowCount||0)+'</span></div>';
+        return '<div class="tn-item'+sel+'" onclick="openTable(&#39;'+escJsAttr(t.name)+'&#39;)"><span class="tn-name">'+escHtml(t.name)+'</span><span class="tn-count">'+(t.rowCount||0)+'</span></div>';
       }).join("") : '<div class="empty-msg" style="padding:12px">No tables</div>';
     }
 
@@ -373,7 +392,7 @@ export function generateHTML(data: {
             '<div class="card"><div class="card-hdr">'+
               '<span class="card-title">Data</span>'+
               '<span class="card-meta">'+rowData.rows.length+' of '+rowData.total.toLocaleString()+'</span>'+
-              '<button class="btn btn-xs btn-outline" style="margin-left:auto" onclick="exportCSV(&#39;'+escAttr(name)+'&#39;)">Export CSV</button>'+
+              '<button class="btn btn-xs btn-outline" style="margin-left:auto" onclick="exportCSV(&#39;'+escJsAttr(name)+'&#39;)">Export CSV</button>'+
             '</div><div class="card-flush">'+dataHtml+'</div>'+paginationHtml+'</div>';
         })
         .catch(function(e){
@@ -408,9 +427,9 @@ export function generateHTML(data: {
       var from = total===0?0:page*PAGE_SIZE+1;
       var to = Math.min((page+1)*PAGE_SIZE, total);
       return '<div class="pag"><span class="pag-info">'+from+' \\u2013 '+to+' of '+total+'</span><div class="pag-btns">'+
-        '<button class="pag-btn"'+(page===0?" disabled":"")+ ' onclick="changePage(&#39;'+escAttr(name)+'&#39;,'+(page-1)+')">&#9664;</button>'+
+        '<button class="pag-btn"'+(page===0?" disabled":"")+ ' onclick="changePage(&#39;'+escJsAttr(name)+'&#39;,'+(page-1)+')">&#9664;</button>'+
         '<span class="pag-cur">Page '+(page+1)+'</span>'+
-        '<button class="pag-btn"'+(page>=last?" disabled":"")+ ' onclick="changePage(&#39;'+escAttr(name)+'&#39;,'+(page+1)+')">&#9654;</button>'+
+        '<button class="pag-btn"'+(page>=last?" disabled":"")+ ' onclick="changePage(&#39;'+escJsAttr(name)+'&#39;,'+(page+1)+')">&#9654;</button>'+
       '</div></div>';
     }
 
@@ -478,7 +497,7 @@ export function generateHTML(data: {
             '<div class="rt-controls">'+
               '<input class="rt-input" id="msg-'+wId+'" placeholder=&#39;{"type":"ping"}&#39; />'+
               '<button class="btn btn-xs btn-green" onclick="wsSend(&#39;'+wId+'&#39;)">Send</button>'+
-              '<button class="btn btn-xs btn-outline" onclick="wsConnect(&#39;'+wId+'&#39;,&#39;'+escAttr(w.path)+'&#39;)">Connect</button>'+
+              '<button class="btn btn-xs btn-outline" onclick="wsConnect(&#39;'+wId+'&#39;,&#39;'+escJsAttr(w.path)+'&#39;)">Connect</button>'+
               '<button class="btn btn-xs btn-ghost" onclick="wsDisconnect(&#39;'+wId+'&#39;)">Disconnect</button>'+
             '</div>'+
           '</div></div>';
@@ -550,7 +569,7 @@ export function generateHTML(data: {
             '<div class="rt-label">Stream Log</div>'+
             '<div class="rt-log" id="slog-'+sId+'"><div class="log-line"><span class="log-sys">SYS</span> Waiting...</div></div>'+
             '<div class="rt-controls">'+
-              '<button class="btn btn-xs btn-green" onclick="sseConnect(&#39;'+sId+'&#39;,&#39;'+escAttr(s.path)+'&#39;)">Listen</button>'+
+              '<button class="btn btn-xs btn-green" onclick="sseConnect(&#39;'+sId+'&#39;,&#39;'+escJsAttr(s.path)+'&#39;)">Listen</button>'+
               '<button class="btn btn-xs btn-outline" onclick="sseDisconnect(&#39;'+sId+'&#39;)">Stop</button>'+
             '</div>'+
           '</div></div>';
@@ -697,7 +716,7 @@ export function generateHTML(data: {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>${data.appName} | Axil Studio</title>
+<title>${appName} | Axil Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 ${buildStyles()}
@@ -707,7 +726,7 @@ ${buildStyles()}
 <nav class="sidebar">
   <div class="sb-header">
     <div class="sb-brand"><span>Axil Studio</span></div>
-    <div class="sb-app">${data.appName}</div>
+    <div class="sb-app">${appName}</div>
   </div>
   <div class="sb-nav">
     <button class="nav-link active" id="nav-overview" onclick="showPanel('overview')">${icon("overview")}<span>Overview</span></button>
@@ -737,7 +756,7 @@ ${buildStyles()}
 
     <!-- OVERVIEW -->
     <div class="tab-panel active" id="panel-overview">
-      <h1 class="page-title">${data.appName}</h1>
+      <h1 class="page-title">${appName}</h1>
       <p class="page-sub">Development API explorer &amp; database inspector</p>
       <div class="stats-grid" id="stats-grid"></div>
       <div class="ov-grid">

@@ -42,7 +42,7 @@ export class SQLiteDriver extends BaseDriver {
       this.connected = true;
 
       console.log(
-        `\x1b[32m[@axiljsJS ORM]\x1b[0m SQLite connected: ${filename}`
+        `\x1b[32m[AxilJS ORM]\x1b[0m SQLite connected: ${filename}`
       );
     } catch (error: any) {
       if (error.code === 'MODULE_NOT_FOUND') {
@@ -71,16 +71,25 @@ export class SQLiteDriver extends BaseDriver {
 
     this.log(sql, params);
 
-    const trimmed = sql.trim().toUpperCase();
+    // better-sqlite3 cannot bind booleans, Dates or undefined
+    const bound = params.map(v =>
+      typeof v === 'boolean' ? (v ? 1 : 0)
+        : v instanceof Date ? v.toISOString()
+        : v === undefined ? null
+        : v
+    );
 
     try {
-      if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH')) {
+      const stmt = this.db.prepare(sql);
+      // stmt.reader is true for any statement that returns rows
+      // (SELECT, WITH, PRAGMA, ... RETURNING)
+      if (stmt.reader) {
         // Read query - returns rows
-        const rows = this.db.prepare(sql).all(...params) as T[];
+        const rows = stmt.all(...bound) as T[];
         return { rows, affectedRows: 0 };
       } else {
         // Write query - returns run info
-        const result = this.db.prepare(sql).run(...params);
+        const result = stmt.run(...bound);
         return {
           rows: [],
           affectedRows: result.changes,
@@ -97,31 +106,37 @@ export class SQLiteDriver extends BaseDriver {
   ): Promise<T> {
     if (!this.db) throw new Error('SQLite not connected.');
 
-    // better-sqlite3 transactions are synchronous
-    // We wrap in a promise for API consistency
-    return new Promise((resolve, reject) => {
-      const trxContext: TransactionContext = {
-        query: async <R>(sql: string, params: unknown[] = []) => {
-          return this.query<R>(sql, params);
-        }
-      };
-
-      const trx = this.db.transaction(async () => {
-        return await work(trxContext);
-      });
-
-      try {
-        const result = trx();
-        // Handle if result is a promise
-        if (result && typeof result.then === 'function') {
-          result.then(resolve).catch(reject);
-        } else {
-          resolve(result);
-        }
-      } catch (error) {
-        reject(error);
+    // better-sqlite3's db.transaction() rejects async functions
+    // ("Transaction function cannot return a promise"), so manage
+    // BEGIN / COMMIT / ROLLBACK manually. Nested calls use savepoints.
+    const trxContext: TransactionContext = {
+      query: async <R>(sql: string, params: unknown[] = []) => {
+        return this.query<R>(sql, params);
       }
-    });
+    };
+
+    const nested    = this.db.inTransaction;
+    const savepoint = `axil_sp_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+
+    this.db.exec(nested ? `SAVEPOINT ${savepoint}` : 'BEGIN');
+
+    try {
+      const result = await work(trxContext);
+      this.db.exec(nested ? `RELEASE SAVEPOINT ${savepoint}` : 'COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        if (nested) {
+          this.db.exec(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+          this.db.exec(`RELEASE SAVEPOINT ${savepoint}`);
+        } else if (this.db.inTransaction) {
+          this.db.exec('ROLLBACK');
+        }
+      } catch {
+        // Preserve the original error
+      }
+      throw error;
+    }
   }
 
   async ping(): Promise<boolean> {

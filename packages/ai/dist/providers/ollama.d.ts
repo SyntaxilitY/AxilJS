@@ -17,17 +17,31 @@ export interface OllamaProviderOptions {
     baseUrl?: string;
     model?: string;
     timeoutMs?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
 }
 export declare class OllamaProvider implements AIProvider {
     readonly name = "ollama";
     readonly defaultModel: string;
     private baseUrl;
     private timeoutMs;
+    private maxRetries;
+    private retryBaseDelayMs?;
+    private callCounter;
+    private legacyEmbeddings;
     constructor(options?: OllamaProviderOptions);
     complete(options: CompletionOptions): Promise<CompletionResponse>;
     stream(options: CompletionOptions): CompletionStream;
+    /**
+     * Embed with the batched /api/embed endpoint (`input: string[]`).
+     * Falls back to the legacy one-text-per-request /api/embeddings when the
+     * server answers 404 (Ollama older than 0.3.4).
+     */
     embed(options: EmbeddingOptions): Promise<EmbeddingResponse>;
+    private addTools;
     private formatMessages;
+    private parseToolCalls;
+    private connectError;
     private post;
     private postStream;
 }

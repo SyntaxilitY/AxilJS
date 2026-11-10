@@ -35,4 +35,68 @@ const agent = new Agent({ provider: ai, tools: [calculatorTool] })
 const result = await agent.run('What is 25 * 4?')
 ```
 
+## Retries, cancellation and timeouts
+
+All four providers retry 408/409/425/429/5xx (incl. Anthropic's 529) and transient
+network errors with exponential backoff + jitter, honoring `retry-after` /
+`retry-after-ms`. Streams are only retried before the first line is received.
+Failed calls reject with `AIHttpError` (`.status`, `.body`).
+
+```typescript
+const ai = new OpenAIProvider({ apiKey, maxRetries: 2, retryBaseDelayMs: 500 }) // defaults shown; 0 disables
+
+const controller = new AbortController()
+const res = await ai.complete({
+  messages,
+  signal:    controller.signal, // abort() tears the HTTP request down (AbortError)
+  timeoutMs: 15_000             // overall deadline across retries (TimeoutError)
+})
+// signal / timeoutMs work for stream() and embed() too.
+// The provider-level `timeoutMs` option stays a per-attempt socket idle timeout.
+```
+
+## Tool calling
+
+`tools` / `toolChoice` work with OpenAI, Anthropic, Gemini (`functionDeclarations`)
+and Ollama (`tools` on `/api/chat`), so `Agent` runs on any of them. Results come
+back as `response.toolCalls: ToolCall[]` with `finishReason: 'tool_use'`.
+
+When streaming, tool calls arrive as chunks with `toolCallDelta` (first `{ id, name }`,
+then `toolCallArgumentsDelta` JSON fragments for OpenAI/Anthropic; Gemini and Ollama
+send one complete `{ id, name, arguments }`), plus `toolCallIndex`. The final
+`done` chunk's `response.toolCalls` holds the assembled, parsed calls.
+
+`Agent.runStream()` always ends with a `done: true` step; if `maxIterations` is
+hit, its `finalResult` matches `run()`'s (`success: false`).
+
+`calculatorTool` evaluates with a small arithmetic parser (no `eval`/`new Function`):
+`+ - * / % ^ **`, parentheses, unary minus, decimals/exponents, and Math
+functions/constants with or without `Math.` (`sqrt`, `pow`, `log`, `sin`, `max`, `PI`, `E`, ...).
+It is also exported as `evaluateMathExpression(expr)`.
+
+## Embeddings
+
+- Ollama uses the batched `/api/embed` (`input: string[]`) and falls back to the
+  legacy one-request-per-text `/api/embeddings` when the server returns 404
+  (Ollama < 0.3.4). Note `/api/embed` returns L2-normalized vectors.
+- Gemini uses `batchEmbedContents` (100 texts per request).
+
+## VectorStore persistence
+
+```typescript
+const store = new VectorStore({ metric: 'cosine' })
+await store.upsert(docs)                      // add() also replaces by id; O(1) id index
+await store.save('./data/vectors.json')        // atomic write, creates directories
+await new VectorStore().load('./data/vectors.json')
+const copy = VectorStore.fromJSON(store.toJSON())   // keeps metric + maxDocuments
+```
+
+All metrics (`cosine`, `dot`, `euclidean`) throw on vector dimension mismatch.
+
+## MCP
+
+`MCPClient` POSTs to `serverUrl` exactly as given (path, trailing slash and query
+string preserved) and resolves Streamable HTTP SSE responses as soon as the
+matching JSON-RPC message arrives.
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

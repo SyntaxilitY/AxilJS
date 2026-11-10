@@ -25,6 +25,7 @@ class BaseValidator {
     _nullable = false;
     _defaultValue = undefined;
     rules = [];
+    _transforms = [];
     /**
      * Mark this field as optional (undefined is allowed).
      */
@@ -60,6 +61,18 @@ class BaseValidator {
                 code: 'CUSTOM'
             };
         });
+        return this;
+    }
+    /**
+     * Transform the validated output value (applied after validation, in the
+     * order added; not called for null/undefined). The result is what parse()
+     * and validate() hand back - validation rules still see the input value.
+     *
+     *   v.string().transform(s => s.toUpperCase())
+     *   v.string().transform(Number)   // BaseValidator<number>
+     */
+    transform(fn) {
+        this._transforms.push(fn);
         return this;
     }
     /**
@@ -106,9 +119,42 @@ class BaseValidator {
         if (errors.length > 0) {
             return { success: false, errors };
         }
+        return buildOutput(this, value);
+    }
+    /**
+     * Build the output value for already-validated input
+     * (applies defaults and transforms, including on nested fields).
+     * @internal Used by ObjectValidator / ArrayValidator
+     */
+    _output(value) {
+        let out = this._build(value);
+        if (out === undefined || out === null)
+            return out;
+        for (const fn of this._transforms)
+            out = fn(out);
+        return out;
+    }
+    /**
+     * Type-specific output (before transforms). Subclasses extend this.
+     * @internal
+     */
+    _build(value) {
+        return value === undefined ? this._defaultValue : value;
+    }
+}
+/** Build parse() output; a throwing transform becomes a validation error. */
+function buildOutput(validator, value) {
+    try {
+        return { success: true, data: validator._output(value) };
+    }
+    catch (error) {
         return {
-            success: true,
-            data: (value === undefined ? this._defaultValue : value)
+            success: false,
+            errors: [{
+                    path: 'root',
+                    message: error instanceof Error ? error.message : String(error),
+                    code: 'TRANSFORM_ERROR'
+                }]
         };
     }
 }
@@ -140,9 +186,16 @@ class StringValidator extends BaseValidator {
         this._urlMode = true;
         return this;
     }
+    /**
+     * Validate the trimmed string, and return it trimmed.
+     */
     trim() {
         this._trim = true;
         return this;
+    }
+    _build(value) {
+        const out = super._build(value);
+        return this._trim && typeof out === 'string' ? out.trim() : out;
     }
     validateType(value, path) {
         if (typeof value !== 'string') {
@@ -164,6 +217,9 @@ class StringValidator extends BaseValidator {
                 code: 'MAX_LENGTH'
             });
         }
+        // Reset lastIndex so /g or /y regexes don't carry state between calls
+        if (this._pattern)
+            this._pattern.lastIndex = 0;
         if (this._pattern && !this._pattern.test(str)) {
             errors.push({
                 path,
@@ -201,7 +257,8 @@ class NumberValidator extends BaseValidator {
     validateType(value, path) {
         // Accept string numbers too (from query params)
         const num = typeof value === 'string' ? Number(value) : value;
-        if (typeof num !== 'number' || isNaN(num)) {
+        // NaN and +/-Infinity are not usable numbers (also rejects 'Infinity')
+        if (typeof num !== 'number' || !Number.isFinite(num)) {
             return [{ path, message: `${path} must be a number`, code: 'TYPE_ERROR' }];
         }
         const errors = [];
@@ -271,6 +328,12 @@ class ArrayValidator extends BaseValidator {
         });
         return errors;
     }
+    _build(value) {
+        value = super._build(value);
+        if (!Array.isArray(value))
+            return value;
+        return value.map(item => this.itemValidator._output(item));
+    }
 }
 class ObjectValidator extends BaseValidator {
     shape;
@@ -304,18 +367,24 @@ class ObjectValidator extends BaseValidator {
         if (errors.length > 0) {
             return { success: false, errors };
         }
-        let data = value;
-        // Strip unknown fields if configured
-        if (this._strip && data) {
-            const stripped = {};
-            for (const key of Object.keys(this.shape)) {
-                if (key in data) {
-                    stripped[key] = data[key];
-                }
-            }
-            data = stripped;
+        // Applies defaults, strip() and transforms recursively (incl. nested objects)
+        return buildOutput(this, value);
+    }
+    _build(value) {
+        value = super._build(value);
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            return value;
         }
-        return { success: true, data };
+        const src = value;
+        // Strip unknown fields if configured, otherwise keep them
+        const out = this._strip ? {} : { ...src };
+        for (const [key, validator] of Object.entries(this.shape)) {
+            const fieldValue = validator._output(src[key]);
+            if (fieldValue !== undefined || key in src) {
+                out[key] = fieldValue;
+            }
+        }
+        return out;
     }
 }
 // ─── Enum Validator ───────────────────────────────────────────────────────────
@@ -336,6 +405,94 @@ class EnumValidator extends BaseValidator {
         return [];
     }
 }
+class LiteralValidator extends BaseValidator {
+    expected;
+    constructor(expected) {
+        super();
+        this.expected = expected;
+        // v.literal(null) must accept null
+        if (expected === null)
+            this._nullable = true;
+    }
+    validateType(value, path) {
+        if (value !== this.expected) {
+            return [{
+                    path,
+                    message: `${path} must be ${JSON.stringify(this.expected)}`,
+                    code: 'LITERAL'
+                }];
+        }
+        return [];
+    }
+}
+class UnionValidator extends BaseValidator {
+    options;
+    constructor(options) {
+        super();
+        this.options = options;
+        // null is allowed if any option allows it (e.g. v.literal(null))
+        if (options.some(option => option._validate(null, 'root').length === 0)) {
+            this._nullable = true;
+        }
+    }
+    /** The first option that accepts value, or undefined. */
+    matching(value) {
+        return this.options.find(option => option._validate(value, 'root').length === 0);
+    }
+    validateType(value, path) {
+        if (this.matching(value))
+            return [];
+        return [{
+                path,
+                message: `${path} does not match any of the allowed types`,
+                code: 'UNION'
+            }];
+    }
+    _build(value) {
+        value = super._build(value);
+        if (value === undefined || value === null)
+            return value;
+        // Output (defaults, transforms, strip) of the option that matched
+        const option = this.matching(value);
+        return option ? option._output(value) : value;
+    }
+}
+// ─── Record Validator ─────────────────────────────────────────────────────────
+class RecordValidator extends BaseValidator {
+    valueValidator;
+    constructor(valueValidator) {
+        super();
+        this.valueValidator = valueValidator;
+    }
+    validateType(value, path) {
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            return [{ path, message: `${path} must be an object`, code: 'TYPE_ERROR' }];
+        }
+        const errors = [];
+        for (const [key, item] of Object.entries(value)) {
+            const fieldPath = path === 'root' ? key : `${path}.${key}`;
+            errors.push(...this.valueValidator._validate(item, fieldPath));
+        }
+        return errors;
+    }
+    _build(value) {
+        value = super._build(value);
+        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+            return value;
+        }
+        const out = {};
+        for (const [key, item] of Object.entries(value)) {
+            // defineProperty so a "__proto__" key can't replace the prototype
+            Object.defineProperty(out, key, {
+                value: this.valueValidator._output(item),
+                enumerable: true,
+                writable: true,
+                configurable: true
+            });
+        }
+        return out;
+    }
+}
 // ─── Public API ───────────────────────────────────────────────────────────────
 /**
  * Validation schema builder.
@@ -352,6 +509,9 @@ exports.v = {
     boolean: () => new BooleanValidator(),
     array: (item) => new ArrayValidator(item),
     object: (shape) => new ObjectValidator(shape),
-    enum: (values) => new EnumValidator(values)
+    enum: (values) => new EnumValidator(values),
+    literal: (value) => new LiteralValidator(value),
+    union: (options) => new UnionValidator(options),
+    record: (valueSchema) => new RecordValidator(valueSchema)
 };
 //# sourceMappingURL=schema.js.map

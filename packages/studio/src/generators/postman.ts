@@ -32,7 +32,7 @@ export function generatePostmanCollection(
         ],
         url: {
           raw:      `${appUrl}${route.path}`,
-          host:     [appUrl],
+          ...urlParts(appUrl),
           path:     route.path.split('/').filter(Boolean),
           variable: extractPathVariables(route.path)
         },
@@ -60,6 +60,21 @@ export function generatePostmanCollection(
       { key: 'baseUrl', value: appUrl,  type: 'string' },
       { key: 'token',   value: '',       type: 'string' }
     ]
+  }
+}
+
+// Postman v2.1 Url object: protocol without "://", host as an array of
+// host-name parts (["api", "example", "com"]), port as a string
+function urlParts(appUrl: string): { protocol?: string; host: string[]; port?: string } {
+  try {
+    const u = new URL(appUrl)
+    return {
+      protocol: u.protocol.replace(/:$/, ''),
+      host:     u.hostname.split('.').filter(Boolean),
+      ...(u.port ? { port: u.port } : {})
+    }
+  } catch {
+    return { host: [appUrl] }
   }
 }
 

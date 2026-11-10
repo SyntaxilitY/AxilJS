@@ -36,7 +36,7 @@ export interface LockEntry {
 }
 
 export interface LockFile {
-  // @axiljsJS lock file version (for future migration)
+  // AxilJS lock file version (for future migration)
   lockfileVersion: number;
 
   // Timestamp of last update
@@ -79,7 +79,7 @@ export class LockFileManager {
       return JSON.parse(content) as LockFile;
     } catch {
       console.warn(
-        '[@axiljsJS PM] Warning: Could not parse @axiljs.lock - creating new one'
+        '[AxilJS PM] Warning: Could not parse @axiljs.lock - creating new one'
       );
       return {
         lockfileVersion: LOCKFILE_VERSION,

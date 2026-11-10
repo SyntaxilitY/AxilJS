@@ -22,6 +22,26 @@ import type {
 // Re-export for convenience
 export type { Tenant, TenantContext, MultiTenancyOptions, TenantResolutionStrategy };
 
+// ─── Host helpers ────────────────────────────────────────────────────────────
+
+/** Strip an optional :port (handles bracketed IPv6 like "[::1]:3000"). */
+function stripPort(host: string): string {
+  const h = host.trim();
+  if (h.startsWith('[')) {
+    const end = h.indexOf(']');
+    return end === -1 ? h : h.slice(0, end + 1);
+  }
+  const colon = h.indexOf(':');
+  // More than one colon without brackets: bare IPv6, no port
+  if (colon !== -1 && h.indexOf(':', colon + 1) === -1) return h.slice(0, colon);
+  return h;
+}
+
+function isIpAddress(hostname: string): boolean {
+  if (hostname.startsWith('[') || hostname.includes(':')) return true; // IPv6
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname);
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
@@ -64,8 +84,14 @@ export function multiTenancy(options: MultiTenancyOptions = {}): MiddlewareFn {
           break;
 
         case 'subdomain': {
-          const host = (req.headers['host'] as string) ?? '';
-          const segments = host.split('.');
+          const hostHeader = (req.headers['host'] as string) ?? '';
+          const hostname = stripPort(hostHeader);
+          // IP-address hosts (e.g. 10.0.0.5, [::1]) never carry a tenant
+          if (isIpAddress(hostname)) {
+            tenantId = null;
+            break;
+          }
+          const segments = hostname.split('.');
           // Require at least "tenant.example.com" (3 segments) to avoid
           // treating "localhost" or "example.com" as a tenant.
           tenantId = segments.length >= 3 ? segments[0] : null;

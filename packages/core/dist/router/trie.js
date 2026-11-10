@@ -10,7 +10,18 @@
  *   Wildcard:         /files/*
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Trie = void 0;
+exports.Trie = exports.ALL_METHODS = void 0;
+/** Decode a path segment; keep it raw if it is malformed. */
+function decodeSegment(segment) {
+    try {
+        return decodeURIComponent(segment);
+    }
+    catch {
+        return segment;
+    }
+}
+/** Method key used for routes registered with all() */
+exports.ALL_METHODS = '*';
 // ─── Trie ─────────────────────────────────────────────────────────────────────
 class Trie {
     root;
@@ -21,7 +32,8 @@ class Trie {
     createNode() {
         return {
             children: new Map(),
-            handlers: new Map()
+            handlers: new Map(),
+            paramKeys: new Map()
         };
     }
     /**
@@ -36,10 +48,12 @@ class Trie {
         // Split path into segments, filter empty strings
         // '/users/:id' → ['users', ':id']
         const segments = path.split('/').filter(Boolean);
+        const paramNames = [];
         for (const segment of segments) {
             if (segment.startsWith(':')) {
                 // Dynamic segment: :id, :userId, etc.
                 const paramName = segment.slice(1); // Remove the colon
+                paramNames.push(paramName);
                 if (!node.paramChild) {
                     node.paramChild = this.createNode();
                 }
@@ -63,6 +77,7 @@ class Trie {
         }
         // Store handler at the final node
         node.handlers.set(method.toUpperCase(), handler);
+        node.paramKeys.set(method.toUpperCase(), paramNames);
     }
     /**
      * Find a matching route for the given method and path.
@@ -73,49 +88,70 @@ class Trie {
      */
     find(method, path) {
         const segments = path.split('/').filter(Boolean);
-        const params = {};
-        const handler = this.search(this.root, segments, 0, method.toUpperCase(), params);
-        if (!handler)
+        const values = [];
+        const found = this.search(this.root, segments, 0, method.toUpperCase(), values);
+        if (!found)
             return null;
-        return { handler, params };
+        // Map captured values to the param names of the matched route
+        const params = {};
+        const names = found.node.paramKeys.get(found.key) || [];
+        names.forEach((name, i) => {
+            params[name] = decodeSegment(values[i]);
+        });
+        if (found.wildcard !== undefined) {
+            params['*'] = found.wildcard;
+        }
+        return { handler: found.handler, params };
+    }
+    /**
+     * The handler key to use at a node: the exact method, else an all() route.
+     */
+    methodKey(node, method) {
+        if (node.handlers.has(method))
+            return method;
+        if (node.handlers.has(exports.ALL_METHODS))
+            return exports.ALL_METHODS;
+        return null;
     }
     /**
      * Recursive depth-first search through the trie.
+     * Captured :param values are pushed onto `values` (popped on backtrack).
      */
-    search(node, segments, index, method, params) {
+    search(node, segments, index, method, values) {
         // We've consumed all segments - check for a handler at this node
         if (index === segments.length) {
-            return node.handlers.get(method) || null;
+            const key = this.methodKey(node, method);
+            return key ? { handler: node.handlers.get(key), node, key } : null;
         }
         const segment = segments[index];
         // 1. Try exact static match first (highest priority)
         if (node.children.has(segment)) {
-            const result = this.search(node.children.get(segment), segments, index + 1, method, params);
+            const result = this.search(node.children.get(segment), segments, index + 1, method, values);
             if (result)
                 return result;
         }
         // 2. Try dynamic param match
         if (node.paramChild) {
-            const savedParams = { ...params };
             // Capture this segment as the param value
-            params[node.paramChild.paramName] = segment;
-            const result = this.search(node.paramChild, segments, index + 1, method, params);
+            values.push(segment);
+            const result = this.search(node.paramChild, segments, index + 1, method, values);
             if (result)
                 return result;
-            // Backtrack - @axiljsore params if this path didn't work
-            Object.assign(params, savedParams);
-            Object.keys(params).forEach(key => {
-                if (!(key in savedParams))
-                    delete params[key];
-            });
+            // Backtrack - drop the value captured for this path
+            values.pop();
         }
         // 3. Try wildcard match (lowest priority)
         if (node.wildcardChild) {
             // Wildcard consumes all remaining segments
-            params['*'] = segments.slice(index).join('/');
-            const result = node.wildcardChild.handlers.get(method) || null;
-            if (result)
-                return result;
+            const key = this.methodKey(node.wildcardChild, method);
+            if (key) {
+                return {
+                    handler: node.wildcardChild.handlers.get(key),
+                    node: node.wildcardChild,
+                    key,
+                    wildcard: segments.slice(index).join('/')
+                };
+            }
         }
         return null;
     }

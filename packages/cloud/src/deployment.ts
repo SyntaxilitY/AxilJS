@@ -124,7 +124,7 @@ metadata:
   name: ${name}
   labels:
     app: ${name}
-    version: ${cfg.version}
+    version: ${JSON.stringify(String(cfg.version))}
 spec:
   replicas: ${replicas}
   strategy:
@@ -139,7 +139,7 @@ spec:
     metadata:
       labels:
         app: ${name}
-        version: ${cfg.version}
+        version: ${JSON.stringify(String(cfg.version))}
     spec:
       securityContext:
         runAsNonRoot: true
@@ -286,7 +286,7 @@ export function generateDeployment(
       writeFileSync(join(dir, f.filename), f.content, 'utf-8');
     }
     console.log(
-      `\x1b[32m[@axiljs Deploy]\x1b[0m Generated ${files.length} files in ./${dir}/`
+      `\x1b[32m[@axiljs Deploy]\x1b[0m Generated ${files.length} files in ${dir}/`
     );
   }
 

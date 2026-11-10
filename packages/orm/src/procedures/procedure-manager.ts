@@ -37,6 +37,12 @@ export class ProcedureManager {
     }
 
     const result = await driver.query<T>(sql, params)
+
+    // mysql2 returns CALL results as [[...rows], ResultSetHeader]
+    if (driverType === 'mysql' && Array.isArray(result.rows[0])) {
+      return result.rows[0] as unknown as T[]
+    }
+
     return result.rows
   }
 

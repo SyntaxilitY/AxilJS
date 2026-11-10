@@ -103,11 +103,18 @@ function UpdatedAt() {
     });
 }
 function DeletedAt() {
-    return Column({
+    const column = Column({
         type: 'timestamp',
         name: 'deleted_at',
         nullable: true
     });
+    // Also mark the entity as soft-deletable (see BaseModel / BaseRepository)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (target, propertyKey) => {
+        column(target, propertyKey);
+        const ctor = (typeof target === 'function' ? target : target?.constructor);
+        getOrCreateMeta(ctor).softDelete = { propertyKey: String(propertyKey), columnName: 'deleted_at' };
+    };
 }
 // ── Relations ─────────────────────────────────────────────────────────────
 function makeRelation(relationType) {
@@ -125,6 +132,7 @@ function makeRelation(relationType) {
                 target: targetFactory,
                 foreignKey: options.foreignKey ?? '',
                 pivotTable: options.pivotTable,
+                relatedKey: options.relatedKey,
                 eager: options.eager ?? false
             });
         };

@@ -11,11 +11,11 @@
  *
  *   // Index documents
  *   await rag.index([
- *     { id: '1', content: '@axiljsJS is a backend framework...', metadata: {} }
+ *     { id: '1', content: 'AxilJS is a backend framework...', metadata: {} }
  *   ])
  *
  *   // Query
- *   const answer = await rag.query('What is @axiljsJS?')
+ *   const answer = await rag.query('What is AxilJS?')
  *   console.log(answer.response)
  *   console.log(answer.sources) // Which documents were used
  */
@@ -128,13 +128,13 @@ export class RAGPipeline {
     chunksCreated: number;
   }> {
     console.log(
-      `\x1b[36m[@axiljsJS AI]\x1b[0m Indexing ${documents.length} document(s)...`
+      `\x1b[36m[AxilJS AI]\x1b[0m Indexing ${documents.length} document(s)...`
     );
 
     // Step 1: Chunk documents
     const chunks = this.chunker.chunk(documents);
     console.log(
-      `\x1b[90m[@axiljsJS AI]\x1b[0m Created ${chunks.length} chunk(s)`
+      `\x1b[90m[AxilJS AI]\x1b[0m Created ${chunks.length} chunk(s)`
     );
 
     // Step 2: Generate embeddings for all chunks
@@ -171,13 +171,13 @@ export class RAGPipeline {
       processed += batch.length;
 
       process.stdout.write(
-        `\r\x1b[90m[@axiljsJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
+        `\r\x1b[90m[AxilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
       );
     }
 
     console.log('');
     console.log(
-      `\x1b[32m[@axiljsJS AI]\x1b[0m Indexed ${documents.length} documents ` +
+      `\x1b[32m[AxilJS AI]\x1b[0m Indexed ${documents.length} documents ` +
       `(${chunks.length} chunks, ${this.totalEmbeddingTokens} tokens)`
     );
 
@@ -280,7 +280,12 @@ export class RAGPipeline {
     data: unknown;
   }> {
     // Retrieve context (same as query())
-    const queryEmbedding = await this.provider.embed({ input: question });
+    // Must use the same embedding model as index(), or dimensions mismatch
+    const queryEmbedding = await this.provider.embed(
+      this.options.embeddingModel
+        ? { input: question, model: this.options.embeddingModel }
+        : { input: question }
+    );
     const searchResults = await this.vectorStore.search(
       queryEmbedding.embeddings[0],
       { topK: this.options.topK, minScore: this.options.minScore }

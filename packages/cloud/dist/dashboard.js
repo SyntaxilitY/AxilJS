@@ -1133,8 +1133,8 @@ function createDashboard(options = {}) {
   </div>
 
   <script>
-    const METRICS_URL = ${JSON.stringify(metricsEndpoint)};
-    const HEALTH_URL = ${JSON.stringify(healthEndpoint)};
+    const METRICS_URL = ${JSON.stringify(metricsEndpoint).replace(/</g, '\\u003c')};
+    const HEALTH_URL = ${JSON.stringify(healthEndpoint).replace(/</g, '\\u003c')};
     const REFRESH_MS = ${safeRefresh};
 
     const $ = (id) => document.getElementById(id);
@@ -1231,7 +1231,7 @@ function createDashboard(options = {}) {
         const data = await response.json();
 
         const status =
-          response.ok && data.status === 'ok'
+          response.ok && (data.status === 'ok' || data.status === 'healthy' || data.status === 'up')
             ? 'ok'
             : response.ok
               ? 'warning'

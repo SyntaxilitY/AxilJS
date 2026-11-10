@@ -43,8 +43,20 @@ export interface PrimaryKeyOptions {
 }
 
 export interface RelationOptions {
+  /**
+   * hasOne / hasMany: column on the related table pointing at this entity
+   *                   (default `<this_class_snake>_id`).
+   * belongsTo:        column on this table pointing at the related entity
+   *                   (default `<related_class_snake>_id`).
+   * manyToMany:       pivot column pointing at this entity
+   *                   (default `<this_class_snake>_id`).
+   */
   foreignKey?:    string
+  /** manyToMany: pivot table (default: both class names in snake_case, sorted, joined by `_`). */
   pivotTable?:    string
+  /** manyToMany: pivot column pointing at the related entity (default `<related_class_snake>_id`). */
+  relatedKey?:    string
+  /** Recorded only — relations are loaded explicitly with `with()`. */
   eager?:         boolean
 }
 
@@ -75,6 +87,7 @@ export interface RelationMeta {
   target:         () => Function
   foreignKey:     string
   pivotTable?:    string
+  relatedKey?:    string
   eager:          boolean
 }
 
@@ -90,6 +103,8 @@ export interface EntityMeta {
   columns:        Map<string, ColumnMeta>
   relations:      Map<string, RelationMeta>
   indexes:        IndexMeta[]
+  /** Set by @DeletedAt — enables soft deletes for the entity. */
+  softDelete?:    { propertyKey: string; columnName: string }
 }
 
 // Backward compat
@@ -206,11 +221,18 @@ export function UpdatedAt(): PropDecorator {
 }
 
 export function DeletedAt(): PropDecorator {
-  return Column({
+  const column = Column({
     type:     'timestamp',
     name:     'deleted_at',
     nullable: true
   })
+  // Also mark the entity as soft-deletable (see BaseModel / BaseRepository)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (target: any, propertyKey: string | symbol): void => {
+    column(target, propertyKey)
+    const ctor = (typeof target === 'function' ? target : target?.constructor) as Function
+    getOrCreateMeta(ctor).softDelete = { propertyKey: String(propertyKey), columnName: 'deleted_at' }
+  }
 }
 
 // ── Relations ─────────────────────────────────────────────────────────────
@@ -236,6 +258,7 @@ function makeRelation(
         target:      targetFactory,
         foreignKey:  options.foreignKey ?? '',
         pivotTable:  options.pivotTable,
+        relatedKey:  options.relatedKey,
         eager:       options.eager      ?? false
       })
     }

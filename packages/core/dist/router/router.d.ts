@@ -1,5 +1,5 @@
 /**
- * @axiljsJS Router.
+ * AxilJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
@@ -49,6 +49,16 @@ export declare class Router {
      * Register an OPTIONS route.
      */
     options(path: string, ...args: [...MiddlewareFn[], RouteHandler]): Router;
+    /**
+     * Register a HEAD route.
+     * (Without one, HEAD requests are answered by the GET route by default.)
+     */
+    head(path: string, ...args: [...MiddlewareFn[], RouteHandler]): Router;
+    /**
+     * Register a route for every HTTP method.
+     * A route registered for a specific method on the same path wins.
+     */
+    all(path: string, ...args: [...MiddlewareFn[], RouteHandler]): Router;
     /**
      * Internal route registration.
      * Separates middleware from the final handler.

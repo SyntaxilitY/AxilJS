@@ -3,9 +3,9 @@
  * Logs each request with method, path, status, and duration.
  *
  * Output example:
- *   [@axiljsJS] GET /users/123 → 200 OK  4ms
- *   [@axiljsJS] POST /users   → 201 Created  12ms
- *   [@axiljsJS] GET /missing  → 404 Not Found  1ms
+ *   [AxilJS] GET /users/123 → 200 OK  4ms
+ *   [AxilJS] POST /users   → 201 Created  12ms
+ *   [AxilJS] GET /missing  → 404 Not Found  1ms
  */
 
 import { MiddlewareFn } from '@axiljs/common';
@@ -78,7 +78,7 @@ export function requestLogger(enabled: boolean = true): MiddlewareFn {
       const sColor = statusColor(status);
 
       console.log(
-        `${colors.gray}[@axiljsJS]${colors.reset} ` +
+        `${colors.gray}[AxilJS]${colors.reset} ` +
           `${mColor}${colors.bold}${method.padEnd(7)}${colors.reset} ` +
           `${path.padEnd(30)} ` +
           `${sColor}→ ${status}${colors.reset} ` +

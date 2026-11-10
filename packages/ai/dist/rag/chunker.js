@@ -45,22 +45,25 @@ class DocumentChunker {
     chunkDocument(document) {
         const texts = this.splitText(document.content);
         const chunks = [];
-        let charOffset = 0;
+        // Chunks start at non-decreasing positions; search from the previous start
+        let prevStart = -1;
         texts.forEach((text, index) => {
+            const span = locateChunk(document.content, text, prevStart);
+            if (span)
+                prevStart = span.start;
             if (text.length < this.minChunkSize)
                 return;
-            const startChar = document.content.indexOf(text, charOffset);
-            const endChar = startChar + text.length;
+            const startChar = span ? span.start : 0;
+            const endChar = span ? span.end : startChar + text.length;
             chunks.push({
                 id: `${document.id}-chunk-${index}`,
                 content: text,
                 documentId: document.id,
                 chunkIndex: index,
-                startChar: Math.max(0, startChar),
+                startChar,
                 endChar,
                 metadata: { ...document.metadata }
             });
-            charOffset = Math.max(0, endChar - this.overlap);
         });
         return chunks;
     }
@@ -83,7 +86,8 @@ class DocumentChunker {
         while (start < text.length) {
             const end = Math.min(start + this.chunkSize, text.length);
             chunks.push(text.slice(start, end));
-            start += this.chunkSize - this.overlap;
+            // Always advance (overlap >= chunkSize would otherwise loop forever)
+            start += Math.max(1, this.chunkSize - this.overlap);
             if (start >= text.length)
                 break;
         }
@@ -121,7 +125,11 @@ class DocumentChunker {
         for (const sep of separators) {
             if (!text.includes(sep) && sep !== '')
                 continue;
-            const parts = sep ? text.split(sep) : text.split('');
+            // Character level: merging single chars would join them with spaces
+            // ("abc" -> "a b c"), so slice the text directly instead
+            if (sep === '')
+                break;
+            const parts = text.split(sep);
             const chunks = this.mergeSmallChunks(parts);
             // Check if chunks are now small enough
             if (chunks.every(c => c.length <= this.chunkSize)) {
@@ -131,7 +139,11 @@ class DocumentChunker {
             const finalChunks = [];
             for (const chunk of chunks) {
                 if (chunk.length > this.chunkSize) {
-                    finalChunks.push(...this.recursiveSplit(chunk));
+                    // Only recurse when the chunk shrank; otherwise (overlap + one
+                    // oversized word) recursion reproduces it forever -> stack overflow
+                    finalChunks.push(...(chunk.length < text.length
+                        ? this.recursiveSplit(chunk)
+                        : this.fixedSplit(chunk)));
                 }
                 else {
                     finalChunks.push(chunk);
@@ -157,7 +169,10 @@ class DocumentChunker {
                 // Current chunk is full - save it and start new one
                 chunks.push(current.trim());
                 // Include overlap from end of current chunk
-                const overlapText = current.slice(-this.overlap).trim();
+                // (slice(-0) would return the whole chunk, so overlap 0 is special)
+                const overlapText = this.overlap > 0
+                    ? current.slice(-this.overlap).trim()
+                    : '';
                 current = overlapText
                     ? `${overlapText} ${trimmed}`
                     : trimmed;
@@ -174,4 +189,36 @@ class DocumentChunker {
     }
 }
 exports.DocumentChunker = DocumentChunker;
+// ─── Offsets ─────────────────────────────────────────────────────────────────
+function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+/**
+ * Find where a chunk lives in the original text.
+ *
+ * Merged chunks join their pieces with a single space, while the original
+ * pieces were separated by '\n\n', '\n', '. ' or other whitespace, so a
+ * plain indexOf fails for them. Fall back to matching token by token, where
+ * each space in the chunk stands for an optional '.' plus whitespace.
+ * Chunk content itself is never changed - only the offsets are computed.
+ */
+function locateChunk(source, chunk, prevStart) {
+    const starts = [prevStart + 1, Math.max(0, prevStart), 0];
+    for (const from of starts) {
+        const exact = source.indexOf(chunk, from);
+        if (exact !== -1)
+            return { start: exact, end: exact + chunk.length };
+    }
+    const tokens = chunk.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0)
+        return null;
+    const pattern = new RegExp(tokens.map(escapeRegExp).join('\\.?\\s+'), 'g');
+    for (const from of starts) {
+        pattern.lastIndex = from;
+        const match = pattern.exec(source);
+        if (match)
+            return { start: match.index, end: match.index + match[0].length };
+    }
+    return null;
+}
 //# sourceMappingURL=chunker.js.map

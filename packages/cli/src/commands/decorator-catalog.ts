@@ -216,6 +216,20 @@ const SECURITY_DECORATORS: TDecoratorInfo[] = [
     examples: ['@tPermission("users.write")', '@tPermission("orders.read", "orders.update")']
   },
   {
+    name: 'tPolicy',
+    description: 'Declares an authorization policy',
+    purpose: 'References a named policy that must evaluate true for access',
+    why: 'Decouples authorization logic from route handlers via named policies',
+    whenToUse: 'When access depends on relationships (ownership, membership, state)',
+    whenNotToUse: 'For simple role checks — use tRole instead',
+    category: 'Policy',
+    targets: ['method', 'class'],
+    securityImpact: 'HIGH — policy evaluation determines access',
+    consumedBy: ['Policy Engine', '@axiljs/security'],
+    composesWith: ['tAuth', 'tRole', 'tPermission'],
+    examples: ['@tPolicy("OrderOwnership")', '@tPolicy("TenantAdmin")']
+  },
+  {
     name: 'tRateLimit',
     description: 'Declares rate limiting rules',
     purpose: 'Constrains how frequently an operation may execute',

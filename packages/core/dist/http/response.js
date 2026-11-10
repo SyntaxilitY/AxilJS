@@ -44,7 +44,8 @@ class Response {
     json(data) {
         if (this.sent)
             return;
-        const body = JSON.stringify(data);
+        // JSON.stringify(undefined) is undefined, which would crash below
+        const body = JSON.stringify(data) ?? 'null';
         this.raw.setHeader('Content-Type', 'application/json; charset=utf-8');
         this.raw.setHeader('Content-Length', Buffer.byteLength(body));
         this.raw.end(body);
@@ -69,6 +70,8 @@ class Response {
     send(data) {
         if (this.sent)
             return;
+        if (this.endWithoutBody())
+            return;
         const buffer = typeof data === 'string'
             ? Buffer.from(data)
             : data;
@@ -85,6 +88,21 @@ class Response {
         this.raw.end();
         this.sent = true;
     }
+    /**
+     * 204 / 304 responses must not carry a body or a body Content-Length
+     * (RFC 9110 §15.3.5, §15.4.5). Node drops the body but would still send
+     * the Content-Length header, so end the response bare instead.
+     * Returns true if the response was ended here.
+     */
+    endWithoutBody() {
+        const code = this.raw.statusCode;
+        if (code !== 204 && code !== 304)
+            return false;
+        this.raw.removeHeader('Content-Length');
+        this.raw.end();
+        this.sent = true;
+        return true;
+    }
     // ============================================================================
     // INTERNAL STANDARD RESPONSE HANDLER
     // ============================================================================
@@ -98,6 +116,8 @@ class Response {
             return;
         this.statusCode = statusCode;
         this.raw.statusCode = statusCode;
+        if (this.endWithoutBody())
+            return;
         const body = JSON.stringify({
             status: statusCode,
             code,
@@ -144,8 +164,9 @@ class Response {
                 total,
                 page,
                 limit,
-                totalPages: Math.ceil(total / limit),
-                hasNextPage: page * limit < total,
+                // limit 0 (or negative) would give Infinity/negative page counts
+                totalPages: limit > 0 ? Math.ceil(total / limit) : 0,
+                hasNextPage: limit > 0 && page * limit < total,
                 hasPrevPage: page > 1
             }
         };

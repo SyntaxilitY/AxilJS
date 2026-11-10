@@ -55,6 +55,13 @@ export declare class Span {
     get durationMs(): number;
     isEnded(): boolean;
 }
+export interface SpanContext {
+    traceId?: string;
+    spanId?: string;
+}
+export interface StartSpanOptions {
+    parent?: Span | SpanContext;
+}
 export interface TracerOptions {
     serviceName: string;
     exporter?: (span: SpanData) => void;
@@ -66,14 +73,23 @@ export declare class Tracer {
     private maxSpans;
     constructor(options: TracerOptions);
     /**
-     * Start a new root span.
+     * Start a new span.
+     * Without options (or with an invalid parent context) this is a new root span.
+     *
+     *   const ctx  = tracer.extractContext(req.headers)
+     *   const span = tracer.startSpan('http.request', { parent: ctx })
      */
-    startSpan(name: string): Span;
+    startSpan(name: string, options?: StartSpanOptions): Span;
     /**
      * Execute a function within a span.
      * Automatically ends the span when done.
      */
     trace<T>(name: string, fn: (span: Span) => Promise<T>, parentSpan?: Span): Promise<T>;
+    /**
+     * Hand a finished span to the configured exporter
+     * (used for spans not created via trace(), e.g. by middleware).
+     */
+    exportSpan(span: SpanData): void;
     /**
      * Get stored spans (when using default in-memory exporter).
      */

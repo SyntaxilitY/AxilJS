@@ -1,5 +1,5 @@
 /**
- * @axiljsJS Application - The main class.
+ * AxilJS Application - The main class.
  * This is what developers create and configure.
  *
  * Usage:
@@ -9,14 +9,21 @@
  *   await app.listen()
  */
 
-import { createServer, IncomingMessage, ServerResponse, Server } from 'http';
+import {
+  createServer,
+  IncomingMessage,
+  ServerResponse,
+  Server,
+  ServerOptions
+} from 'http';
 import {
   AppConfig,
   MiddlewareFn,
   ErrorMiddlewareFn,
   RouteHandler,
   HttpMethod,
-  NotFoundError
+  NotFoundError,
+  axilError
 } from '@axiljs/common';
 
 import { Request } from './http/request';
@@ -25,6 +32,44 @@ import { Router } from './router/router';
 import { MiddlewareChain } from './middleware/chain';
 import { requestLogger } from './middleware/logger';
 import { bodyParser } from './middleware/body-parser';
+
+// Methods probed when building the Allow header of a 405 response
+const KNOWN_METHODS: HttpMethod[] = [
+  'GET',
+  'HEAD',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+  'OPTIONS'
+];
+
+/**
+ * Parse a size such as '1mb', '512kb', '100b' or '2048' into bytes.
+ * @internal
+ */
+export function parseByteSize(size: string | number): number {
+  if (typeof size === 'number') {
+    if (!Number.isFinite(size) || size < 0) {
+      throw new Error(`Invalid size: ${size}`);
+    }
+    return Math.floor(size);
+  }
+
+  const match = /^\s*(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?\s*$/i.exec(size);
+  if (!match) {
+    throw new Error(`Invalid size: '${size}'. Use e.g. '1mb', '500kb' or '1024'.`);
+  }
+
+  const units: Record<string, number> = {
+    b: 1,
+    kb: 1024,
+    mb: 1024 * 1024,
+    gb: 1024 * 1024 * 1024
+  };
+
+  return Math.floor(parseFloat(match[1]) * units[(match[2] || 'b').toLowerCase()]);
+}
 
 export class Application {
   // Configuration
@@ -46,7 +91,11 @@ export class Application {
   private server: Server | null;
 
   constructor(config: AppConfig = {}) {
+    // Spread user config first so the merged/defaulted values below win
+    // (spreading it last would discard the server defaults and let
+    // explicit `undefined` values override the fallbacks)
     this.config = {
+      ...config,
       server: {
         port: 3000,
         host: '0.0.0.0',
@@ -55,8 +104,7 @@ export class Application {
       env: config.env || process.env.NODE_ENV || 'development',
       prettyJson: config.prettyJson ?? true,
       prefix: config.prefix || '',
-      logging: config.logging ?? true,
-      ...config
+      logging: config.logging ?? true
     };
 
     this.router = new Router(this.config.prefix);
@@ -76,8 +124,11 @@ export class Application {
     // Request logging (can be disabled via config)
     this.use(requestLogger(this.config.logging));
 
-    // Body parsing for JSON, form data, etc.
-    this.use(bodyParser());
+    // Body parsing for JSON, form data, etc. (server.bodyLimit, default 1 MB)
+    const bodyLimit = this.config.server?.bodyLimit;
+    this.use(
+      bodyParser(bodyLimit !== undefined ? parseByteSize(bodyLimit) : undefined)
+    );
   }
 
   // ─── Middleware Registration ─────────────────────────────────────────────────
@@ -129,6 +180,28 @@ export class Application {
     return this;
   }
 
+  head(path: string, ...args: [...MiddlewareFn[], RouteHandler]): Application {
+    this.router.head(path, ...args);
+    return this;
+  }
+
+  options(
+    path: string,
+    ...args: [...MiddlewareFn[], RouteHandler]
+  ): Application {
+    this.router.options(path, ...args);
+    return this;
+  }
+
+  /**
+   * Register a route for every HTTP method
+   * (a route for a specific method on the same path wins).
+   */
+  all(path: string, ...args: [...MiddlewareFn[], RouteHandler]): Application {
+    this.router.all(path, ...args);
+    return this;
+  }
+
   // ─── Router Mounting ─────────────────────────────────────────────────────────
 
   /**
@@ -157,17 +230,38 @@ export class Application {
     rawReq: IncomingMessage,
     rawRes: ServerResponse
   ): Promise<void> {
-    // Create @axiljsJS request and response objects
-    const req = new Request(rawReq);
+    // Create AxilJS request and response objects
+    const req = new Request(rawReq, {
+      trustProxy: this.config.server?.trustProxy
+    });
     const res = new Response(rawRes);
 
     // Try to find a matching route
-    const match = this.findRoute(req.method, req.path);
+    const match = this.matchRoute(req.method, req.path);
 
     if (!match) {
-      // No route matched - 404
+      // No route matched - 404, or 405 when enabled and only the method differs
       const middleware = [...this.globalMiddleware];
-      const notFoundHandler: RouteHandler = () => {
+      const allowed = this.config.server?.methodNotAllowed
+        ? this.allowedMethods(req.path)
+        : [];
+
+      const notFoundHandler: RouteHandler = (req, res) => {
+        if (allowed.length > 0) {
+          res.header('Allow', allowed.join(', '));
+
+          // OPTIONS on a known path: answer with the allowed methods
+          if (req.method === 'OPTIONS') {
+            res.status(204).send('');
+            return;
+          }
+
+          throw new axilError(
+            `Method ${req.method} not allowed for ${req.path}`,
+            405,
+            'METHOD_NOT_ALLOWED'
+          );
+        }
         throw new NotFoundError(`Cannot ${req.method} ${req.path}`);
       };
 
@@ -202,6 +296,26 @@ export class Application {
   }
 
   /**
+   * Find the route for a request, answering HEAD with the GET route when no
+   * HEAD route exists (unless server.headFallback is false). Node omits the
+   * body of HEAD responses, so the GET handler only contributes headers.
+   */
+  private matchRoute(method: string, path: string) {
+    const match = this.findRoute(method, path);
+    if (match || method !== 'HEAD' || this.config.server?.headFallback === false) {
+      return match;
+    }
+    return this.findRoute('GET', path);
+  }
+
+  /**
+   * Methods that have a route for this path (for the 405 Allow header).
+   */
+  private allowedMethods(path: string): string[] {
+    return KNOWN_METHODS.filter(method => this.matchRoute(method, path));
+  }
+
+  /**
    * Find a matching route across the main router and all mounted routers.
    */
   private findRoute(
@@ -226,10 +340,18 @@ export class Application {
 
     // Check mounted routers
     for (const { prefix, router } of this.mountedRouters) {
-      // Only try routers where path starts with the prefix
-      if (!path.startsWith(prefix)) continue;
+      // Only try routers where path is under the prefix on a segment
+      // boundary ('/users' must not match '/usersettings')
+      const base = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+      if (base && path !== base && !path.startsWith(base + '/')) continue;
 
-      const match = router.match(method, path);
+      // Routers are usually defined relative to the mount point
+      // (router.get('/:id') mounted at '/users'), so match the path with
+      // the prefix removed; fall back to the full path for routers that
+      // were created with the prefix baked in (new Router('/users')).
+      const relative = path.slice(base.length) || '/';
+      const match =
+        router.match(method, relative) || router.match(method, path);
       if (match) {
         return {
           handler: match.entry.handler,
@@ -254,11 +376,13 @@ export class Application {
     port?: number,
     host?: string
   ): Promise<{ port: number; host: string }> {
-    const listenPort = port || this.config.server?.port || 3000;
+    // ?? so port 0 (pick a free port) is honoured
+    const listenPort = port ?? this.config.server?.port ?? 3000;
     const listenHost = host || this.config.server?.host || '0.0.0.0';
 
     return new Promise((resolve, reject) => {
       this.server = createServer(
+        this.serverOptions(),
         async (rawReq, rawRes) => {
           // Handle each request - catch any unhandled errors
           try {
@@ -283,11 +407,41 @@ export class Application {
       this.server.on('error', reject);
 
       this.server.listen(listenPort, listenHost, () => {
+        // Report the bound port (differs from listenPort when it was 0)
+        const address = this.server?.address();
+        const boundPort =
+          address && typeof address === 'object' ? address.port : listenPort;
+
         // Print startup banner
-        this.printBanner(listenPort, listenHost);
-        resolve({ port: listenPort, host: listenHost });
+        this.printBanner(boundPort, listenHost);
+        resolve({ port: boundPort, host: listenHost });
       });
     });
+  }
+
+  /**
+   * Node server options derived from the config.
+   * server.timeout is the deadline for receiving a whole request (Node's
+   * requestTimeout; slower clients get 408). Node checks it every
+   * connectionsCheckingInterval (30 s by default), so that interval is
+   * scaled down for short timeouts.
+   */
+  private serverOptions(): ServerOptions {
+    const timeout = this.config.server?.timeout;
+    if (timeout === undefined || !Number.isFinite(timeout) || timeout < 0) {
+      return {};
+    }
+    if (timeout === 0) return { requestTimeout: 0 };
+
+    return {
+      requestTimeout: timeout,
+      // Node requires headersTimeout <= requestTimeout (default 60 s)
+      headersTimeout: Math.min(timeout, 60000),
+      connectionsCheckingInterval: Math.max(
+        10,
+        Math.min(30000, Math.floor(timeout / 2))
+      )
+    };
   }
 
   /**

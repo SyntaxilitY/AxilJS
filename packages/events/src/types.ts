@@ -1,6 +1,6 @@
 /**
  * Core event system types.
- * Used across the entire @axiljsJS event infrastructure.
+ * Used across the entire AxilJS event infrastructure.
  */
 
 // ─── Base Event ───────────────────────────────────────────────────────────────
@@ -54,7 +54,8 @@ export interface Subscription {
 // ─── Event Bus Options ────────────────────────────────────────────────────────
 
 export interface EventBusOptions {
-  // Max number of listeners per event type (default: 100)
+  // Warn (once per event type) when more listeners than this are added.
+  // The listener is still registered. 0 / undefined = unlimited (default).
   maxListeners?: number;
 
   // Whether to process events asynchronously (default: true)

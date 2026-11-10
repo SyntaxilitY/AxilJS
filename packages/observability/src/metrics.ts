@@ -22,8 +22,16 @@ type Labels = Record<string, string>;
 function labelsToKey(labels: Labels): string {
   return Object.entries(labels)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}="${v}"`)
+    // Escape label values per Prometheus text format: \ → \\, " → \", newline → \n
+    .map(([k, v]) => `${k}="${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`)
     .join(',');
+}
+
+/**
+ * Escape HELP text per Prometheus text format: \ → \\, newline → \n.
+ */
+function escapeHelp(help: string): string {
+  return String(help).replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
 }
 
 // ─── Counter ─────────────────────────────────────────────────────────────────
@@ -54,7 +62,7 @@ export class Counter {
 
   toPrometheus(): string {
     const lines = [
-      `# HELP ${this.name} ${this.help}`,
+      `# HELP ${this.name} ${escapeHelp(this.help)}`,
       `# TYPE ${this.name} counter`
     ];
 
@@ -97,7 +105,7 @@ export class Gauge {
 
   toPrometheus(): string {
     const lines = [
-      `# HELP ${this.name} ${this.help}`,
+      `# HELP ${this.name} ${escapeHelp(this.help)}`,
       `# TYPE ${this.name} gauge`
     ];
 
@@ -157,18 +165,18 @@ export class Histogram {
 
   toPrometheus(): string {
     const lines = [
-      `# HELP ${this.name} ${this.help}`,
+      `# HELP ${this.name} ${escapeHelp(this.help)}`,
       `# TYPE ${this.name} histogram`
     ];
 
     for (const [key, entry] of this.data.entries()) {
       const labelBase = key ? `,${key}` : '';
-      let cumulativeCount = 0;
 
+      // Bucket counts are already cumulative (observe() increments every
+      // bucket >= value), so emit them as-is rather than summing again.
       for (const [bucket, count] of entry.buckets.entries()) {
-        cumulativeCount += count;
         lines.push(
-          `${this.name}_bucket{le="${bucket}"${labelBase}} ${cumulativeCount}`
+          `${this.name}_bucket{le="${bucket}"${labelBase}} ${count}`
         );
       }
 
@@ -181,18 +189,33 @@ export class Histogram {
   }
 }
 
+function metricTypeName(m: Counter | Gauge | Histogram): string {
+  if (m instanceof Counter) return 'counter';
+  if (m instanceof Gauge) return 'gauge';
+  return 'histogram';
+}
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
+/**
+ * Registration is idempotent per name: registering a name again with the
+ * same metric type returns the EXISTING metric (its original help, labels
+ * and buckets are kept). Registering it with a different type throws.
+ */
 export class MetricsRegistry {
   private metrics: Array<Counter | Gauge | Histogram> = [];
 
   counter(name: string, help: string, labelNames: string[] = []): Counter {
+    const existing = this.findExisting(name, Counter, 'counter');
+    if (existing) return existing;
     const metric = new Counter(name, help, labelNames);
     this.metrics.push(metric);
     return metric;
   }
 
   gauge(name: string, help: string, labelNames: string[] = []): Gauge {
+    const existing = this.findExisting(name, Gauge, 'gauge');
+    if (existing) return existing;
     const metric = new Gauge(name, help, labelNames);
     this.metrics.push(metric);
     return metric;
@@ -204,9 +227,32 @@ export class MetricsRegistry {
     buckets?: number[],
     labelNames: string[] = []
   ): Histogram {
+    const existing = this.findExisting(name, Histogram, 'histogram');
+    if (existing) return existing;
     const metric = new Histogram(name, help, buckets, labelNames);
     this.metrics.push(metric);
     return metric;
+  }
+
+  /**
+   * Look up a metric by name.
+   */
+  get(name: string): Counter | Gauge | Histogram | undefined {
+    return this.metrics.find(m => m.name === name);
+  }
+
+  private findExisting<T extends Counter | Gauge | Histogram>(
+    name: string,
+    type: new (...args: any[]) => T,
+    typeName: string
+  ): T | undefined {
+    const existing = this.metrics.find(m => m.name === name);
+    if (!existing) return undefined;
+    if (existing instanceof type) return existing;
+    throw new Error(
+      `Metric '${name}' is already registered as a ${metricTypeName(existing)}, ` +
+      `cannot re-register it as a ${typeName}`
+    );
   }
 
   /**

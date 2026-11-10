@@ -113,14 +113,16 @@ export function requireOwnership(paramName: string = 'id'): MiddlewareFn {
     }
 
     const resourceId = req.params[paramName];
-    const userId = String(user.id || user.sub);
+    const rawUserId = user.id ?? user.sub;
+    // Avoid String(undefined) === 'undefined' matching a ':id' of "undefined"
+    const userId = rawUserId === undefined || rawUserId === null ? null : String(rawUserId);
 
     // Admins can access any resource
     const isAdmin =
       user.role === 'admin' ||
       (Array.isArray(user.roles) && user.roles.includes('admin'));
 
-    if (!isAdmin && resourceId !== userId) {
+    if (!isAdmin && (userId === null || resourceId !== userId)) {
       return next(
         new ForbiddenError('You do not have permission to access this resource')
       );

@@ -8,6 +8,31 @@
 import { BaseDriver, TransactionContext } from './base-driver';
 import { ConnectionConfig, QueryResult } from '../types';
 
+/**
+ * mysql2 pool options for a ConnectionConfig. `config.url`
+ * (mysql://user:pass@host:3306/db) takes priority over the individual fields,
+ * which still override pool size / ssl.
+ */
+export function buildMySQLPoolOptions(config: ConnectionConfig): Record<string, unknown> {
+  const common = {
+    connectionLimit: config.pool?.max || 10,
+    ...(config.ssl !== undefined ? { ssl: config.ssl } : {})
+  };
+
+  if (config.url) {
+    return { uri: config.url, ...common };
+  }
+
+  return {
+    host: config.host || 'localhost',
+    port: config.port || 3306,
+    database: config.database,
+    user: config.username,
+    password: config.password,
+    ...common
+  };
+}
+
 export class MySQLDriver extends BaseDriver {
   // mysql2 pool instance
   private pool: any = null;
@@ -20,26 +45,26 @@ export class MySQLDriver extends BaseDriver {
     try {
       const mysql = require('mysql2/promise');
 
-      this.pool = mysql.createPool({
-        host: this.config.host || 'localhost',
-        port: this.config.port || 3306,
-        database: this.config.database,
-        user: this.config.username,
-        password: this.config.password,
-        connectionLimit: this.config.pool?.max || 10,
-        ssl: this.config.ssl
-      });
+      this.pool = mysql.createPool(buildMySQLPoolOptions(this.config));
 
       // Test connection
-      const conn = await this.pool.getConnection();
+      let conn: any;
+      try {
+        conn = await this.pool.getConnection();
+      } catch (error) {
+        // Don't leak the pool when the first connection fails
+        await this.pool.end().catch(() => {});
+        this.pool = null;
+        throw error;
+      }
       conn.release();
 
       this.connected = true;
 
-      console.log(
-        `\x1b[32m[@axiljsJS ORM]\x1b[0m MySQL connected: ` +
-          `${this.config.host}:${this.config.port}/${this.config.database}`
-      );
+      const target = this.config.url
+        ? this.config.url.replace(/:[^:@/]+@/, ':***@') // Hide password in log
+        : `${this.config.host}:${this.config.port}/${this.config.database}`;
+      console.log(`\x1b[32m[AxilJS ORM]\x1b[0m MySQL connected: ${target}`);
     } catch (error: any) {
       if (error.code === 'MODULE_NOT_FOUND') {
         throw new Error(
@@ -70,7 +95,8 @@ export class MySQLDriver extends BaseDriver {
     this.log(sql, params);
 
     try {
-      const [rows, fields] = await this.pool.execute(sql, params);
+      // mysql2 rejects undefined bind values — send NULL instead
+      const [rows, fields] = await this.pool.execute(sql, params.map(v => v === undefined ? null : v));
 
       // mysql2 returns different shapes for SELECT vs writes
       if (Array.isArray(rows)) {
@@ -102,7 +128,7 @@ export class MySQLDriver extends BaseDriver {
       const trxContext: TransactionContext = {
         query: async <R>(sql: string, params: unknown[] = []) => {
           this.log(sql, params);
-          const [rows] = await conn.execute(sql, params);
+          const [rows] = await conn.execute(sql, params.map(v => v === undefined ? null : v));
           if (Array.isArray(rows)) {
             return { rows: rows as R[], affectedRows: 0 };
           }
@@ -119,7 +145,11 @@ export class MySQLDriver extends BaseDriver {
       await conn.commit();
       return result;
     } catch (error) {
-      await conn.rollback();
+      try {
+        await conn.rollback();
+      } catch {
+        // Preserve the original error
+      }
       throw error;
     } finally {
       conn.release();

@@ -56,9 +56,19 @@ class MigrationRunner {
     getMigrationFiles() {
         if (!(0, fs_1.existsSync)(this.migrationsDir))
             return [];
+        // Skip declaration files and keep one file per migration name
+        // (x.ts + x.js side by side would otherwise run twice in one batch)
+        const seen = new Set();
         return (0, fs_1.readdirSync)(this.migrationsDir)
-            .filter(f => f.endsWith('.ts') || f.endsWith('.js'))
-            .sort();
+            .filter(f => (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts'))
+            .sort()
+            .filter(f => {
+            const name = f.replace(/\.(ts|js)$/, '');
+            if (seen.has(name))
+                return false;
+            seen.add(name);
+            return true;
+        });
     }
     async getExecutedMigrations() {
         const result = await this.driver.query('SELECT * FROM _migrations ORDER BY id ASC');
@@ -88,7 +98,9 @@ class MigrationRunner {
             process.stdout.write(`  Migrating: ${name}... `);
             try {
                 await this.driver.transaction(async (trx) => {
-                    const migration = require(filePath);
+                    const mod = require(filePath);
+                    // Support both `export function up` and `export default { up, down }`
+                    const migration = mod && typeof mod.up !== 'function' && mod.default ? mod.default : mod;
                     await migration.up(trx);
                     await trx.query(`INSERT INTO _migrations (name, batch) VALUES (${this.p(1)}, ${this.p(2)})`, [name, batch]);
                 });
@@ -120,7 +132,8 @@ class MigrationRunner {
             process.stdout.write(`  Rolling back: ${migration.name}... `);
             try {
                 await this.driver.transaction(async (trx) => {
-                    const mig = require(path);
+                    const mod = require(path);
+                    const mig = mod && typeof mod.down !== 'function' && mod.default ? mod.default : mod;
                     await mig.down(trx);
                     await trx.query(`DELETE FROM _migrations WHERE name = ${this.p(1)}`, [migration.name]);
                 });

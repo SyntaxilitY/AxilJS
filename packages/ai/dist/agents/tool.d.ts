@@ -44,8 +44,15 @@ export declare function createTool(config: ToolConfig): Tool;
  */
 export declare const currentDateTimeTool: Tool;
 /**
+ * Evaluate an arithmetic expression without eval / new Function.
+ * Supports + - * / % ^ (and **), parentheses, unary +/-, decimals,
+ * scientific notation, Math functions and constants (Math.sqrt or sqrt).
+ * `^` binds tighter than unary minus and is right-associative: -2^2 = -4.
+ */
+export declare function evaluateMathExpression(expression: string): number;
+/**
  * Tool to perform math calculations.
- * Safer than eval - uses a @axiljsricted expression evaluator.
+ * Uses a small recursive-descent parser - no eval / new Function.
  */
 export declare const calculatorTool: Tool;
 /**

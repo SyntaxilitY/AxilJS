@@ -5,7 +5,7 @@
 
 // ─── Leak Types ───────────────────────────────────────────────────────────────
 
-// Every type of memory leak @axiljsJS can detect and fix
+// Every type of memory leak AxilJS can detect and fix
 export type LeakType =
   | 'event-listener'    // Unremoved event listeners
   | 'timer'             // Uncleared setTimeout / setInterval
@@ -55,6 +55,13 @@ export interface MemorySnapshot {
   rssMb:        number;
   usagePercent: number;   // heapUsed / heapTotal * 100
 
+  // V8 heap ceiling (v8.getHeapStatistics().heap_size_limit, i.e. what
+  // --max-old-space-size controls). heapTotal grows on demand, so
+  // usagePercent is routinely ~90%; heapLimitPercent is the real pressure.
+  heapLimit?:        number;  // bytes
+  heapLimitMb?:      number;
+  heapLimitPercent?: number;  // heapUsed / heapLimit * 100
+
   // When taken
   timestamp: string;
 }
@@ -90,13 +97,14 @@ export interface MemoryMonitorOptions {
   // How often to run the monitor in ms (default: 30000)
   intervalMs?: number;
 
-  // Heap usage % that triggers a warning (default: 70)
+  // Heap usage % (of the V8 heap limit) that emits a 'warning' event (default: 70)
   warnThresholdPercent?: number;
 
-  // Heap usage % that triggers critical alert (default: 85)
+  // Heap usage % (of the V8 heap limit) that triggers critical alert (default: 85)
   criticalThresholdPercent?: number;
 
-  // Max heap in MB before forcing GC (default: 512)
+  // Absolute cap: heapUsed >= maxHeapMb is treated as critical
+  // (GC + optimizer + 'critical' event). Not enforced unless set.
   maxHeapMb?: number;
 
   // Auto-fix leaks when detected (default: true)

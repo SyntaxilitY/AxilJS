@@ -1,9 +1,7 @@
 /**
  * OpenAI Provider.
  * Supports GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-3.5-turbo.
- * Uses the official openai npm package (peer dependency).
- *
- * Install: npm install openai
+ * Pure Node.js https - no SDK required.
  *
  * Usage:
  *   const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
@@ -18,6 +16,8 @@ export interface OpenAIProviderOptions {
     baseUrl?: string;
     organization?: string;
     timeoutMs?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
 }
 export declare class OpenAIProvider implements AIProvider {
     readonly name = "openai";
@@ -26,6 +26,8 @@ export declare class OpenAIProvider implements AIProvider {
     private baseUrl;
     private organization?;
     private timeoutMs;
+    private maxRetries;
+    private retryBaseDelayMs?;
     constructor(options: OpenAIProviderOptions);
     complete(options: CompletionOptions): Promise<CompletionResponse>;
     stream(options: CompletionOptions): CompletionStream;
@@ -42,14 +44,15 @@ export declare class OpenAIProvider implements AIProvider {
      * Parse OpenAI tool_calls format into our ToolCall format.
      */
     private parseToolCalls;
+    private assembleToolCalls;
     private mapFinishReason;
+    private headers;
     /**
-     * Make a POST request to the OpenAI API.
-     * Pure Node.js https - no external dependencies.
+     * POST to the OpenAI API (retries, abort and timeouts via ./http).
      */
     private post;
     /**
-     * Stream POST request - returns async iterable of SSE lines.
+     * Streaming POST - async iterable of SSE lines.
      */
     private postStream;
 }

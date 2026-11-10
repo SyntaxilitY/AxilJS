@@ -1,6 +1,6 @@
 /**
  * Application configuration types.
- * Used when creating a new @axiljsJS application.
+ * Used when creating a new AxilJS application.
  */
 export interface ServerConfig {
     port?: number;
@@ -12,7 +12,11 @@ export interface ServerConfig {
     };
     bodyLimit?: string;
     timeout?: number;
+    headFallback?: boolean;
+    methodNotAllowed?: boolean;
+    trustProxy?: TrustProxy;
 }
+export type TrustProxy = boolean | number | ((address: string, hop: number) => boolean);
 export interface AppConfig {
     server?: ServerConfig;
     env?: string;

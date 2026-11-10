@@ -19,6 +19,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import { DECORATOR_CATALOG, type TDecoratorInfo } from './decorator-catalog'
+import * as ui from '../ui'
 
 // ============================================================================
 // ENTRY POINT
@@ -41,6 +42,7 @@ export async function runDecorator(
     case 'check':
       return checkFile(args[0])
 
+    // Machine-readable: pure JSON on stdout, no title or colour
     case 'graph':
       return emitGraph()
 
@@ -48,14 +50,17 @@ export async function runDecorator(
       return listCategories()
 
     default:
-      console.error(
-        `\x1b[31mError:\x1b[0m Unknown decorator subcommand '${subcommand}'`
-      )
-      console.error(
-        'Run \x1b[1maxil decorator --help\x1b[0m style: just run \x1b[1maxil decorator\x1b[0m for usage.'
+      ui.error(
+        `Unknown decorator subcommand '${subcommand}'`,
+        'Run `axil decorator` for the list of subcommands.'
       )
       process.exit(1)
   }
+}
+
+/** One row per decorator: "@tName   Category   description". */
+function decoratorRows(decorators: TDecoratorInfo[]): string[][] {
+  return decorators.map(d => [ui.cmd(`@${d.name}`), ui.muted(d.category), d.description])
 }
 
 // ============================================================================
@@ -66,107 +71,83 @@ function listDecorators(args: string[]): void {
   const categoryFlag = args.find(a => a.startsWith('--category='))
   const category = categoryFlag?.split('=')[1]
 
+  ui.title('decorator list', category ? `Category "${category}"` : 'All semantic decorators')
+
   const decorators = category
     ? DECORATOR_CATALOG.filter(d => d.category.toLowerCase() === category.toLowerCase())
     : DECORATOR_CATALOG
 
+  const categories = Array.from(new Set(DECORATOR_CATALOG.map(d => d.category))).sort()
+
   if (decorators.length === 0) {
-    console.log(`\nNo decorators found${category ? ` in category "${category}"` : ''}.\n`)
+    ui.warn(`No decorators found${category ? ` in category "${category}"` : ''}.`)
+    ui.line()
+    ui.line(ui.muted(`Categories: ${categories.join(', ')}`))
+    ui.line()
     return
   }
 
   const sorted = [...decorators].sort((a, b) => a.name.localeCompare(b.name))
 
-  console.log(
-    `\n\x1b[1m${sorted.length} decorator(s)${category ? ` in "${category}"` : ''}\x1b[0m\n`
-  )
+  ui.line(ui.c.bold(`${sorted.length} decorator(s)${category ? ` in "${category}"` : ''}`))
+  ui.line()
+  ui.table(decoratorRows(sorted), { gap: 3 })
 
-  for (const d of sorted) {
-    const tag = `[${d.category}]`.padEnd(16)
-    console.log(`  \x1b[36m@${d.name.padEnd(22)}\x1b[0m ${tag} ${d.description}`)
-  }
-
-  const categories = Array.from(new Set(DECORATOR_CATALOG.map(d => d.category))).sort()
-  console.log(`\n\x1b[2mCategories: ${categories.join(', ')}\x1b[0m\n`)
+  ui.line()
+  ui.line(ui.muted(`Categories: ${categories.join(', ')}`))
+  ui.line(ui.muted(`Details: ${ui.cmd('axil decorator info <name>')}`))
+  ui.line()
 }
 
 // ============================================================================
 // INFO
 // ============================================================================
 
+function infoSection(heading: string, lines: string[], color: (t: string) => string = ui.c.bold): void {
+  ui.line(color(heading))
+  for (const l of lines) ui.line(`  ${l}`)
+  ui.line()
+}
+
 function showDecoratorInfo(name: string | undefined): void {
   if (!name) {
-    console.error('\x1b[31mError:\x1b[0m Usage: axil decorator info <name>')
+    ui.error('Missing decorator name.', 'Usage: axil decorator info <name>')
     process.exit(1)
   }
 
   const info = findDecorator(name)
 
   if (!info) {
-    console.error(`\x1b[31mError:\x1b[0m Unknown decorator "${name}"`)
+    ui.error(`Unknown decorator "${name}"`, 'Try `axil decorator search <keyword>`.')
     suggestSimilar(name)
     process.exit(1)
   }
 
-  console.log(`\n\x1b[1m\x1b[36m${info.name}\x1b[0m  \x1b[2m[${info.category}]\x1b[0m\n`)
-  console.log(`${info.description}\n`)
+  ui.title('decorator info', info.category)
 
-  console.log('\x1b[1mPurpose:\x1b[0m')
-  console.log(`  ${info.purpose}\n`)
+  ui.line(`${ui.brand('@' + info.name)}  ${ui.muted('[' + info.category + ']')}`)
+  ui.line(info.description)
+  ui.line()
 
-  console.log('\x1b[1mWhy:\x1b[0m')
-  console.log(`  ${info.why}\n`)
-
-  console.log('\x1b[1mWhen to use:\x1b[0m')
-  console.log(`  ${info.whenToUse}\n`)
-
-  if (info.whenNotToUse) {
-    console.log('\x1b[1mWhen NOT to use:\x1b[0m')
-    console.log(`  ${info.whenNotToUse}\n`)
-  }
-
-  console.log('\x1b[1mTargets:\x1b[0m')
-  console.log(`  ${info.targets.join(', ')}\n`)
+  infoSection('Purpose:', [info.purpose])
+  infoSection('Why:', [info.why])
+  infoSection('When to use:', [info.whenToUse])
+  if (info.whenNotToUse) infoSection('When NOT to use:', [info.whenNotToUse])
+  infoSection('Targets:', [info.targets.join(', ')])
 
   if (info.options) {
-    console.log('\x1b[1mOptions:\x1b[0m')
-    for (const [key, desc] of Object.entries(info.options)) {
-      console.log(`  ${key.padEnd(16)} ${desc}`)
-    }
-    console.log()
+    ui.line(ui.c.bold('Options:'))
+    ui.table(Object.entries(info.options).map(([key, desc]) => [ui.cmd(key), desc]), { indent: 4, gap: 2 })
+    ui.line()
   }
 
-  if (info.consumedBy?.length) {
-    console.log('\x1b[1mConsumed by:\x1b[0m')
-    info.consumedBy.forEach(c => console.log(`  ${c}`))
-    console.log()
-  }
+  if (info.consumedBy?.length)    infoSection('Consumed by:', info.consumedBy)
+  if (info.composesWith?.length)  infoSection('Compatible with:', info.composesWith.map(c => ui.c.green(c)))
+  if (info.conflictsWith?.length) infoSection('Conflicts with:', info.conflictsWith.map(c => ui.c.red(c)), t => ui.c.bold(ui.c.red(t)))
+  if (info.securityImpact)        infoSection('Security impact:', [info.securityImpact])
+  if (info.performanceImpact)     infoSection('Performance impact:', [info.performanceImpact])
 
-  if (info.composesWith?.length) {
-    console.log('\x1b[1mCompatible with:\x1b[0m')
-    info.composesWith.forEach(c => console.log(`  ${c}`))
-    console.log()
-  }
-
-  if (info.conflictsWith?.length) {
-    console.log('\x1b[1m\x1b[31mConflicts with:\x1b[0m')
-    info.conflictsWith.forEach(c => console.log(`  ${c}`))
-    console.log()
-  }
-
-  if (info.securityImpact) {
-    console.log('\x1b[1mSecurity impact:\x1b[0m')
-    console.log(`  ${info.securityImpact}\n`)
-  }
-
-  if (info.performanceImpact) {
-    console.log('\x1b[1mPerformance impact:\x1b[0m')
-    console.log(`  ${info.performanceImpact}\n`)
-  }
-
-  console.log('\x1b[1mExamples:\x1b[0m')
-  info.examples.forEach(ex => console.log(`  ${ex}`))
-  console.log()
+  infoSection('Examples:', info.examples.map(ex => ui.cmd(ex)))
 }
 
 function suggestSimilar(name: string): void {
@@ -176,9 +157,9 @@ function suggestSimilar(name: string): void {
     .slice(0, 5)
 
   if (suggestions.length) {
-    console.log('\nDid you mean:')
-    suggestions.forEach(s => console.log(`  @${s.name}`))
-    console.log()
+    ui.line('Did you mean:')
+    ui.list(suggestions.map(s => ui.cmd(`@${s.name}`)))
+    ui.line()
   }
 }
 
@@ -188,9 +169,11 @@ function suggestSimilar(name: string): void {
 
 function searchDecorators(query: string): void {
   if (!query) {
-    console.error('\x1b[31mError:\x1b[0m Usage: axil decorator search <query>')
+    ui.error('Missing search query.', 'Usage: axil decorator search <query>')
     process.exit(1)
   }
+
+  ui.title('decorator search', `"${query}"`)
 
   const q = query.toLowerCase()
 
@@ -202,17 +185,17 @@ function searchDecorators(query: string): void {
     d.why.toLowerCase().includes(q)
   )
 
-  console.log(`\n\x1b[1m${results.length} result(s) for "${query}"\x1b[0m\n`)
+  ui.line(ui.c.bold(`${results.length} result(s) for "${query}"`))
+  ui.line()
 
   if (results.length === 0) {
-    console.log('  No matches. Try a broader term.\n')
+    ui.warn('No matches. Try a broader term.')
+    ui.line()
     return
   }
 
-  for (const d of results) {
-    console.log(`  \x1b[36m@${d.name.padEnd(22)}\x1b[0m [${d.category}]  ${d.description}`)
-  }
-  console.log()
+  ui.table(decoratorRows(results), { gap: 3 })
+  ui.line()
 }
 
 // ============================================================================
@@ -226,13 +209,19 @@ function listCategories(): void {
     counts.set(d.category, (counts.get(d.category) ?? 0) + 1)
   }
 
-  console.log('\n\x1b[1mDecorator Categories\x1b[0m\n')
+  ui.title('decorator categories', 'Decorator Categories')
 
-  for (const [category, count] of Array.from(counts.entries()).sort()) {
-    console.log(`  ${category.padEnd(20)} ${count} decorator(s)`)
-  }
+  ui.table(
+    Array.from(counts.entries()).sort().map(([category, count]) => [
+      ui.c.bold(category),
+      ui.muted(`${count} decorator(s)`)
+    ]),
+    { gap: 3 }
+  )
 
-  console.log(`\n  \x1b[2mTotal: ${DECORATOR_CATALOG.length} decorators\x1b[0m\n`)
+  ui.line()
+  ui.line(ui.muted(`Total: ${DECORATOR_CATALOG.length} decorators`))
+  ui.line()
 }
 
 // ============================================================================
@@ -241,29 +230,30 @@ function listCategories(): void {
 
 function checkFile(filePath: string | undefined): void {
   if (!filePath) {
-    console.error('\x1b[31mError:\x1b[0m Usage: axil decorator check <file>')
+    ui.error('Missing file path.', 'Usage: axil decorator check <file>')
     process.exit(1)
   }
 
   const fullPath = resolve(process.cwd(), filePath)
 
   if (!existsSync(fullPath)) {
-    console.error(`\x1b[31mError:\x1b[0m File not found: ${fullPath}`)
+    ui.error(`File not found: ${fullPath}`, 'Usage: axil decorator check <file>')
     process.exit(1)
   }
 
   const source = readFileSync(fullPath, 'utf-8')
 
-  console.log(`\nChecking ${filePath}...\n`)
+  ui.title('decorator check', `Checking ${ui.path(filePath)}`)
 
   const methodBlocks = extractDecoratedMethods(source)
 
   if (methodBlocks.length === 0) {
-    console.log('  No decorated methods found.\n')
+    ui.info('No decorated methods found.')
+    ui.line()
     return
   }
 
-  let hasErrors = false
+  let conflicts = 0
 
   for (const block of methodBlocks) {
     const usedNames = block.decorators.map(d => d.name)
@@ -284,22 +274,21 @@ function checkFile(filePath: string | undefined): void {
     }
 
     if (errors.length > 0) {
-      hasErrors = true
-      console.log(`  \x1b[31m✗\x1b[0m ${block.methodName} — CONFLICT\n`)
-      for (const err of errors) {
-        console.log(`      ${err}`)
-      }
-      console.log(`      Location: ${filePath}:${block.line}\n`)
+      conflicts++
+      ui.line(`${ui.c.red(ui.sym.cross)} ${ui.c.bold(block.methodName)} ${ui.c.red('— CONFLICT')}`)
+      for (const err of errors) ui.line(`    ${err}`)
+      ui.line(`    ${ui.muted('Location:')} ${ui.path(`${filePath}:${block.line}`)}`)
     } else {
-      console.log(`  \x1b[32m✓\x1b[0m ${block.methodName}  — ${usedNames.length} decorator(s), valid composition`)
+      ui.success(block.methodName, `— ${usedNames.length} decorator(s), valid composition`)
     }
   }
 
-  console.log()
-
-  if (hasErrors) {
+  if (conflicts > 0) {
+    ui.failed(`${conflicts} of ${methodBlocks.length} method(s) have conflicting decorators`)
     process.exit(1)
   }
+
+  ui.done(`${methodBlocks.length} method(s) checked, no conflicts`)
 }
 
 interface DecoratedMethodBlock {
@@ -319,17 +308,32 @@ function extractDecoratedMethods(source: string): DecoratedMethodBlock[] {
 
   let pendingDecorators: Array<{ name: string }> = []
   let pendingStartLine = 0
+  // Open-paren depth of a decorator call spanning several lines, e.g.
+  //   @tHttp({
+  //     method: 'GET'
+  //   })
+  let decoratorDepth = 0
+
+  const parenDelta = (text: string): number =>
+    (text.match(/\(/g)?.length ?? 0) - (text.match(/\)/g)?.length ?? 0)
 
   const decoratorRegex = /^\s*@(t[A-Z][a-zA-Z0-9]*)\s*\(/
   const methodRegex = /^\s*(?:public\s+|private\s+|protected\s+|async\s+|static\s+)*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+
+    if (decoratorDepth > 0) {
+      decoratorDepth = Math.max(0, decoratorDepth + parenDelta(line))
+      continue
+    }
+
     const decoratorMatch = line.match(decoratorRegex)
 
     if (decoratorMatch) {
       if (pendingDecorators.length === 0) pendingStartLine = i + 1
       pendingDecorators.push({ name: decoratorMatch[1] })
+      decoratorDepth = Math.max(0, parenDelta(line))
       continue
     }
 
@@ -375,4 +379,4 @@ function findDecorator(name: string): TDecoratorInfo | undefined {
     d => d.name.toLowerCase() === name.toLowerCase() ||
          d.name.toLowerCase() === normalized.toLowerCase()
   )
-}
+}

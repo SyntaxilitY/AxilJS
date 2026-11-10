@@ -5,7 +5,7 @@
  *
  * Optimizations:
  *   1. Trigger GC if available
- *   2. Clear require() module cache of unused modules
+ *   2. Clear require() module cache of unused modules (opt-in: clearModuleCache)
  *   3. Compact string buffers
  *   4. Release idle stream buffers
  *   5. Prune registered caches
@@ -18,16 +18,24 @@ const snapshot_1 = require("./snapshot");
 // ─── Optimizer ────────────────────────────────────────────────────────────────
 class MemoryOptimizer {
     actions = [];
+    options;
+    constructor(options = {}) {
+        this.options = { ...options };
+    }
     /**
      * Run all optimizations.
      * Returns a report showing before/after memory usage.
+     * Per-call options override the constructor options.
      */
-    async optimize() {
+    async optimize(options = {}) {
         this.actions = [];
         const before = (0, snapshot_1.takeSnapshot)();
+        const clearModuleCache = options.clearModuleCache ?? this.options.clearModuleCache ?? false;
         // Run each optimization step
         await this.step1_triggerGC();
-        await this.step2_clearModuleCache();
+        if (clearModuleCache) {
+            await this.step2_clearModuleCache();
+        }
         await this.step3_pruneCaches();
         await this.step4_clearConsoleHistory();
         // Allow GC to settle
@@ -67,7 +75,7 @@ class MemoryOptimizer {
             // Only clear non-essential cached modules
             // Never clear core modules or currently-active package modules
             if (key.includes('node_modules') &&
-                !key.includes('@@axiljs') &&
+                !key.includes('@axiljs') &&
                 !key.includes('typescript') &&
                 // Check if it has been accessed recently via exports
                 require.cache[key]?.exports &&

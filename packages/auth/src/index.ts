@@ -4,7 +4,13 @@
 
 // JWT
 export { JWT } from './jwt/jwt';
-export type { JWTPayload, JWTSignOptions, JWTVerifyOptions } from './jwt/jwt';
+export type {
+  JWTPayload,
+  JWTSignOptions,
+  JWTVerifyOptions,
+  JWTOptions,
+  JWTAlgorithm
+} from './jwt/jwt';
 
 // Auth middleware
 export { authenticate, getUser } from './middleware/auth-middleware';

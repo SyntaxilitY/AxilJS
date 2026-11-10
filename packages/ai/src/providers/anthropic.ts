@@ -20,13 +20,22 @@ import {
   CompletionStream,
   EmbeddingOptions,
   EmbeddingResponse,
-  StreamChunk
+  ToolCall
 } from '../types';
+import { requestJson, requestLines, DEFAULT_MAX_RETRIES } from './http';
 
 export interface AnthropicProviderOptions {
   apiKey: string;
   baseUrl?: string;
+
+  // Per-attempt socket idle timeout in ms (default: 60000)
   timeoutMs?: number;
+
+  // Retries on 429 / 5xx / 529 overloaded / network errors (default: 2)
+  maxRetries?: number;
+
+  // Base delay for exponential backoff with jitter (default: 500)
+  retryBaseDelayMs?: number;
 }
 
 export class AnthropicProvider implements AIProvider {
@@ -36,6 +45,8 @@ export class AnthropicProvider implements AIProvider {
   private apiKey: string;
   private baseUrl: string;
   private timeoutMs: number;
+  private maxRetries: number;
+  private retryBaseDelayMs?: number;
 
   // Anthropic API version header
   private readonly API_VERSION = '2023-06-01';
@@ -50,11 +61,13 @@ export class AnthropicProvider implements AIProvider {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl || 'https://api.anthropic.com/v1';
     this.timeoutMs = options.timeoutMs || 60000;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.retryBaseDelayMs = options.retryBaseDelayMs;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResponse> {
     const body = this.buildRequestBody(options, false);
-    const data = await this.post('/messages', body);
+    const data = await this.post('/messages', body, options);
 
     // Anthropic returns content as an array of content blocks
     const textContent = data.content
@@ -90,8 +103,15 @@ export class AnthropicProvider implements AIProvider {
     let model = options.model || this.defaultModel;
     let inputTokens = 0;
     let outputTokens = 0;
+    let stopReason = '';
+    let streamFailure: string | null = null;
 
-    const lines = await this.postStream('/messages', body);
+    // tool_use blocks keyed by content block index
+    const toolBlocks = new Map<number, { id: string; name: string; json: string; input?: Record<string, unknown> }>();
+    // Stable 0-based position of each tool call (block index -> call index)
+    const toolOrder: number[] = [];
+
+    const lines = this.postStream('/messages', body, options);
 
     for await (const line of lines) {
       if (!line.startsWith('data: ')) continue;
@@ -99,50 +119,106 @@ export class AnthropicProvider implements AIProvider {
       const jsonStr = line.slice(6).trim();
       if (!jsonStr) continue;
 
+      let event: any;
       try {
-        const event = JSON.parse(jsonStr);
+        event = JSON.parse(jsonStr);
+      } catch {
+        continue;
+      }
 
-        switch (event.type) {
-          case 'content_block_delta': {
-            const delta = event.delta?.text || '';
-            if (delta) {
-              fullContent += delta;
-              yield { delta, done: false };
+      switch (event.type) {
+        case 'content_block_start': {
+          const block = event.content_block;
+          if (block?.type === 'tool_use') {
+            const index = typeof event.index === 'number' ? event.index : toolOrder.length;
+            const hasInput = block.input && Object.keys(block.input).length > 0;
+            toolBlocks.set(index, {
+              id: block.id,
+              name: block.name,
+              json: '',
+              input: hasInput ? block.input : undefined
+            });
+            toolOrder.push(index);
+            yield {
+              delta: '',
+              done: false,
+              toolCallIndex: toolOrder.length - 1,
+              toolCallDelta: { id: block.id, name: block.name }
+            };
+          }
+          break;
+        }
+
+        case 'content_block_delta': {
+          if (event.delta?.type === 'input_json_delta') {
+            const block = toolBlocks.get(event.index);
+            const partial = event.delta.partial_json || '';
+            if (block && partial) {
+              block.json += partial;
+              yield {
+                delta: '',
+                done: false,
+                toolCallIndex: toolOrder.indexOf(event.index),
+                toolCallDelta: { id: block.id },
+                toolCallArgumentsDelta: partial
+              };
             }
             break;
           }
 
-          case 'message_delta': {
-            outputTokens = event.usage?.output_tokens || outputTokens;
-            break;
+          const delta = event.delta?.text || '';
+          if (delta) {
+            fullContent += delta;
+            yield { delta, done: false };
           }
-
-          case 'message_start': {
-            model = event.message?.model || model;
-            inputTokens = event.message?.usage?.input_tokens || 0;
-            break;
-          }
-
-          case 'message_stop': {
-            yield {
-              delta: '',
-              done: true,
-              response: {
-                content: fullContent,
-                finishReason: 'stop',
-                usage: {
-                  promptTokens: inputTokens,
-                  completionTokens: outputTokens,
-                  totalTokens: inputTokens + outputTokens
-                },
-                model
-              }
-            };
-            return;
-          }
+          break;
         }
-      } catch {
-        continue;
+
+        case 'message_delta': {
+          outputTokens = event.usage?.output_tokens || outputTokens;
+          stopReason = event.delta?.stop_reason || stopReason;
+          break;
+        }
+
+        case 'error': {
+          // Mid-stream API error (e.g. overloaded_error) - surface it
+          streamFailure = event.error?.message || 'Unknown stream error';
+          break;
+        }
+
+        case 'message_start': {
+          model = event.message?.model || model;
+          inputTokens = event.message?.usage?.input_tokens || 0;
+          break;
+        }
+
+        case 'message_stop': {
+          const toolCalls: ToolCall[] = toolOrder.map(index => {
+            const b = toolBlocks.get(index)!;
+            return { id: b.id, name: b.name, arguments: parseJsonArgs(b.json, b.input) };
+          });
+
+          yield {
+            delta: '',
+            done: true,
+            response: {
+              content: fullContent,
+              toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+              finishReason: this.mapStopReason(stopReason),
+              usage: {
+                promptTokens: inputTokens,
+                completionTokens: outputTokens,
+                totalTokens: inputTokens + outputTokens
+              },
+              model
+            }
+          };
+          return;
+        }
+      }
+
+      if (streamFailure) {
+        throw new Error(`Anthropic stream error: ${streamFailure}`);
       }
     }
   }
@@ -172,12 +248,47 @@ export class AnthropicProvider implements AIProvider {
       systemMessages.map(m => m.content).join('\n') ||
       undefined;
 
+    // Map to Anthropic content blocks. Anthropic has no 'tool' role:
+    // tool results are user-turn tool_result blocks, and assistant tool
+    // calls are tool_use blocks. Consecutive tool results share one turn.
+    const messages: any[] = [];
+    for (const msg of conversationMessages) {
+      if (msg.role === 'tool') {
+        const block = {
+          type: 'tool_result',
+          tool_use_id: msg.toolCallId,
+          content: msg.content
+        };
+        const last = messages[messages.length - 1];
+        if (
+          last && last.role === 'user' && Array.isArray(last.content) &&
+          last.content.every((b: any) => b.type === 'tool_result')
+        ) {
+          last.content.push(block);
+        } else {
+          messages.push({ role: 'user', content: [block] });
+        }
+      } else if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+        messages.push({
+          role: 'assistant',
+          content: [
+            ...(msg.content ? [{ type: 'text', text: msg.content }] : []),
+            ...msg.toolCalls.map(tc => ({
+              type: 'tool_use',
+              id: tc.id,
+              name: tc.name,
+              input: tc.arguments || {}
+            }))
+          ]
+        });
+      } else {
+        messages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
     const body: Record<string, unknown> = {
       model: options.model || this.defaultModel,
-      messages: conversationMessages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })),
+      messages,
       max_tokens: options.maxTokens || 4096,
       stream
     };
@@ -194,6 +305,13 @@ export class AnthropicProvider implements AIProvider {
         description: tool.description,
         input_schema: tool.parameters
       }));
+
+      if (options.toolChoice) {
+        body.tool_choice =
+          options.toolChoice === 'auto' || options.toolChoice === 'none'
+            ? { type: options.toolChoice }
+            : { type: 'tool', name: options.toolChoice.name };
+      }
     }
 
     return body;
@@ -211,131 +329,59 @@ export class AnthropicProvider implements AIProvider {
     return map[reason] || 'stop';
   }
 
-  private post(path: string, body: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const bodyStr = JSON.stringify(body);
-      const url = new URL(this.baseUrl + path);
+  private headers(): Record<string, string> {
+    return {
+      'x-api-key': this.apiKey,
+      'anthropic-version': this.API_VERSION
+    };
+  }
 
-      const req = require('https').request(
-        {
-          hostname: url.hostname,
-          port: 443,
-          path: url.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': this.apiKey,
-            'anthropic-version': this.API_VERSION,
-            'Content-Length': String(Buffer.byteLength(bodyStr))
-          }
-        },
-        (res: any) => {
-          let data = '';
-          res.on('data', (chunk: string) => (data += chunk));
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(data);
-              if (res.statusCode >= 400) {
-                reject(new Error(
-                  `Anthropic API error ${res.statusCode}: ` +
-                  (parsed.error?.message || data)
-                ));
-                return;
-              }
-              resolve(parsed);
-            } catch {
-              reject(new Error(`Anthropic: Invalid JSON: ${data}`));
-            }
-          });
-          res.on('error', reject);
-        }
-      );
-
-      req.on('error', reject);
-      req.setTimeout(this.timeoutMs, () => {
-        req.destroy(new Error(`Anthropic request timed out`));
-      });
-
-      req.write(bodyStr);
-      req.end();
+  private post(
+    path: string,
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<any> {
+    return requestJson({
+      label: 'Anthropic',
+      url: this.baseUrl + path,
+      headers: this.headers(),
+      body,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      idleTimeoutMs: this.timeoutMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs,
+      invalidJson: raw => new Error(`Anthropic: Invalid JSON: ${raw}`)
     });
   }
 
-  private postStream(path: string, body: unknown): AsyncIterable<string> {
-    const bodyStr = JSON.stringify(body);
-    const url = new URL(this.baseUrl + path);
-    const self = this;
+  private postStream(
+    path: string,
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): AsyncIterable<string> {
+    return requestLines({
+      label: 'Anthropic',
+      url: this.baseUrl + path,
+      headers: this.headers(),
+      body,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs
+    });
+  }
+}
 
-    return {
-      [Symbol.asyncIterator]() {
-        return (async function* () {
-          const queue: string[] = [];
-          let notify: (() => void) | null = null;
-          let done = false;
-          let streamError: Error | null = null;
-          let lineBuffer = '';
-
-          const req = require('https').request(
-            {
-              hostname: url.hostname,
-              port: 443,
-              path: url.pathname,
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': self.apiKey,
-                'anthropic-version': self.API_VERSION,
-                'Content-Length': String(Buffer.byteLength(bodyStr))
-              }
-            },
-            (res: any) => {
-              res.on('data', (chunk: Buffer) => {
-                lineBuffer += chunk.toString();
-                const parts = lineBuffer.split('\n');
-                lineBuffer = parts.pop() || '';
-
-                for (const part of parts) {
-                  if (part.trim()) {
-                    queue.push(part.trim());
-                    if (notify) { notify(); notify = null; }
-                  }
-                }
-              });
-
-              res.on('end', () => {
-                done = true;
-                if (notify) { notify(); notify = null; }
-              });
-
-              res.on('error', (err: Error) => {
-                streamError = err;
-                done = true;
-                if (notify) { notify(); notify = null; }
-              });
-            }
-          );
-
-          // ✅ CRITICAL — handle error event on req
-          req.on('error', (err: Error) => {
-            streamError = err;
-            done = true;
-            if (notify) { notify(); notify = null; }
-          });
-
-          req.write(bodyStr);
-          req.end();
-
-          while (!done || queue.length > 0) {
-            if (queue.length > 0) {
-              yield queue.shift()!;
-            } else if (!done) {
-              await new Promise<void>(r => { notify = r; });
-            }
-          }
-
-          if (streamError) throw streamError;
-        })();
-      }
-    };
+/**
+ * Parse accumulated input_json_delta fragments ('' means no input).
+ */
+function parseJsonArgs(json: string, fallback?: Record<string, unknown>): Record<string, unknown> {
+  if (!json.trim()) return fallback || {};
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return fallback || {};
   }
 }

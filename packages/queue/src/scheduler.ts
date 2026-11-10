@@ -25,12 +25,16 @@ import { EventEmitter } from 'events';
 
 // ─── Cron Parser ──────────────────────────────────────────────────────────────
 
-interface ParsedCron {
+export interface ParsedCron {
   minutes:  number[];
   hours:    number[];
   days:     number[];
   months:   number[];
   weekdays: number[];
+  // Whether day-of-month / day-of-week were restricted (not starting with '*').
+  // When both are restricted, standard cron matches if EITHER matches.
+  daysRestricted?:     boolean;
+  weekdaysRestricted?: boolean;
 }
 
 /**
@@ -49,23 +53,41 @@ function parseCronField(field: string, min: number, max: number): number[] {
     return Array.from({ length: max - min + 1 }, (_, i) => min + i);
   }
 
-  // Step values — forward slash syntax e.g. every 15 minutes
-  if (field.startsWith('*/')) {
-    const step = parseInt(field.slice(2), 10);
+  // Comma-separated list — each item may itself be a value, range or step
+  if (field.includes(',')) {
+    const values = field.split(',').flatMap(v => {
+      try {
+        return parseCronField(v.trim(), min, max);
+      } catch {
+        return [];
+      }
+    });
+    return Array.from(new Set(values)).sort((a, b) => a - b);
+  }
+
+  // Step values — forward slash syntax e.g. every 15 minutes,
+  // also on a range ("0-30/5") or from a start value ("5/15")
+  if (field.includes('/')) {
+    const [base, stepStr] = field.split('/');
+    const step = parseInt(stepStr, 10);
     if (isNaN(step) || step <= 0) {
       throw new Error(`Invalid cron step: ${field}`);
     }
+    let start = min;
+    let end = max;
+    if (base !== '*') {
+      const [startStr, endStr] = base.split('-');
+      start = parseInt(startStr, 10);
+      end = endStr !== undefined ? parseInt(endStr, 10) : max;
+      if (isNaN(start) || isNaN(end)) {
+        throw new Error(`Invalid cron step: ${field}`);
+      }
+    }
     const values: number[] = [];
-    for (let i = min; i <= max; i += step) values.push(i);
+    for (let i = start; i <= end; i += step) {
+      if (i >= min && i <= max) values.push(i);
+    }
     return values;
-  }
-
-  // Comma-separated list
-  if (field.includes(',')) {
-    return field
-      .split(',')
-      .map(v => parseInt(v.trim(), 10))
-      .filter(n => !isNaN(n) && n >= min && n <= max);
   }
 
   // Range
@@ -93,7 +115,7 @@ function parseCronField(field: string, min: number, max: number): number[] {
  *
  * @param expression  5-field cron string e.g. "0 9 * * 1-5"
  */
-function parseCron(expression: string): ParsedCron {
+export function parseCron(expression: string): ParsedCron {
   const parts = expression.trim().split(/\s+/);
 
   if (parts.length !== 5) {
@@ -108,20 +130,30 @@ function parseCron(expression: string): ParsedCron {
     hours:    parseCronField(parts[1], 0, 23),
     days:     parseCronField(parts[2], 1, 31),
     months:   parseCronField(parts[3], 1, 12),
-    weekdays: parseCronField(parts[4], 0, 6)
+    // Accept 7 as an alias for Sunday (standard cron)
+    weekdays: Array.from(new Set(parseCronField(parts[4], 0, 7).map(d => (d === 7 ? 0 : d)))),
+    daysRestricted:     !parts[2].startsWith('*'),
+    weekdaysRestricted: !parts[4].startsWith('*')
   };
 }
 
 /**
  * Check whether a given Date matches a parsed cron schedule.
  */
-function matchesCron(date: Date, cron: ParsedCron): boolean {
+export function matchesCron(date: Date, cron: ParsedCron): boolean {
+  const dayOfMonth = cron.days.includes(date.getDate());
+  const dayOfWeek  = cron.weekdays.includes(date.getDay());
+
+  // Standard (Vixie) cron: if both DOM and DOW are restricted, either may match
+  const dayMatches = cron.daysRestricted && cron.weekdaysRestricted
+    ? dayOfMonth || dayOfWeek
+    : dayOfMonth && dayOfWeek;
+
   return (
     cron.minutes.includes(date.getMinutes())    &&
     cron.hours.includes(date.getHours())        &&
-    cron.days.includes(date.getDate())          &&
     cron.months.includes(date.getMonth() + 1)  && // getMonth() is 0-indexed
-    cron.weekdays.includes(date.getDay())
+    dayMatches
   );
 }
 
@@ -159,8 +191,11 @@ export class Scheduler extends EventEmitter {
   // All registered tasks keyed by name
   private tasks = new Map<string, ScheduledTaskInternal>();
 
-  // Interval handle for the per-minute tick
-  private timer?: ReturnType<typeof setInterval>;
+  // Timeout handle for the next minute-boundary tick
+  private alignTimer?: ReturnType<typeof setTimeout>;
+
+  // Epoch ms of the last minute boundary that was ticked
+  private lastTickAt = 0;
 
   // Whether the scheduler is currently running
   private running = false;
@@ -198,23 +233,16 @@ export class Scheduler extends EventEmitter {
 
   /**
    * Start the scheduler.
-   * Aligns to the next minute boundary then checks every 60 seconds.
+   * Each tick is scheduled with setTimeout aligned to the next minute
+   * boundary (instead of setInterval), so timer drift never accumulates.
    */
   start(): void {
     if (this.running) return;
     this.running = true;
 
-    // Calculate how many ms until the next full minute
-    const now               = Date.now();
-    const msUntilNextMinute = 60000 - (now % 60000);
+    this.scheduleNextTick();
 
-    // Align to next minute then tick every 60 seconds
-    setTimeout(() => {
-      this.tick();
-      this.timer = setInterval(() => this.tick(), 60000);
-    }, msUntilNextMinute);
-
-    console.log('\x1b[36m[@axiljsJS Scheduler]\x1b[0m Started');
+    console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Started');
     this.listTasks();
   }
 
@@ -225,12 +253,12 @@ export class Scheduler extends EventEmitter {
     if (!this.running) return;
     this.running = false;
 
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = undefined;
+    if (this.alignTimer) {
+      clearTimeout(this.alignTimer);
+      this.alignTimer = undefined;
     }
 
-    console.log('\x1b[36m[@axiljsJS Scheduler]\x1b[0m Stopped');
+    console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Stopped');
   }
 
   /**
@@ -272,13 +300,30 @@ export class Scheduler extends EventEmitter {
   }
 
   /**
-   * Check the current time against all task schedules.
+   * Arm a timer for the next minute boundary after the current one.
+   */
+  private scheduleNextTick(): void {
+    const now = Date.now();
+    // Next boundary strictly after both "now" and the last ticked boundary
+    let target = now - (now % 60000) + 60000;
+    if (target <= this.lastTickAt) target = this.lastTickAt + 60000;
+
+    this.alignTimer = setTimeout(() => {
+      this.alignTimer = undefined;
+      if (!this.running) return;
+      this.lastTickAt = target;
+      // Timers may fire a hair early; evaluate the minute we were aiming for
+      this.tick(new Date(Math.max(Date.now(), target)));
+      if (this.running) this.scheduleNextTick();
+    }, target - now);
+  }
+
+  /**
+   * Check the given time against all task schedules.
    * Called once per minute.
    */
-  private tick(): void {
+  private tick(now: Date = new Date()): void {
     if (!this.running) return;
-
-    const now = new Date();
 
     for (const task of this.tasks.values()) {
       if (!task.enabled) continue;
@@ -287,7 +332,7 @@ export class Scheduler extends EventEmitter {
         // Run in background — don't await so other tasks aren't blocked
         this.runTask(task).catch(err => {
           console.error(
-            `\x1b[31m[@axiljsJS Scheduler]\x1b[0m Tick error in '${task.name}':`,
+            `\x1b[31m[AxilJS Scheduler]\x1b[0m Tick error in '${task.name}':`,
             err.message
           );
         });
@@ -315,7 +360,7 @@ export class Scheduler extends EventEmitter {
       this.emit('failed', task.name, err);
 
       console.error(
-        `\x1b[31m[@axiljsJS Scheduler]\x1b[0m Task '${task.name}' failed:`,
+        `\x1b[31m[AxilJS Scheduler]\x1b[0m Task '${task.name}' failed:`,
         err.message
       );
     }
@@ -326,12 +371,12 @@ export class Scheduler extends EventEmitter {
    */
   private listTasks(): void {
     if (this.tasks.size === 0) {
-      console.log('\x1b[90m[@axiljsJS Scheduler]\x1b[0m No tasks registered');
+      console.log('\x1b[90m[AxilJS Scheduler]\x1b[0m No tasks registered');
       return;
     }
 
     console.log(
-      `\x1b[90m[@axiljsJS Scheduler]\x1b[0m ` +
+      `\x1b[90m[AxilJS Scheduler]\x1b[0m ` +
       `${this.tasks.size} task(s) registered:`
     );
 

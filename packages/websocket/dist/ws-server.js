@@ -43,15 +43,23 @@ class WSServer {
     connectionHandlers = [];
     // Server options
     options;
+    // Bound upgrade listener (kept so close() can detach it)
+    upgradeListener;
     constructor(httpServer, options = {}) {
         this.httpServer = httpServer;
         this.options = {
             path: options.path || '/ws',
             maxClients: options.maxClients || Infinity,
-            guard: options.guard || (() => true)
+            guard: options.guard || (() => true),
+            maxPayload: options.maxPayload ?? ws_client_1.DEFAULT_MAX_PAYLOAD,
+            closeTimeoutMs: options.closeTimeoutMs ?? 5000,
+            heartbeatIntervalMs: options.heartbeatIntervalMs ?? 30000
         };
         // Listen for HTTP upgrade requests
-        this.httpServer.on('upgrade', this.handleUpgrade.bind(this));
+        this.upgradeListener = (req, socket, head) => {
+            void this.handleUpgrade(req, socket, head);
+        };
+        this.httpServer.on('upgrade', this.upgradeListener);
     }
     // ─── Event Registration ───────────────────────────────────────────────────────
     /**
@@ -160,18 +168,29 @@ class WSServer {
     getRooms() {
         return Array.from(this.rooms.keys());
     }
+    // ─── Shutdown ────────────────────────────────────────────────────────────────
+    /**
+     * Stop accepting upgrades and close every connected client.
+     * Does not close the underlying HTTP server.
+     */
+    close(code = 1001, reason = 'Server shutting down') {
+        this.httpServer.off('upgrade', this.upgradeListener);
+        for (const client of this.clients.values()) {
+            client.close(code, reason);
+        }
+    }
     // ─── Upgrade Handler ──────────────────────────────────────────────────────────
     async handleUpgrade(req, socket, _head) {
-        // Only handle WebSocket upgrades
-        if (!(0, handshake_1.isWebSocketUpgrade)(req)) {
-            socket.destroy();
-            return;
-        }
         // Only handle our configured path
         const url = req.url || '/';
         const path = url.split('?')[0];
         if (path !== this.options.path) {
-            // Not our path - let other handlers deal with it
+            // Not our path - let other upgrade handlers deal with it
+            return;
+        }
+        // Only handle WebSocket upgrades on our path
+        if (!(0, handshake_1.isWebSocketUpgrade)(req)) {
+            (0, handshake_1.rejectUpgrade)(socket, 400, 'Bad Request');
             return;
         }
         // Check client limit
@@ -195,8 +214,16 @@ class WSServer {
         const success = (0, handshake_1.performHandshake)(req, socket);
         if (!success)
             return;
+        // Re-queue any bytes that arrived with the upgrade request (first frames)
+        if (_head && _head.length > 0) {
+            socket.unshift(_head);
+        }
         // Create client wrapper
-        const client = new ws_client_1.WSClient(socket, req);
+        const client = new ws_client_1.WSClient(socket, req, {
+            maxPayload: this.options.maxPayload,
+            closeTimeoutMs: this.options.closeTimeoutMs,
+            heartbeatIntervalMs: this.options.heartbeatIntervalMs
+        });
         // Register client
         this.clients.set(client.id, client);
         // Remove from all data structures on disconnect

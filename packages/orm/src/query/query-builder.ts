@@ -10,16 +10,20 @@
  */
 
 import { BaseDriver } from '../connection/base-driver'
+import { assertSafeIdentifier, assertSortDirection, assertWhereOperator } from './identifier'
+import { eagerLoad } from '../relations/eager-loader'
 
-type Operator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'NOT IN' | 'IS NULL' | 'IS NOT NULL'
+type Operator = '=' | '!=' | '<>' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'IN' | 'NOT IN' | 'IS NULL' | 'IS NOT NULL'
 type OrderDir = 'ASC' | 'DESC'
 type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
+type TrashedMode = 'exclude' | 'include' | 'only'
 
 interface WhereClause {
   column:    string
-  operator:  Operator
+  operator:  Operator | 'BETWEEN' | 'NOT BETWEEN'
   value?:    unknown
   raw?:      string
+  group?:    WhereClause[]
   conjunction: 'AND' | 'OR'
 }
 
@@ -46,6 +50,12 @@ export class QueryBuilder<T = Record<string, unknown>> {
   private _offset?:   number
   private _params:    unknown[]    = []
   private _paramIdx:  number       = 1
+  // Soft deletes (enabled by BaseModel for @DeletedAt entities)
+  private _softDeleteColumn?: string
+  private _trashed:   TrashedMode  = 'exclude'
+  // Eager loading (needs the model class the rows belong to)
+  private _model?:    Function
+  private _with:      string[]     = []
 
   constructor(
     private readonly driver: BaseDriver,
@@ -77,14 +87,28 @@ export class QueryBuilder<T = Record<string, unknown>> {
 
   // ── Where ─────────────────────────────────────────────────────────
 
-  where(column: string, operator: Operator, value?: unknown): this {
-    this._wheres.push({ column, operator, value, conjunction: 'AND' })
-    return this
+  /**
+   * `where('age', '>', 18)` — or a group:
+   * `where(q => q.where('a', '=', 1).orWhere('b', '=', 2))` → `WHERE (a = ? OR b = ?)`
+   */
+  where(callback: (qb: QueryBuilder<T>) => unknown): this
+  where(column: string, operator: Operator, value?: unknown): this
+  where(
+    column:    string | ((qb: QueryBuilder<T>) => unknown),
+    operator?: Operator,
+    value?:    unknown
+  ): this {
+    return this._addWhere('AND', column, operator, value)
   }
 
-  orWhere(column: string, operator: Operator, value?: unknown): this {
-    this._wheres.push({ column, operator, value, conjunction: 'OR' })
-    return this
+  orWhere(callback: (qb: QueryBuilder<T>) => unknown): this
+  orWhere(column: string, operator: Operator, value?: unknown): this
+  orWhere(
+    column:    string | ((qb: QueryBuilder<T>) => unknown),
+    operator?: Operator,
+    value?:    unknown
+  ): this {
+    return this._addWhere('OR', column, operator, value)
   }
 
   whereRaw(raw: string): this {
@@ -93,17 +117,94 @@ export class QueryBuilder<T = Record<string, unknown>> {
   }
 
   whereIn(column: string, values: unknown[]): this {
-    this._wheres.push({ column, operator: 'IN', value: values, conjunction: 'AND' })
-    return this
+    return this._push('AND', column, 'IN', values)
+  }
+
+  whereNotIn(column: string, values: unknown[]): this {
+    return this._push('AND', column, 'NOT IN', values)
   }
 
   whereNull(column: string): this {
-    this._wheres.push({ column, operator: 'IS NULL', conjunction: 'AND' })
-    return this
+    return this._push('AND', column, 'IS NULL')
   }
 
   whereNotNull(column: string): this {
-    this._wheres.push({ column, operator: 'IS NOT NULL', conjunction: 'AND' })
+    return this._push('AND', column, 'IS NOT NULL')
+  }
+
+  whereBetween(column: string, min: unknown, max: unknown): this {
+    return this._push('AND', column, 'BETWEEN', [min, max])
+  }
+
+  whereNotBetween(column: string, min: unknown, max: unknown): this {
+    return this._push('AND', column, 'NOT BETWEEN', [min, max])
+  }
+
+  whereLike(column: string, pattern: string): this {
+    return this._push('AND', column, 'LIKE', pattern)
+  }
+
+  private _addWhere(
+    conjunction: 'AND' | 'OR',
+    column:      string | ((qb: QueryBuilder<T>) => unknown),
+    operator?:   Operator,
+    value?:      unknown
+  ): this {
+    if (typeof column === 'function') {
+      const nested = new QueryBuilder<T>(this.driver, this.driverType)
+      column(nested)
+      this._wheres.push({ column: '', operator: '=', group: nested._wheres, conjunction })
+      return this
+    }
+    return this._push(conjunction, column, assertWhereOperator(operator) as WhereClause['operator'], value)
+  }
+
+  private _push(
+    conjunction: 'AND' | 'OR',
+    column:      string,
+    operator:    WhereClause['operator'],
+    value?:      unknown
+  ): this {
+    assertSafeIdentifier(column, 'column')
+    this._wheres.push({ column, operator, value, conjunction })
+    return this
+  }
+
+  // ── Soft deletes ──────────────────────────────────────────────────
+
+  /** Scope this query to a soft-delete column (set automatically for @DeletedAt models). */
+  useSoftDeletes(column = 'deleted_at'): this {
+    this._softDeleteColumn = assertSafeIdentifier(column, 'soft-delete column')
+    return this
+  }
+
+  /** Include soft-deleted rows. */
+  withTrashed(): this {
+    this._trashed = 'include'
+    return this
+  }
+
+  /** Only soft-deleted rows. */
+  onlyTrashed(): this {
+    this._trashed = 'only'
+    return this
+  }
+
+  // ── Eager loading ─────────────────────────────────────────────────
+
+  /** Bind the entity class whose relations `with()` loads (done by BaseModel.query()). */
+  forModel(model: Function): this {
+    this._model = model
+    return this
+  }
+
+  /**
+   * Eager-load relations declared with @HasOne/@HasMany/@BelongsTo/@ManyToMany.
+   * One batched `IN (...)` query per relation; dot paths load nested relations.
+   *   User.query().with('posts', 'posts.comments').get()
+   */
+  with(...relations: string[]): this {
+    this._with.push(...relations)
     return this
   }
 
@@ -125,7 +226,11 @@ export class QueryBuilder<T = Record<string, unknown>> {
   // ── Order / Group / Limit ─────────────────────────────────────────
 
   orderBy(column: string, direction: OrderDir = 'ASC'): this {
-    this._orders.push({ column, direction })
+    // Sort keys often come from the query string — validate both parts
+    this._orders.push({
+      column:    assertSafeIdentifier(column, 'ORDER BY column'),
+      direction: assertSortDirection(direction)
+    })
     return this
   }
 
@@ -165,28 +270,70 @@ export class QueryBuilder<T = Record<string, unknown>> {
     return '?'
   }
 
-  private compileWheres(): string {
-    if (this._wheres.length === 0) return ''
+  private compileWheres(mode: TrashedMode = this._trashed): string {
+    let conditions = this.compileConditions(this._wheres)
 
-    const parts = this._wheres.map((w, i) => {
-      const prefix = i === 0 ? 'WHERE' : w.conjunction
+    // Soft-delete scope — user conditions are parenthesised so an OR inside
+    // them cannot escape the scope
+    const scope = this.softDeleteScope(mode)
+    if (scope) conditions = conditions ? `(${conditions}) AND ${scope}` : scope
 
-      if (w.raw) return `${prefix} ${w.raw}`
+    return conditions ? `WHERE ${conditions}` : ''
+  }
 
-      if (w.operator === 'IS NULL')     return `${prefix} ${w.column} IS NULL`
-      if (w.operator === 'IS NOT NULL') return `${prefix} ${w.column} IS NOT NULL`
+  private softDeleteScope(mode: TrashedMode): string {
+    if (!this._softDeleteColumn || mode === 'include') return ''
+    // Qualify the column when joins could make it ambiguous
+    const col = this._joins.length && !this._softDeleteColumn.includes('.')
+      ? `${this._table}.${this._softDeleteColumn}`
+      : this._softDeleteColumn
+    return mode === 'only' ? `${col} IS NOT NULL` : `${col} IS NULL`
+  }
 
-      if (w.operator === 'IN' || w.operator === 'NOT IN') {
-        const values = w.value as unknown[]
-        const placeholders = values.map(v => this.nextParam(v)).join(', ')
-        return `${prefix} ${w.column} ${w.operator} (${placeholders})`
-      }
-
-      const ph = this.nextParam(w.value)
-      return `${prefix} ${w.column} ${w.operator} ${ph}`
-    })
-
+  private compileConditions(list: WhereClause[]): string {
+    const parts: string[] = []
+    for (const w of list) {
+      const sql = this.compileCondition(w)
+      if (!sql) continue  // e.g. an empty group
+      parts.push(parts.length === 0 ? sql : `${w.conjunction} ${sql}`)
+    }
     return parts.join(' ')
+  }
+
+  private compileCondition(w: WhereClause): string {
+    if (w.group) {
+      const inner = this.compileConditions(w.group)
+      return inner ? `(${inner})` : ''
+    }
+
+    if (w.raw) return w.raw
+
+    if (w.operator === 'IS NULL')     return `${w.column} IS NULL`
+    if (w.operator === 'IS NOT NULL') return `${w.column} IS NOT NULL`
+
+    // `col = NULL` never matches in SQL — translate to IS [NOT] NULL
+    if (w.value === null && w.operator === '=')  return `${w.column} IS NULL`
+    if (w.value === null && (w.operator === '!=' || w.operator === '<>')) return `${w.column} IS NOT NULL`
+
+    if (w.operator === 'IN' || w.operator === 'NOT IN') {
+      const values = w.value as unknown[]
+      // `IN ()` is a syntax error — empty IN matches nothing, empty NOT IN matches everything
+      if (!values || values.length === 0) {
+        return w.operator === 'IN' ? '1 = 0' : '1 = 1'
+      }
+      const placeholders = values.map(v => this.nextParam(v)).join(', ')
+      return `${w.column} ${w.operator} (${placeholders})`
+    }
+
+    if (w.operator === 'BETWEEN' || w.operator === 'NOT BETWEEN') {
+      const [min, max] = Array.isArray(w.value) ? w.value : []
+      const p1 = this.nextParam(min)
+      const p2 = this.nextParam(max)
+      return `${w.column} ${w.operator} ${p1} AND ${p2}`
+    }
+
+    const ph = this.nextParam(w.value)
+    return `${w.column} ${w.operator} ${ph}`
   }
 
   toSQL(): { sql: string; params: unknown[] } {
@@ -206,7 +353,11 @@ export class QueryBuilder<T = Record<string, unknown>> {
     const orders  = this._orders.length
       ? `ORDER BY ${this._orders.map(o => `${o.column} ${o.direction}`).join(', ')}`
       : ''
-    const limit   = this._limit  !== undefined ? `LIMIT ${this._limit}`   : ''
+    // MySQL / SQLite reject OFFSET without LIMIT — use the dialect's "no limit" value
+    const noLimit = this._limit === undefined && this._offset !== undefined && this.driverType !== 'postgres'
+      ? (this.driverType === 'mysql' ? 'LIMIT 18446744073709551615' : 'LIMIT -1')
+      : ''
+    const limit   = this._limit  !== undefined ? `LIMIT ${this._limit}`   : noLimit
     const offset  = this._offset !== undefined ? `OFFSET ${this._offset}` : ''
 
     const sql = [
@@ -224,9 +375,40 @@ export class QueryBuilder<T = Record<string, unknown>> {
   // ── Execute ───────────────────────────────────────────────────────
 
   async get(): Promise<T[]> {
+    const rows = await this._fetch()
+    if (this._with.length > 0 && rows.length > 0) {
+      if (!this._model) {
+        throw new Error('[AxilORM] with() needs a model — use Model.query() or call forModel(Entity) first.')
+      }
+      await eagerLoad(this._model, rows as unknown as Record<string, unknown>[], this._with, {
+        driver:     this.driver,
+        driverType: this.driverType
+      })
+    }
+    return rows
+  }
+
+  private async _fetch(): Promise<T[]> {
     const { sql, params } = this.toSQL()
     const result = await this.driver.query<T>(sql, params)
     return result.rows
+  }
+
+  // Run a single-value SELECT without permanently changing the builder.
+  // ORDER BY is dropped: it is meaningless for an aggregate and Postgres
+  // rejects ordering by a non-aggregated column.
+  private async _scalar(expression: string, alias: string): Promise<unknown> {
+    const selects = this._selects
+    const orders  = this._orders
+    this._selects = [`${expression} AS ${alias}`]
+    this._orders  = []
+    try {
+      const rows = await this._fetch() as unknown as Array<Record<string, unknown>>
+      return rows[0]?.[alias]
+    } finally {
+      this._selects = selects
+      this._orders  = orders
+    }
   }
 
   async first(): Promise<T | null> {
@@ -242,11 +424,7 @@ export class QueryBuilder<T = Record<string, unknown>> {
   }
 
   async count(): Promise<number> {
-    const original = [...this._selects]
-    this._selects  = ['COUNT(*) AS _count']
-    const rows     = await this.get() as Array<{ _count: string | number }>
-    this._selects  = original
-    return Number(rows[0]?._count ?? 0)
+    return Number(await this._scalar('COUNT(*)', '_count') ?? 0)
   }
 
   async exists(): Promise<boolean> {
@@ -254,14 +432,19 @@ export class QueryBuilder<T = Record<string, unknown>> {
   }
 
   async pluck<K extends keyof T>(column: K): Promise<T[K][]> {
+    const selects = this._selects
     this._selects = [String(column)]
-    const rows    = await this.get()
-    return rows.map(r => r[column])
+    try {
+      const rows = await this._fetch()
+      return rows.map(r => r[column])
+    } finally {
+      this._selects = selects
+    }
   }
 
   // ── Insert ────────────────────────────────────────────────────────
 
-  async insert(data: Partial<T>): Promise<T> {
+  async insert(data: Partial<T>, primaryKey: string = 'id'): Promise<T> {
     const keys   = Object.keys(data)
     const values = Object.values(data)
     this._params   = []
@@ -280,9 +463,16 @@ export class QueryBuilder<T = Record<string, unknown>> {
     }
 
     // MySQL / SQLite: fetch the inserted row
-    const lastId  = (result as any).lastInsertRowid ?? (result as any).insertId
+    // SQLite: insertId is the rowid, which is valid for any rowid table
+    // even when the primary key is not called "id" or is a UUID.
+    // MySQL: insertId is 0 for non auto-increment keys — use the supplied key.
+    const supplied = (data as Record<string, unknown>)[primaryKey]
+    const lastId   = this.driverType === 'sqlite'
+      ? ((result as any).lastInsertRowid ?? (result as any).insertId)
+      : (supplied !== undefined && supplied !== null ? supplied : ((result as any).lastInsertRowid ?? (result as any).insertId))
+    const keyCol   = this.driverType === 'sqlite' ? 'rowid' : primaryKey
     const fetched = await this.driver.query<T>(
-      `SELECT * FROM ${this._table} WHERE id = ${this.nextParam(lastId)}`,
+      `SELECT * FROM ${this._table} WHERE ${keyCol} = ${this.nextParam(lastId)}`,
       [lastId]
     )
     return fetched.rows[0]
@@ -310,6 +500,10 @@ export class QueryBuilder<T = Record<string, unknown>> {
   // ── Update ────────────────────────────────────────────────────────
 
   async update(data: Partial<T>): Promise<number> {
+    return this._update(data as Record<string, unknown>, this._trashed)
+  }
+
+  private async _update(data: Record<string, unknown>, mode: TrashedMode): Promise<number> {
     this._params   = []
     this._paramIdx = 1
 
@@ -317,35 +511,68 @@ export class QueryBuilder<T = Record<string, unknown>> {
       .map(([k, v]) => `${k} = ${this.nextParam(v)}`)
       .join(', ')
 
-    const wheres    = this.compileWheres()
-    const returning = this.driverType === 'postgres' ? 'RETURNING id' : ''
+    const wheres    = this.compileWheres(mode)
+    // No RETURNING: it breaks tables without an "id" column, and affectedRows
+    // already carries the row count for every driver
+    const returning = ''
 
     const sql = `UPDATE ${this._table} SET ${sets} ${wheres} ${returning}`.trim()
     const result = await this.driver.query(sql, this._params)
 
-    return (result as any).rowCount ?? (result as any).changes ?? result.rows.length
+    return result.affectedRows ?? result.rows.length
   }
 
   // ── Delete ────────────────────────────────────────────────────────
 
+  /**
+   * DELETE matching rows. On a soft-delete query (@DeletedAt model) this
+   * sets the deleted-at column instead — use forceDelete() to remove rows.
+   */
   async delete(): Promise<number> {
+    if (this._softDeleteColumn) {
+      return this._update({ [this._softDeleteColumn]: new Date() }, this._trashed === 'only' ? 'only' : 'exclude')
+    }
+    return this._delete(this._trashed)
+  }
+
+  /** Permanently delete matching rows, trashed or not (unless onlyTrashed()). */
+  async forceDelete(): Promise<number> {
+    return this._delete(this._trashed === 'only' ? 'only' : 'include')
+  }
+
+  /** Clear the deleted-at column on matching soft-deleted rows. */
+  async restore(): Promise<number> {
+    if (!this._softDeleteColumn) {
+      throw new Error('[AxilORM] restore() needs a soft-delete column (@DeletedAt or useSoftDeletes()).')
+    }
+    return this._update({ [this._softDeleteColumn]: null }, 'only')
+  }
+
+  private async _delete(mode: TrashedMode): Promise<number> {
     this._params   = []
     this._paramIdx = 1
 
-    const wheres    = this.compileWheres()
-    const returning = this.driverType === 'postgres' ? 'RETURNING id' : ''
+    const wheres    = this.compileWheres(mode)
+    // No RETURNING: it breaks tables without an "id" column, and affectedRows
+    // already carries the row count for every driver
+    const returning = ''
 
     const sql = `DELETE FROM ${this._table} ${wheres} ${returning}`.trim()
     const result = await this.driver.query(sql, this._params)
 
-    return (result as any).rowCount ?? (result as any).changes ?? result.rows.length
+    return result.affectedRows ?? result.rows.length
   }
 
   // ── Increment / Decrement ─────────────────────────────────────────
 
   async increment(column: string, by = 1): Promise<void> {
+    this._params   = []
+    this._paramIdx = 1
     const wheres = this.compileWheres()
-    const sql    = `UPDATE ${this._table} SET ${column} = ${column} + ${by} ${wheres}`
+    assertSafeIdentifier(column, 'column')
+    const step   = Number(by)
+    if (!Number.isFinite(step)) throw new Error(`[AxilORM] increment() step must be a number`)
+    const sql    = `UPDATE ${this._table} SET ${column} = ${column} + ${step} ${wheres}`
     await this.driver.query(sql, this._params)
   }
 
@@ -356,27 +583,19 @@ export class QueryBuilder<T = Record<string, unknown>> {
   // ── Aggregate ─────────────────────────────────────────────────────
 
   async sum(column: string): Promise<number> {
-    this._selects = [`SUM(${column}) AS _sum`]
-    const rows    = await this.get() as Array<{ _sum: string | number }>
-    return Number(rows[0]?._sum ?? 0)
+    return Number(await this._scalar(`SUM(${column})`, '_sum') ?? 0)
   }
 
   async avg(column: string): Promise<number> {
-    this._selects = [`AVG(${column}) AS _avg`]
-    const rows    = await this.get() as Array<{ _avg: string | number }>
-    return Number(rows[0]?._avg ?? 0)
+    return Number(await this._scalar(`AVG(${column})`, '_avg') ?? 0)
   }
 
   async max(column: string): Promise<number> {
-    this._selects = [`MAX(${column}) AS _max`]
-    const rows    = await this.get() as Array<{ _max: string | number }>
-    return Number(rows[0]?._max ?? 0)
+    return Number(await this._scalar(`MAX(${column})`, '_max') ?? 0)
   }
 
   async min(column: string): Promise<number> {
-    this._selects = [`MIN(${column}) AS _min`]
-    const rows    = await this.get() as Array<{ _min: string | number }>
-    return Number(rows[0]?._min ?? 0)
+    return Number(await this._scalar(`MIN(${column})`, '_min') ?? 0)
   }
 
   // ── Raw ───────────────────────────────────────────────────────────

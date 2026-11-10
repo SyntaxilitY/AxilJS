@@ -4,7 +4,7 @@
  *
  * Optimizations:
  *   1. Trigger GC if available
- *   2. Clear require() module cache of unused modules
+ *   2. Clear require() module cache of unused modules (opt-in: clearModuleCache)
  *   3. Compact string buffers
  *   4. Release idle stream buffers
  *   5. Prune registered caches
@@ -26,22 +26,43 @@ export interface OptimizationResult {
   actions:       string[];
 }
 
+// ─── Options ──────────────────────────────────────────────────────────────────
+
+export interface MemoryOptimizerOptions {
+  // Delete "unused" node_modules entries from require.cache (default: false).
+  // Opt-in because it is risky: a later require() re-evaluates the module,
+  // creating duplicate singletons / class identities (instanceof breaks)
+  // and re-running module side effects.
+  clearModuleCache?: boolean;
+}
+
 // ─── Optimizer ────────────────────────────────────────────────────────────────
 
 export class MemoryOptimizer {
   private actions: string[] = [];
+  private options: MemoryOptimizerOptions;
+
+  constructor(options: MemoryOptimizerOptions = {}) {
+    this.options = { ...options };
+  }
 
   /**
    * Run all optimizations.
    * Returns a report showing before/after memory usage.
+   * Per-call options override the constructor options.
    */
-  async optimize(): Promise<OptimizationResult> {
+  async optimize(options: MemoryOptimizerOptions = {}): Promise<OptimizationResult> {
     this.actions = [];
     const before = takeSnapshot();
 
+    const clearModuleCache =
+      options.clearModuleCache ?? this.options.clearModuleCache ?? false;
+
     // Run each optimization step
     await this.step1_triggerGC();
-    await this.step2_clearModuleCache();
+    if (clearModuleCache) {
+      await this.step2_clearModuleCache();
+    }
     await this.step3_pruneCaches();
     await this.step4_clearConsoleHistory();
 
@@ -93,7 +114,7 @@ export class MemoryOptimizer {
       // Never clear core modules or currently-active package modules
       if (
         key.includes('node_modules') &&
-        !key.includes('@@axiljs') &&
+        !key.includes('@axiljs') &&
         !key.includes('typescript') &&
         // Check if it has been accessed recently via exports
         require.cache[key]?.exports &&

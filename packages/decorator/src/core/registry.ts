@@ -26,10 +26,26 @@ interface ParamMeta {
 
 const allEntries: TMetadataEntry[] = []
 
+/**
+ * Copy an inherited store so subclasses keep their parent's metadata
+ * without writing into the parent's store.
+ */
+function cloneStore(inherited: any, depth: number): any {
+  const copy = Object.create(null)
+  if (!inherited) return copy
+  for (const k of Object.keys(inherited)) {
+    const v = inherited[k]
+    copy[k] =
+      depth > 1 ? cloneStore(v, depth - 1) : Array.isArray(v) ? [...v] : v
+  }
+  return copy
+}
+
 function getStore<T>(target: object, key: symbol): T {
-  if (!(target as any)[key]) {
+  if (!Object.prototype.hasOwnProperty.call(target, key)) {
+    const depth = key === CLASS_KEY ? 1 : 2
     Object.defineProperty(target, key, {
-      value: Object.create(null),
+      value: cloneStore((target as any)[key], depth),
       enumerable: false,
       configurable: false,
       writable: true

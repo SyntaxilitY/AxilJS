@@ -11,6 +11,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.bodyParser = bodyParser;
 const common_1 = require("@axiljs/common");
+const request_1 = require("../http/request");
 /**
  * Create body parser middleware.
  *
@@ -29,7 +30,8 @@ function bodyParser(limit = 1024 * 1024) {
                 // No body - that's fine
                 return next();
             }
-            const contentType = req.headers['content-type'] || '';
+            // Media types are case-insensitive (RFC 9110 §8.3.1)
+            const contentType = (req.headers['content-type'] || '').toLowerCase();
             if (contentType.includes('application/json')) {
                 // Parse JSON body
                 try {
@@ -61,9 +63,19 @@ function bodyParser(limit = 1024 * 1024) {
 function parseFormData(data) {
     const result = {};
     data.split('&').forEach(pair => {
-        const [key, value] = pair.split('=').map(decodeURIComponent);
-        if (key)
-            result[key] = value || '';
+        // Split on first '=' only; '+' is a space; malformed escapes don't throw
+        const eqIndex = pair.indexOf('=');
+        const key = (0, request_1.safeDecode)(eqIndex === -1 ? pair : pair.slice(0, eqIndex));
+        const value = eqIndex === -1 ? '' : (0, request_1.safeDecode)(pair.slice(eqIndex + 1));
+        if (key) {
+            // defineProperty so a "__proto__" key can't replace the prototype
+            Object.defineProperty(result, key, {
+                value: value || '',
+                enumerable: true,
+                writable: true,
+                configurable: true
+            });
+        }
     });
     return result;
 }

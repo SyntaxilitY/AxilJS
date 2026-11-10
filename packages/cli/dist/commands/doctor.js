@@ -3,13 +3,49 @@
  * axil doctor
  * Diagnoses project for common issues.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.runDoctor = runDoctor;
 const fs_1 = require("fs");
 const path_1 = require("path");
 const child_process_1 = require("child_process");
+const ui = __importStar(require("../ui"));
 async function runDoctor() {
-    console.log('\n\x1b[36m[AxilJS]\x1b[0m Running diagnostics...\n');
+    ui.title('doctor', 'Diagnose the project');
+    const started = Date.now();
+    const spin = ui.spinner('Running diagnostics');
     const checks = [];
     const cwd = process.cwd();
     // Node.js version
@@ -53,7 +89,9 @@ async function runDoctor() {
                 : 'Not found in dependencies'
         });
         // Lock file
-        const hasLock = (0, fs_1.existsSync)((0, path_1.join)(cwd, 'axil.lock'));
+        // `axil install` delegates to npm (package-lock.json); @axiljs/pm writes @axiljs.lock
+        const hasLock = ['axil.lock', '@axiljs.lock', 'package-lock.json']
+            .some(f => (0, fs_1.existsSync)((0, path_1.join)(cwd, f)));
         checks.push({
             name: 'axil.lock (deterministic installs)',
             pass: hasLock,
@@ -73,15 +111,17 @@ async function runDoctor() {
         message: envProtected ? 'Protected' : '.env not in .gitignore'
     });
     // Print results
+    spin.stop();
     const passed = checks.filter(c => c.pass).length;
     const failed = checks.filter(c => !c.pass).length;
-    for (const check of checks) {
-        const icon = check.pass ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m';
-        console.log(`  ${icon} ${check.name.padEnd(35)} ${check.message}`);
-    }
-    console.log('');
-    console.log(`  ${passed}/${checks.length} checks passed` +
-        (failed > 0 ? ` \x1b[31m(${failed} issues found)\x1b[0m` : ' \x1b[32m✓\x1b[0m'));
-    console.log('');
+    ui.table(checks.map(check => [
+        `${check.pass ? ui.c.green(ui.sym.tick) : ui.c.red(ui.sym.cross)} ${check.name}`,
+        check.pass ? ui.muted(check.message) : ui.c.yellow(check.message)
+    ]), { gap: 2 });
+    const summary = `${passed}/${checks.length} checks passed`;
+    if (failed > 0)
+        ui.failed(summary, `${failed} issue(s) found`);
+    else
+        ui.done(summary, started);
 }
 //# sourceMappingURL=doctor.js.map

@@ -1,9 +1,24 @@
 /**
- * @axiljsJS Request implementation.
+ * AxilJS Request implementation.
  * Wraps Node.js IncomingMessage and provides a clean API.
  */
 import { IncomingMessage } from 'http';
-import { axilRequest, HttpMethod, RouteParams, QueryParams } from '@axiljs/common';
+import { axilRequest, HttpMethod, RouteParams, QueryParams, TrustProxy } from '@axiljs/common';
+/** Options for building a Request. */
+export interface RequestOptions {
+    trustProxy?: TrustProxy;
+}
+/**
+ * Decode a query-string / form-urlencoded component.
+ * '+' means space; malformed %-escapes are kept as-is instead of throwing.
+ * @internal
+ */
+export declare function safeDecode(str: string): string;
+/**
+ * Derive the client address from the socket and X-Forwarded-For.
+ * @internal
+ */
+export declare function resolveClientIp(raw: IncomingMessage, trustProxy: TrustProxy): string;
 export declare class Request implements axilRequest {
     raw: IncomingMessage;
     method: HttpMethod;
@@ -15,7 +30,7 @@ export declare class Request implements axilRequest {
     body: unknown;
     ip: string;
     locals: Record<string, unknown>;
-    constructor(raw: IncomingMessage);
+    constructor(raw: IncomingMessage, options?: RequestOptions);
     /**
      * Parse query string into key-value object.
      * Handles arrays: ?tag=js&tag=ts → { tag: ['js', 'ts'] }

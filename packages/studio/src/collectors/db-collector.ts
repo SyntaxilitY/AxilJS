@@ -30,17 +30,24 @@ export class DbCollector {
     offset = 0
   ): Promise<{ rows: Record<string, unknown>[]; total: number }> {
     try {
-      const p = this.driverType === 'postgres'
+      // tableName comes from the request URL — quote it as an identifier
+      // (escaping embedded quotes) so it cannot break out into SQL.
+      // MySQL needs backticks: "x" is a string literal there.
+      const ident = this.driverType === 'mysql'
+        ? '`' + tableName.replace(/`/g, '``') + '`'
+        : '"' + tableName.replace(/"/g, '""') + '"'
+      const safeLimit  = Number.isFinite(limit)  && limit  > 0 ? Math.floor(limit) : 50
+      const safeOffset = Number.isFinite(offset) && offset > 0 ? Math.floor(offset) : 0
 
       const countResult = await this.driver.query(
-        `SELECT COUNT(*) AS cnt FROM "${tableName}"`
+        `SELECT COUNT(*) AS cnt FROM ${ident}`
       )
       const total = Number(
         countResult.rows[0]?.cnt ?? countResult.rows[0]?.count ?? 0
       )
 
       const dataResult = await this.driver.query(
-        `SELECT * FROM "${tableName}" LIMIT ${limit} OFFSET ${offset}`
+        `SELECT * FROM ${ident} LIMIT ${safeLimit} OFFSET ${safeOffset}`
       )
 
       return { rows: dataResult.rows, total }

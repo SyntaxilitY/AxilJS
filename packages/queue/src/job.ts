@@ -64,6 +64,9 @@ export interface Job<T = unknown> {
 
   // When to run (for delayed/scheduled jobs)
   runAt: Date;
+
+  // Per-attempt timeout in ms (an attempt exceeding it fails and may be retried)
+  timeoutMs?: number;
 }
 
 // ─── Job Options ──────────────────────────────────────────────────────────────
@@ -80,11 +83,22 @@ export interface JobOptions {
 
   // Specific time to run the job (overrides delay)
   runAt?: Date;
+
+  // Per-attempt timeout in ms (default: none). A timed-out attempt counts as
+  // failed and is retried up to maxAttempts.
+  timeoutMs?: number;
+}
+
+// ─── Job Context ─────────────────────────────────────────────────────────────
+
+export interface JobContext {
+  // Aborted when the attempt times out or the job is cancelled
+  signal: AbortSignal;
 }
 
 // ─── Job Handler ─────────────────────────────────────────────────────────────
 
-export type JobHandler<T = unknown> = (job: Job<T>) => Promise<unknown>;
+export type JobHandler<T = unknown> = (job: Job<T>, context?: JobContext) => Promise<unknown>;
 
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
@@ -97,7 +111,7 @@ export function createJob<T>(
   const now = new Date();
   const delay = options.delay || 0;
 
-  return {
+  const job: Job<T> = {
     id: randomUUID(),
     queue,
     name,
@@ -110,4 +124,10 @@ export function createJob<T>(
     createdAt: now,
     runAt: options.runAt || new Date(now.getTime() + delay)
   };
+
+  if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+    job.timeoutMs = options.timeoutMs;
+  }
+
+  return job;
 }

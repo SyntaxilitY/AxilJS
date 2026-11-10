@@ -56,11 +56,21 @@ export declare class Histogram {
     observe(value: number, labels?: Labels): void;
     toPrometheus(): string;
 }
+/**
+ * Registration is idempotent per name: registering a name again with the
+ * same metric type returns the EXISTING metric (its original help, labels
+ * and buckets are kept). Registering it with a different type throws.
+ */
 export declare class MetricsRegistry {
     private metrics;
     counter(name: string, help: string, labelNames?: string[]): Counter;
     gauge(name: string, help: string, labelNames?: string[]): Gauge;
     histogram(name: string, help: string, buckets?: number[], labelNames?: string[]): Histogram;
+    /**
+     * Look up a metric by name.
+     */
+    get(name: string): Counter | Gauge | Histogram | undefined;
+    private findExisting;
     /**
      * Generate Prometheus-format metrics output.
      * Serve this at GET /metrics.

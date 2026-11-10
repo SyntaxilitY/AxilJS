@@ -1,7 +1,7 @@
 "use strict";
 /**
  * @axiljs/ai - Public API
- * The complete @axiljsJS AI platform.
+ * The complete AxilJS AI platform.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
@@ -18,7 +18,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiAgent = exports.aiEmbed = exports.aiChatStream = exports.aiChat = exports.MCPClient = exports.jsonTool = exports.calculatorTool = exports.currentDateTimeTool = exports.createTool = exports.Agent = exports.loadFromUrls = exports.loadFromFiles = exports.loadFromString = exports.loadFromText = exports.DocumentChunker = exports.RAGPipeline = exports.VectorStore = exports.GeminiProvider = exports.OllamaProvider = exports.AnthropicProvider = exports.OpenAIProvider = void 0;
+exports.aiAgent = exports.aiEmbed = exports.aiChatStream = exports.aiChat = exports.MCPClient = exports.evaluateMathExpression = exports.jsonTool = exports.calculatorTool = exports.currentDateTimeTool = exports.createTool = exports.Agent = exports.loadFromUrls = exports.loadFromFiles = exports.loadFromString = exports.loadFromText = exports.DocumentChunker = exports.RAGPipeline = exports.VectorStore = exports.AIHttpError = exports.GeminiProvider = exports.OllamaProvider = exports.AnthropicProvider = exports.OpenAIProvider = void 0;
 // ─── Types ────────────────────────────────────────────────────────────────────
 __exportStar(require("./types"), exports);
 // ─── Providers ────────────────────────────────────────────────────────────────
@@ -30,6 +30,9 @@ var ollama_1 = require("./providers/ollama");
 Object.defineProperty(exports, "OllamaProvider", { enumerable: true, get: function () { return ollama_1.OllamaProvider; } });
 var gemini_1 = require("./providers/gemini");
 Object.defineProperty(exports, "GeminiProvider", { enumerable: true, get: function () { return gemini_1.GeminiProvider; } });
+// Error thrown for non-2xx provider responses (has .status, .body)
+var http_1 = require("./providers/http");
+Object.defineProperty(exports, "AIHttpError", { enumerable: true, get: function () { return http_1.AIHttpError; } });
 // ─── Vector Store ─────────────────────────────────────────────────────────────
 var vector_store_1 = require("./vector/vector-store");
 Object.defineProperty(exports, "VectorStore", { enumerable: true, get: function () { return vector_store_1.VectorStore; } });
@@ -51,6 +54,7 @@ Object.defineProperty(exports, "createTool", { enumerable: true, get: function (
 Object.defineProperty(exports, "currentDateTimeTool", { enumerable: true, get: function () { return tool_1.currentDateTimeTool; } });
 Object.defineProperty(exports, "calculatorTool", { enumerable: true, get: function () { return tool_1.calculatorTool; } });
 Object.defineProperty(exports, "jsonTool", { enumerable: true, get: function () { return tool_1.jsonTool; } });
+Object.defineProperty(exports, "evaluateMathExpression", { enumerable: true, get: function () { return tool_1.evaluateMathExpression; } });
 // ─── MCP ─────────────────────────────────────────────────────────────────────
 var mcp_client_1 = require("./mcp/mcp-client");
 Object.defineProperty(exports, "MCPClient", { enumerable: true, get: function () { return mcp_client_1.MCPClient; } });

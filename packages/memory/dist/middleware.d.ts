@@ -1,5 +1,5 @@
 /**
- * Memory Middleware for @axiljsJS HTTP requests.
+ * Memory Middleware for AxilJS HTTP requests.
  * Attaches memory info to requests for debugging.
  * Flags requests that trigger significant memory increases.
  */

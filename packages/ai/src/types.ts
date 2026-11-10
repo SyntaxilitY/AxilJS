@@ -88,6 +88,15 @@ export interface CompletionOptions {
 
   // Top-p nucleus sampling (default: 1)
   topP?: number;
+
+  // Cancel the request (and any pending retries). Aborting tears the
+  // underlying HTTP request down and rejects with an AbortError.
+  signal?: AbortSignal;
+
+  // Overall deadline for this call in ms, across all retries
+  // (rejects with a TimeoutError). Independent of the provider's
+  // per-attempt socket timeout.
+  timeoutMs?: number;
 }
 
 // ─── Completion Response ─────────────────────────────────────────────────────
@@ -124,8 +133,18 @@ export interface StreamChunk {
   // True when this is the last chunk
   done: boolean;
 
-  // Tool call being built (for streaming tool calls)
+  // Tool call being built (for streaming tool calls).
+  // The first delta for a call carries { id, name }; later deltas carry { id }
+  // plus `toolCallArgumentsDelta`. Providers that deliver complete calls
+  // (Gemini, Ollama) emit one delta with { id, name, arguments }.
+  // The assembled calls are in `response.toolCalls` on the final chunk.
   toolCallDelta?: Partial<ToolCall>;
+
+  // Position of the tool call `toolCallDelta` refers to (0-based)
+  toolCallIndex?: number;
+
+  // Raw JSON fragment of the tool call's arguments (OpenAI / Anthropic)
+  toolCallArgumentsDelta?: string;
 
   // Final response metadata (only on last chunk)
   response?: CompletionResponse;
@@ -142,6 +161,12 @@ export interface EmbeddingOptions {
 
   // Embedding model (provider-specific)
   model?: string;
+
+  // Cancel the request (see CompletionOptions.signal)
+  signal?: AbortSignal;
+
+  // Overall deadline in ms across all retries / batches
+  timeoutMs?: number;
 }
 
 export interface EmbeddingResponse {

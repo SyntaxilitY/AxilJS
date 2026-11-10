@@ -11,11 +11,11 @@
  *
  *   // Index documents
  *   await rag.index([
- *     { id: '1', content: '@axiljsJS is a backend framework...', metadata: {} }
+ *     { id: '1', content: 'AxilJS is a backend framework...', metadata: {} }
  *   ])
  *
  *   // Query
- *   const answer = await rag.query('What is @axiljsJS?')
+ *   const answer = await rag.query('What is AxilJS?')
  *   console.log(answer.response)
  *   console.log(answer.sources) // Which documents were used
  */

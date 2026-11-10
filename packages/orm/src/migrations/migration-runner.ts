@@ -69,9 +69,18 @@ export class MigrationRunner {
 
   private getMigrationFiles(): string[] {
     if (!existsSync(this.migrationsDir)) return []
+    // Skip declaration files and keep one file per migration name
+    // (x.ts + x.js side by side would otherwise run twice in one batch)
+    const seen = new Set<string>()
     return readdirSync(this.migrationsDir)
-      .filter(f => f.endsWith('.ts') || f.endsWith('.js'))
+      .filter(f => (f.endsWith('.ts') || f.endsWith('.js')) && !f.endsWith('.d.ts'))
       .sort()
+      .filter(f => {
+        const name = f.replace(/\.(ts|js)$/, '')
+        if (seen.has(name)) return false
+        seen.add(name)
+        return true
+      })
   }
 
   private async getExecutedMigrations(): Promise<MigrationRecord[]> {
@@ -115,7 +124,9 @@ export class MigrationRunner {
 
       try {
         await this.driver.transaction(async (trx) => {
-          const migration: Migration = require(filePath)
+          const mod = require(filePath)
+          // Support both `export function up` and `export default { up, down }`
+          const migration: Migration = mod && typeof mod.up !== 'function' && mod.default ? mod.default : mod
           await migration.up(trx)
 
           await trx.query(
@@ -166,7 +177,8 @@ export class MigrationRunner {
 
       try {
         await this.driver.transaction(async (trx) => {
-          const mig: Migration = require(path)
+          const mod = require(path)
+          const mig: Migration = mod && typeof mod.down !== 'function' && mod.default ? mod.default : mod
           await mig.down(trx)
 
           await trx.query(

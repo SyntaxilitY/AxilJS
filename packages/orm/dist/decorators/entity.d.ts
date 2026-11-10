@@ -20,8 +20,20 @@ export interface PrimaryKeyOptions {
     name?: string;
 }
 export interface RelationOptions {
+    /**
+     * hasOne / hasMany: column on the related table pointing at this entity
+     *                   (default `<this_class_snake>_id`).
+     * belongsTo:        column on this table pointing at the related entity
+     *                   (default `<related_class_snake>_id`).
+     * manyToMany:       pivot column pointing at this entity
+     *                   (default `<this_class_snake>_id`).
+     */
     foreignKey?: string;
+    /** manyToMany: pivot table (default: both class names in snake_case, sorted, joined by `_`). */
     pivotTable?: string;
+    /** manyToMany: pivot column pointing at the related entity (default `<related_class_snake>_id`). */
+    relatedKey?: string;
+    /** Recorded only — relations are loaded explicitly with `with()`. */
     eager?: boolean;
 }
 export interface IndexOptions {
@@ -47,6 +59,7 @@ export interface RelationMeta {
     target: () => Function;
     foreignKey: string;
     pivotTable?: string;
+    relatedKey?: string;
     eager: boolean;
 }
 export interface IndexMeta {
@@ -60,6 +73,11 @@ export interface EntityMeta {
     columns: Map<string, ColumnMeta>;
     relations: Map<string, RelationMeta>;
     indexes: IndexMeta[];
+    /** Set by @DeletedAt — enables soft deletes for the entity. */
+    softDelete?: {
+        propertyKey: string;
+        columnName: string;
+    };
 }
 export type EntityMetadata = EntityMeta;
 type PropDecorator = (target: any, propertyKey: string | symbol) => void;

@@ -198,7 +198,12 @@ class ColumnBuilder {
   }
 
   default(value: string | number | boolean): this {
-    this.def.defaultVal = typeof value === 'string' ? `'${value}'` : String(value)
+    // SQL keywords / functions (e.g. timestamps()' CURRENT_TIMESTAMP) must not be
+    // quoted, otherwise they become string literals ('CURRENT_TIMESTAMP')
+    const SQL_KEYWORDS = /^(CURRENT_TIMESTAMP|CURRENT_DATE|CURRENT_TIME|LOCALTIMESTAMP|LOCALTIME|NULL|NOW\(\))$/i
+    this.def.defaultVal = typeof value === 'string'
+      ? (SQL_KEYWORDS.test(value.trim()) ? value.trim() : `'${value.replace(/'/g, "''")}'`)
+      : String(value)
     return this
   }
 }

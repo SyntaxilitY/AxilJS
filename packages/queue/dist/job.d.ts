@@ -19,13 +19,18 @@ export interface Job<T = unknown> {
     stack?: string;
     result?: unknown;
     runAt: Date;
+    timeoutMs?: number;
 }
 export interface JobOptions {
     maxAttempts?: number;
     delay?: number;
     priority?: number;
     runAt?: Date;
+    timeoutMs?: number;
 }
-export type JobHandler<T = unknown> = (job: Job<T>) => Promise<unknown>;
+export interface JobContext {
+    signal: AbortSignal;
+}
+export type JobHandler<T = unknown> = (job: Job<T>, context?: JobContext) => Promise<unknown>;
 export declare function createJob<T>(queue: string, name: string, data: T, options?: JobOptions): Job<T>;
 //# sourceMappingURL=job.d.ts.map

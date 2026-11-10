@@ -22,7 +22,10 @@ class PostgresDriver extends base_driver_1.BaseDriver {
             const pgConfig = this.config.url
                 ? {
                     connectionString: this.config.url,
-                    ssl: this.config.ssl
+                    ssl: this.config.ssl,
+                    max: this.config.pool?.max || 10,
+                    min: this.config.pool?.min || 2,
+                    idleTimeoutMillis: this.config.pool?.idleTimeoutMs || 30000
                 }
                 : {
                     host: this.config.host || 'localhost',
@@ -37,13 +40,22 @@ class PostgresDriver extends base_driver_1.BaseDriver {
                 };
             this.pool = new Pool(pgConfig);
             // Test connection
-            const client = await this.pool.connect();
+            let client;
+            try {
+                client = await this.pool.connect();
+            }
+            catch (error) {
+                // Don't leak the pool when the first connection fails
+                await this.pool.end().catch(() => { });
+                this.pool = null;
+                throw error;
+            }
             client.release();
             this.connected = true;
             const host = this.config.url
                 ? this.config.url.replace(/:[^@]+@/, ':***@') // Hide password in log
                 : `${this.config.host}:${this.config.port}/${this.config.database}`;
-            console.log(`\x1b[32m[@axiljsJS ORM]\x1b[0m PostgreSQL connected: ${host}`);
+            console.log(`\x1b[32m[AxilJS ORM]\x1b[0m PostgreSQL connected: ${host}`);
         }
         catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {
@@ -81,6 +93,7 @@ class PostgresDriver extends base_driver_1.BaseDriver {
         if (!this.pool)
             throw new Error('PostgreSQL not connected.');
         const client = await this.pool.connect();
+        let broken = undefined;
         try {
             await client.query('BEGIN');
             const trxContext = {
@@ -99,11 +112,17 @@ class PostgresDriver extends base_driver_1.BaseDriver {
             return result;
         }
         catch (error) {
-            await client.query('ROLLBACK');
+            try {
+                await client.query('ROLLBACK');
+            }
+            catch (rollbackError) {
+                // Connection is unusable — destroy it instead of returning it to the pool
+                broken = rollbackError;
+            }
             throw error;
         }
         finally {
-            client.release();
+            client.release(broken);
         }
     }
     async ping() {

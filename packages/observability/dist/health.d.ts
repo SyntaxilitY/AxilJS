@@ -39,20 +39,34 @@ type CheckFn = () => Promise<void | {
     message?: string;
     details?: Record<string, unknown>;
 }>;
+export interface CheckOptions {
+    timeoutMs?: number;
+}
+export interface HealthCheckerOptions {
+    defaultTimeoutMs?: number;
+}
 export declare class HealthChecker {
     private checks;
+    private checkTimeouts;
     private startTime;
+    private defaultTimeoutMs;
+    constructor(options?: HealthCheckerOptions);
     /**
      * Register a health check.
      *
      * @param name   Check name (shown in response)
      * @param check  Async function - throw to indicate failure
+     * @param options  { timeoutMs } - a check that hangs longer is reported unhealthy
      */
-    addCheck(name: string, check: CheckFn): this;
+    addCheck(name: string, check: CheckFn, options?: CheckOptions): this;
     /**
      * Run all health checks and return the status.
      */
     check(): Promise<HealthStatus>;
+    /**
+     * Run a check, rejecting if it exceeds its timeout.
+     */
+    private runWithTimeout;
     /**
      * Create a route handler for GET /health.
      * Returns 200 if healthy, 503 if unhealthy.

@@ -33,17 +33,37 @@ export declare class QueryBuilder {
     private operation;
     private params;
     private driverType;
+    private softDeleteColumn?;
+    private trashedMode;
     constructor(driver: BaseDriver, driverType?: string);
     select(...columns: string[]): QueryBuilder;
     from(table: string): QueryBuilder;
     join(table: string, on: string, type?: JoinType): QueryBuilder;
     leftJoin(table: string, on: string): QueryBuilder;
     rightJoin(table: string, on: string): QueryBuilder;
+    /**
+     * `.where('age', '>', 18)`, `.where('id', 1)` (shorthand for `=`), or a
+     * parenthesised group: `.where(qb => qb.where('a', 1).orWhere('b', 2))`.
+     */
+    where(callback: (qb: QueryBuilder) => unknown): QueryBuilder;
     where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): QueryBuilder;
+    orWhere(callback: (qb: QueryBuilder) => unknown): QueryBuilder;
+    orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): QueryBuilder;
     whereIn(column: string, values: unknown[]): QueryBuilder;
+    whereNotIn(column: string, values: unknown[]): QueryBuilder;
     whereNull(column: string): QueryBuilder;
     whereNotNull(column: string): QueryBuilder;
     whereBetween(column: string, min: unknown, max: unknown): QueryBuilder;
+    whereNotBetween(column: string, min: unknown, max: unknown): QueryBuilder;
+    whereLike(column: string, pattern: string): QueryBuilder;
+    private addWhere;
+    private pushCondition;
+    /** Scope queries to a soft-delete column (BaseRepository does this for @DeletedAt entities). */
+    useSoftDeletes(column?: string): QueryBuilder;
+    /** Include soft-deleted rows. */
+    withTrashed(): QueryBuilder;
+    /** Only soft-deleted rows. */
+    onlyTrashed(): QueryBuilder;
     orderBy(column: string, direction?: 'ASC' | 'DESC'): QueryBuilder;
     groupBy(...columns: string[]): QueryBuilder;
     having(clause: string): QueryBuilder;
@@ -100,6 +120,9 @@ export declare class QueryBuilder {
     private buildUpdate;
     private buildDelete;
     private buildWhere;
+    private softDeleteScope;
+    private buildConditions;
+    private buildCondition;
     /**
      * Get the next parameter placeholder.
      * PostgreSQL uses $1, $2, $3...

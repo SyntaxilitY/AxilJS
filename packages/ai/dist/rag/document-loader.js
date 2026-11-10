@@ -42,7 +42,7 @@ function loadFromFiles(filePaths) {
     const documents = [];
     for (const filePath of filePaths) {
         if (!(0, fs_1.existsSync)(filePath)) {
-            console.warn(`[@axiljsJS AI] File not found: ${filePath}`);
+            console.warn(`[AxilJS AI] File not found: ${filePath}`);
             continue;
         }
         try {
@@ -70,7 +70,7 @@ function loadFromFiles(filePaths) {
             });
         }
         catch (error) {
-            console.warn(`[@axiljsJS AI] Could not load file ${filePath}:`, error.message);
+            console.warn(`[AxilJS AI] Could not load file ${filePath}:`, error.message);
         }
     }
     return documents;
@@ -94,7 +94,7 @@ async function loadFromUrls(urls) {
             });
         }
         catch (error) {
-            console.warn(`[@axiljsJS AI] Could not load URL ${url}:`, error.message);
+            console.warn(`[AxilJS AI] Could not load URL ${url}:`, error.message);
         }
     }
     return documents;
@@ -102,15 +102,28 @@ async function loadFromUrls(urls) {
 /**
  * Fetch content from a URL using Node.js built-in https.
  */
-function fetchUrl(url) {
+function fetchUrl(url, redirects = 0) {
     return new Promise((resolve, reject) => {
         const transport = url.startsWith('https') ? require('https') : require('http');
         transport.get(url, (res) => {
-            // Handle redirects
-            if (res.statusCode === 301 || res.statusCode === 302) {
-                fetchUrl(res.headers.location).then(resolve).catch(reject);
+            // Handle redirects (Location may be relative; cap hops to avoid loops)
+            if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+                res.resume();
+                if (redirects >= 10) {
+                    reject(new Error(`Too many redirects: ${url}`));
+                    return;
+                }
+                const next = new URL(res.headers.location, url).toString();
+                fetchUrl(next, redirects + 1).then(resolve).catch(reject);
                 return;
             }
+            if (res.statusCode >= 400) {
+                res.resume();
+                reject(new Error(`HTTP ${res.statusCode} fetching ${url}`));
+                return;
+            }
+            // Decode as UTF-8 stream so multi-byte chars split across chunks survive
+            res.setEncoding('utf8');
             let data = '';
             res.on('data', (chunk) => (data += chunk));
             res.on('end', () => resolve(data));
@@ -127,10 +140,11 @@ function stripHtml(html) {
         .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"')
+        // &amp; last, so "&amp;lt;" decodes to "&lt;" rather than "<"
+        .replace(/&amp;/g, '&')
         .replace(/\s+/g, ' ')
         .trim();
 }

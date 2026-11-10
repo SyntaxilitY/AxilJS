@@ -5,6 +5,8 @@
  *
  * Commands:
  *   axil create <name>           Create a new project
+ *   axil generate <kind> <name>  Generate module/controller/service/entity/migration
+ *   axil migrate [up|down|status] Run database migrations
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests

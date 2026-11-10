@@ -1,0 +1,24 @@
+{
+  "name": "minimal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "minimal - AxilJS Minimal API (template: minimal)",
+  "scripts": {
+    "dev": "axil run",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "axil test"
+  },
+  "dependencies": {
+    "@axiljs/config": "^0.3.0",
+    "@axiljs/core": "^0.3.0",
+    "@axiljs/validation": "^0.3.0"
+  },
+  "devDependencies": {
+    "@axiljs/cli": "^0.3.2",
+    "@axiljs/testing": "^0.3.0",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

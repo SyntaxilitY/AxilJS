@@ -15,12 +15,15 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AnthropicProvider = void 0;
+const http_1 = require("./http");
 class AnthropicProvider {
     name = 'anthropic';
     defaultModel = 'claude-3-5-haiku-20241022';
     apiKey;
     baseUrl;
     timeoutMs;
+    maxRetries;
+    retryBaseDelayMs;
     // Anthropic API version header
     API_VERSION = '2023-06-01';
     constructor(options) {
@@ -31,10 +34,12 @@ class AnthropicProvider {
         this.apiKey = options.apiKey;
         this.baseUrl = options.baseUrl || 'https://api.anthropic.com/v1';
         this.timeoutMs = options.timeoutMs || 60000;
+        this.maxRetries = options.maxRetries ?? http_1.DEFAULT_MAX_RETRIES;
+        this.retryBaseDelayMs = options.retryBaseDelayMs;
     }
     async complete(options) {
         const body = this.buildRequestBody(options, false);
-        const data = await this.post('/messages', body);
+        const data = await this.post('/messages', body, options);
         // Anthropic returns content as an array of content blocks
         const textContent = data.content
             .filter((c) => c.type === 'text')
@@ -65,54 +70,111 @@ class AnthropicProvider {
         let model = options.model || this.defaultModel;
         let inputTokens = 0;
         let outputTokens = 0;
-        const lines = await this.postStream('/messages', body);
+        let stopReason = '';
+        let streamFailure = null;
+        // tool_use blocks keyed by content block index
+        const toolBlocks = new Map();
+        // Stable 0-based position of each tool call (block index -> call index)
+        const toolOrder = [];
+        const lines = this.postStream('/messages', body, options);
         for await (const line of lines) {
             if (!line.startsWith('data: '))
                 continue;
             const jsonStr = line.slice(6).trim();
             if (!jsonStr)
                 continue;
+            let event;
             try {
-                const event = JSON.parse(jsonStr);
-                switch (event.type) {
-                    case 'content_block_delta': {
-                        const delta = event.delta?.text || '';
-                        if (delta) {
-                            fullContent += delta;
-                            yield { delta, done: false };
-                        }
-                        break;
-                    }
-                    case 'message_delta': {
-                        outputTokens = event.usage?.output_tokens || outputTokens;
-                        break;
-                    }
-                    case 'message_start': {
-                        model = event.message?.model || model;
-                        inputTokens = event.message?.usage?.input_tokens || 0;
-                        break;
-                    }
-                    case 'message_stop': {
-                        yield {
-                            delta: '',
-                            done: true,
-                            response: {
-                                content: fullContent,
-                                finishReason: 'stop',
-                                usage: {
-                                    promptTokens: inputTokens,
-                                    completionTokens: outputTokens,
-                                    totalTokens: inputTokens + outputTokens
-                                },
-                                model
-                            }
-                        };
-                        return;
-                    }
-                }
+                event = JSON.parse(jsonStr);
             }
             catch {
                 continue;
+            }
+            switch (event.type) {
+                case 'content_block_start': {
+                    const block = event.content_block;
+                    if (block?.type === 'tool_use') {
+                        const index = typeof event.index === 'number' ? event.index : toolOrder.length;
+                        const hasInput = block.input && Object.keys(block.input).length > 0;
+                        toolBlocks.set(index, {
+                            id: block.id,
+                            name: block.name,
+                            json: '',
+                            input: hasInput ? block.input : undefined
+                        });
+                        toolOrder.push(index);
+                        yield {
+                            delta: '',
+                            done: false,
+                            toolCallIndex: toolOrder.length - 1,
+                            toolCallDelta: { id: block.id, name: block.name }
+                        };
+                    }
+                    break;
+                }
+                case 'content_block_delta': {
+                    if (event.delta?.type === 'input_json_delta') {
+                        const block = toolBlocks.get(event.index);
+                        const partial = event.delta.partial_json || '';
+                        if (block && partial) {
+                            block.json += partial;
+                            yield {
+                                delta: '',
+                                done: false,
+                                toolCallIndex: toolOrder.indexOf(event.index),
+                                toolCallDelta: { id: block.id },
+                                toolCallArgumentsDelta: partial
+                            };
+                        }
+                        break;
+                    }
+                    const delta = event.delta?.text || '';
+                    if (delta) {
+                        fullContent += delta;
+                        yield { delta, done: false };
+                    }
+                    break;
+                }
+                case 'message_delta': {
+                    outputTokens = event.usage?.output_tokens || outputTokens;
+                    stopReason = event.delta?.stop_reason || stopReason;
+                    break;
+                }
+                case 'error': {
+                    // Mid-stream API error (e.g. overloaded_error) - surface it
+                    streamFailure = event.error?.message || 'Unknown stream error';
+                    break;
+                }
+                case 'message_start': {
+                    model = event.message?.model || model;
+                    inputTokens = event.message?.usage?.input_tokens || 0;
+                    break;
+                }
+                case 'message_stop': {
+                    const toolCalls = toolOrder.map(index => {
+                        const b = toolBlocks.get(index);
+                        return { id: b.id, name: b.name, arguments: parseJsonArgs(b.json, b.input) };
+                    });
+                    yield {
+                        delta: '',
+                        done: true,
+                        response: {
+                            content: fullContent,
+                            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                            finishReason: this.mapStopReason(stopReason),
+                            usage: {
+                                promptTokens: inputTokens,
+                                completionTokens: outputTokens,
+                                totalTokens: inputTokens + outputTokens
+                            },
+                            model
+                        }
+                    };
+                    return;
+                }
+            }
+            if (streamFailure) {
+                throw new Error(`Anthropic stream error: ${streamFailure}`);
             }
         }
     }
@@ -131,12 +193,47 @@ class AnthropicProvider {
         const system = options.system ||
             systemMessages.map(m => m.content).join('\n') ||
             undefined;
+        // Map to Anthropic content blocks. Anthropic has no 'tool' role:
+        // tool results are user-turn tool_result blocks, and assistant tool
+        // calls are tool_use blocks. Consecutive tool results share one turn.
+        const messages = [];
+        for (const msg of conversationMessages) {
+            if (msg.role === 'tool') {
+                const block = {
+                    type: 'tool_result',
+                    tool_use_id: msg.toolCallId,
+                    content: msg.content
+                };
+                const last = messages[messages.length - 1];
+                if (last && last.role === 'user' && Array.isArray(last.content) &&
+                    last.content.every((b) => b.type === 'tool_result')) {
+                    last.content.push(block);
+                }
+                else {
+                    messages.push({ role: 'user', content: [block] });
+                }
+            }
+            else if (msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0) {
+                messages.push({
+                    role: 'assistant',
+                    content: [
+                        ...(msg.content ? [{ type: 'text', text: msg.content }] : []),
+                        ...msg.toolCalls.map(tc => ({
+                            type: 'tool_use',
+                            id: tc.id,
+                            name: tc.name,
+                            input: tc.arguments || {}
+                        }))
+                    ]
+                });
+            }
+            else {
+                messages.push({ role: msg.role, content: msg.content });
+            }
+        }
         const body = {
             model: options.model || this.defaultModel,
-            messages: conversationMessages.map(msg => ({
-                role: msg.role,
-                content: msg.content
-            })),
+            messages,
             max_tokens: options.maxTokens || 4096,
             stream
         };
@@ -155,6 +252,12 @@ class AnthropicProvider {
                 description: tool.description,
                 input_schema: tool.parameters
             }));
+            if (options.toolChoice) {
+                body.tool_choice =
+                    options.toolChoice === 'auto' || options.toolChoice === 'none'
+                        ? { type: options.toolChoice }
+                        : { type: 'tool', name: options.toolChoice.name };
+            }
         }
         return body;
     }
@@ -167,127 +270,52 @@ class AnthropicProvider {
         };
         return map[reason] || 'stop';
     }
-    post(path, body) {
-        return new Promise((resolve, reject) => {
-            const bodyStr = JSON.stringify(body);
-            const url = new URL(this.baseUrl + path);
-            const req = require('https').request({
-                hostname: url.hostname,
-                port: 443,
-                path: url.pathname,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.apiKey,
-                    'anthropic-version': this.API_VERSION,
-                    'Content-Length': String(Buffer.byteLength(bodyStr))
-                }
-            }, (res) => {
-                let data = '';
-                res.on('data', (chunk) => (data += chunk));
-                res.on('end', () => {
-                    try {
-                        const parsed = JSON.parse(data);
-                        if (res.statusCode >= 400) {
-                            reject(new Error(`Anthropic API error ${res.statusCode}: ` +
-                                (parsed.error?.message || data)));
-                            return;
-                        }
-                        resolve(parsed);
-                    }
-                    catch {
-                        reject(new Error(`Anthropic: Invalid JSON: ${data}`));
-                    }
-                });
-                res.on('error', reject);
-            });
-            req.on('error', reject);
-            req.setTimeout(this.timeoutMs, () => {
-                req.destroy(new Error(`Anthropic request timed out`));
-            });
-            req.write(bodyStr);
-            req.end();
+    headers() {
+        return {
+            'x-api-key': this.apiKey,
+            'anthropic-version': this.API_VERSION
+        };
+    }
+    post(path, body, call = {}) {
+        return (0, http_1.requestJson)({
+            label: 'Anthropic',
+            url: this.baseUrl + path,
+            headers: this.headers(),
+            body,
+            maxRetries: this.maxRetries,
+            retryBaseDelayMs: this.retryBaseDelayMs,
+            idleTimeoutMs: this.timeoutMs,
+            signal: call.signal,
+            timeoutMs: call.timeoutMs,
+            invalidJson: raw => new Error(`Anthropic: Invalid JSON: ${raw}`)
         });
     }
-    postStream(path, body) {
-        const bodyStr = JSON.stringify(body);
-        const url = new URL(this.baseUrl + path);
-        const self = this;
-        return {
-            [Symbol.asyncIterator]() {
-                return (async function* () {
-                    const queue = [];
-                    let notify = null;
-                    let done = false;
-                    let streamError = null;
-                    let lineBuffer = '';
-                    const req = require('https').request({
-                        hostname: url.hostname,
-                        port: 443,
-                        path: url.pathname,
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'x-api-key': self.apiKey,
-                            'anthropic-version': self.API_VERSION,
-                            'Content-Length': String(Buffer.byteLength(bodyStr))
-                        }
-                    }, (res) => {
-                        res.on('data', (chunk) => {
-                            lineBuffer += chunk.toString();
-                            const parts = lineBuffer.split('\n');
-                            lineBuffer = parts.pop() || '';
-                            for (const part of parts) {
-                                if (part.trim()) {
-                                    queue.push(part.trim());
-                                    if (notify) {
-                                        notify();
-                                        notify = null;
-                                    }
-                                }
-                            }
-                        });
-                        res.on('end', () => {
-                            done = true;
-                            if (notify) {
-                                notify();
-                                notify = null;
-                            }
-                        });
-                        res.on('error', (err) => {
-                            streamError = err;
-                            done = true;
-                            if (notify) {
-                                notify();
-                                notify = null;
-                            }
-                        });
-                    });
-                    // ✅ CRITICAL — handle error event on req
-                    req.on('error', (err) => {
-                        streamError = err;
-                        done = true;
-                        if (notify) {
-                            notify();
-                            notify = null;
-                        }
-                    });
-                    req.write(bodyStr);
-                    req.end();
-                    while (!done || queue.length > 0) {
-                        if (queue.length > 0) {
-                            yield queue.shift();
-                        }
-                        else if (!done) {
-                            await new Promise(r => { notify = r; });
-                        }
-                    }
-                    if (streamError)
-                        throw streamError;
-                })();
-            }
-        };
+    postStream(path, body, call = {}) {
+        return (0, http_1.requestLines)({
+            label: 'Anthropic',
+            url: this.baseUrl + path,
+            headers: this.headers(),
+            body,
+            maxRetries: this.maxRetries,
+            retryBaseDelayMs: this.retryBaseDelayMs,
+            signal: call.signal,
+            timeoutMs: call.timeoutMs
+        });
     }
 }
 exports.AnthropicProvider = AnthropicProvider;
+/**
+ * Parse accumulated input_json_delta fragments ('' means no input).
+ */
+function parseJsonArgs(json, fallback) {
+    if (!json.trim())
+        return fallback || {};
+    try {
+        const parsed = JSON.parse(json);
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    }
+    catch {
+        return fallback || {};
+    }
+}
 //# sourceMappingURL=anthropic.js.map

@@ -1,6 +1,6 @@
 /**
  * Core event system types.
- * Used across the entire @axiljsJS event infrastructure.
+ * Used across the entire AxilJS event infrastructure.
  */
 export interface axilEvent<T = unknown> {
     type: string;

@@ -24,6 +24,8 @@ export declare class EventBus {
     private onError;
     private history;
     private historyLimit;
+    private maxListeners;
+    private warnedTypes;
     constructor(options?: EventBusOptions);
     /**
      * Subscribe to an event type.
@@ -76,6 +78,14 @@ export declare class EventBus {
      */
     getEventTypes(): string[];
     /**
+     * Set the listener-count warning threshold (0 = unlimited).
+     */
+    setMaxListeners(n: number): this;
+    /**
+     * Get the listener-count warning threshold (0 = unlimited).
+     */
+    getMaxListeners(): number;
+    /**
      * Get handler count for an event type.
      */
     getHandlerCount(type: string): number;
@@ -83,6 +93,11 @@ export declare class EventBus {
      * Remove all handlers. Useful in tests.
      */
     clear(): void;
+    /**
+     * Warn (once per event type) when listener count exceeds maxListeners.
+     * Mirrors Node's EventEmitter: it is a leak hint, the listener is still added.
+     */
+    private checkMaxListeners;
     /**
      * Find all handlers matching an event type.
      * Supports wildcard patterns: 'user.*', '*.created', '*'

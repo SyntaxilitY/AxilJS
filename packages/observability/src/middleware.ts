@@ -10,13 +10,21 @@
  *   app.get('/metrics', metricsHandler(metrics))
  */
 
-import { MiddlewareFn, RouteHandler } from '@axiljs/common';
+import { MiddlewareFn, RouteHandler, axilRequest } from '@axiljs/common';
 import { MetricsRegistry } from './metrics';
 import { Tracer } from './tracing';
 
 export interface ObservabilityOptions {
   metrics?: MetricsRegistry;
   tracer?: Tracer;
+
+  // Value of the 'path' metric label (default: req.path, the raw path).
+  // Return a route template (e.g. '/users/:id') to avoid high-cardinality
+  // labels. Evaluated when the response ends, after routing.
+  pathLabel?: (req: axilRequest) => string;
+
+  // Continue incoming W3C traceparent / B3 context (default: true)
+  propagate?: boolean;
 }
 
 /**
@@ -26,7 +34,7 @@ export interface ObservabilityOptions {
 export function observabilityMiddleware(
   options: ObservabilityOptions = {}
 ): MiddlewareFn {
-  const { metrics, tracer } = options;
+  const { metrics, tracer, pathLabel, propagate = true } = options;
 
   // Create standard HTTP metrics if registry provided
   const requestCounter = metrics?.counter(
@@ -50,8 +58,11 @@ export function observabilityMiddleware(
   return (req, res, next) => {
     const startTime = Date.now();
 
-    // Start a trace span if tracer is configured
-    const span = tracer?.startSpan('http.request');
+    // Start a trace span if tracer is configured, continuing the caller's
+    // trace when a valid traceparent (or B3) header is present
+    const span = tracer?.startSpan('http.request', propagate
+      ? { parent: tracer.extractContext(req.headers || {}) }
+      : {});
 
     if (span) {
       span.setAttributes({
@@ -70,11 +81,23 @@ export function observabilityMiddleware(
 
     // Override res.raw.end to capture response details
     const originalEnd = res.raw.end.bind(res.raw);
+    let recorded = false;
 
     (res.raw as any).end = function (...args: any[]) {
+      // Record once even if end() is called multiple times
+      if (recorded) return originalEnd(...args);
+      recorded = true;
+
       const duration = Date.now() - startTime;
       const status = String(res.raw.statusCode);
-      const path = req.path;
+      let path = req.path;
+      if (pathLabel) {
+        try {
+          path = pathLabel(req) || req.path;
+        } catch {
+          // Fall back to the raw path if the label function fails
+        }
+      }
 
       // Record metrics
       requestCounter?.inc({ method: req.method, path, status });
@@ -83,10 +106,17 @@ export function observabilityMiddleware(
 
       // End trace span
       if (span) {
-        span
+        const spanData = span
           .setAttribute('http.status_code', res.raw.statusCode)
           .setStatus(res.raw.statusCode < 500 ? 'ok' : 'error')
           .end();
+
+        // Export the finished span (previously ended but never exported)
+        try {
+          tracer!.exportSpan(spanData);
+        } catch {
+          // Never let a failing exporter break the response
+        }
       }
 
       return originalEnd(...args);

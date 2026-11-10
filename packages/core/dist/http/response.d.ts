@@ -32,6 +32,13 @@ export declare class Response implements axilResponse {
     send(data: Buffer | string): void;
     redirect(url: string, code?: number): void;
     /**
+     * 204 / 304 responses must not carry a body or a body Content-Length
+     * (RFC 9110 §15.3.5, §15.4.5). Node drops the body but would still send
+     * the Content-Length header, so end the response bare instead.
+     * Returns true if the response was ended here.
+     */
+    private endWithoutBody;
+    /**
      * Internal response formatter.
      *
      * All standardized response methods use this method.

@@ -7,6 +7,8 @@ import { spawn, ChildProcess, execSync } from 'child_process'
 import { watch, existsSync, mkdirSync, readFileSync } from 'fs'
 import { join, relative, resolve } from 'path'
 import { pathToFileURL } from 'url'
+import * as ui from '../ui'
+import { readEnvFile } from '../utils/env'
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -15,51 +17,51 @@ let restartTimer:  ReturnType<typeof setTimeout> | null = null
 let isCompiling:   boolean = false
 let startCount:    number  = 0
 let studioInstance: any    = null
+let studioAttempted: boolean = false
 
 const changedFiles: Set<string> = new Set()
 
-// ── Colors ────────────────────────────────────────────────────────────────────
-
-const C = {
-  reset:  '\x1b[0m',
-  bold:   '\x1b[1m',
-  dim:    '\x1b[2m',
-  green:  '\x1b[32m',
-  yellow: '\x1b[33m',
-  red:    '\x1b[31m',
-  cyan:   '\x1b[36m',
-  gray:   '\x1b[90m'
-}
-
 // ── Logging ───────────────────────────────────────────────────────────────────
+// Compact timestamped one-liners, e.g. "  12:04:31 ✔ Restarted in 320ms".
+// The app's own output (child process stdio) passes through untouched.
 
-function log(msg: string): void {
+function stamped(icon: string, msg: string, details?: string): void {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-  console.log(`${C.gray}${time}${C.reset} ${C.cyan}[axil run]${C.reset} ${msg}`)
+  console.log(`  ${ui.muted(time)} ${icon} ${msg}${details ? `  ${ui.muted(details)}` : ''}`)
 }
 
-function logError(msg: string): void {
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-  console.log(`${C.gray}${time}${C.reset} ${C.red}[axil run]${C.reset} ${msg}`)
+function log(msg: string, details?: string): void {
+  stamped(ui.muted(ui.sym.arrow), msg, details)
 }
 
-function logSuccess(msg: string): void {
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false })
-  console.log(`${C.gray}${time}${C.reset} ${C.green}[axil run]${C.reset} ${msg}`)
+function logWarn(msg: string, details?: string): void {
+  stamped(ui.c.yellow(ui.sym.warn), ui.c.yellow(msg), details)
+}
+
+function logError(msg: string, details?: string): void {
+  stamped(ui.c.red(ui.sym.cross), ui.c.red(msg), details)
+}
+
+function logSuccess(msg: string, details?: string): void {
+  stamped(ui.c.green(ui.sym.tick), msg, details)
+}
+
+/** "src/a.ts" · "src/a.ts, src/b.ts" · "src/a.ts, src/b.ts +3 more" */
+function describeChanges(files: string[]): string {
+  if (files.length === 0) return 'project'
+  const shown = files.slice(0, 2).map(f => f.replace(/\\/g, '/'))
+  return shown.join(', ') + (files.length > 2 ? ` +${files.length - 2} more` : '')
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function readEnvValue(cwd: string, key: string): string | undefined {
-  const envPath = join(cwd, '.env')
-  if (!existsSync(envPath)) return undefined
-
-  const content = readFileSync(envPath, 'utf-8')
-  const match   = content.match(new RegExp(`^${key}=(.+)$`, 'm'))
-  return match ? match[1].trim() : undefined
+// Values are unquoted (PORT="4000" → 4000) and inline comments stripped.
+export function readEnvValue(cwd: string, key: string): string | undefined {
+  const value = readEnvFile(cwd)[key]
+  return value === undefined || value === '' ? undefined : value
 }
 
-function readAppPort(cwd: string): number {
+export function readAppPort(cwd: string): number {
   const raw = readEnvValue(cwd, 'PORT')
   const n   = raw ? parseInt(raw, 10) : NaN
   return Number.isNaN(n) ? 3000 : n
@@ -112,7 +114,7 @@ async function startStudio(cwd: string, appPort: number): Promise<any> {
     const StudioServer = await loadStudioClass(cwd)
 
     if (!StudioServer) {
-      log(`${C.yellow}[Studio]${C.reset} @axiljs/studio not detected. Studio skipped.`)
+      log('Studio skipped', '@axiljs/studio not detected')
       return null
     }
 
@@ -158,14 +160,21 @@ async function startStudio(cwd: string, appPort: number): Promise<any> {
     await studio.start()
     return studio
   } catch (err: any) {
-    log(`${C.yellow}[Studio error]${C.reset} ${err.message}`)
+    logWarn('Studio error', err.message)
     return null
   }
 }
 
 // ── Compiler ──────────────────────────────────────────────────────────────────
 
-function compile(cwd: string): boolean {
+interface CompileResult {
+  ok:       boolean
+  duration: number
+  output:   string
+}
+
+/** Run tsc; prints nothing (callers report success/failure their own way). */
+function compile(cwd: string): CompileResult {
   const start = Date.now()
 
   try {
@@ -173,37 +182,20 @@ function compile(cwd: string): boolean {
       cwd,
       stdio: 'pipe'
     })
-
-    const duration = Date.now() - start
-    logSuccess(
-      `Compiled ${C.bold}${
-        changedFiles.size > 0 ? changedFiles.size + ' file(s)' : 'project'
-      }${C.reset}${C.green} in ${C.bold}${duration}ms${C.reset}`
-    )
-
-    changedFiles.clear()
-    return true
+    return { ok: true, duration: Date.now() - start, output: '' }
   } catch (error: any) {
-    const duration    = Date.now() - start
-    const output      = error.stdout?.toString() ?? ''
-    const stderr      = error.stderr?.toString() ?? ''
-    const errorOutput = output || stderr
+    const output = error.stdout?.toString() ?? ''
+    const stderr = error.stderr?.toString() ?? ''
+    return { ok: false, duration: Date.now() - start, output: output || stderr }
+  }
+}
 
-    logError(`Compilation failed in ${duration}ms`)
-
-    if (errorOutput) {
-      errorOutput.split('\n').forEach((line: string) => {
-        if (line.includes('error TS')) {
-          console.log(`  ${C.red}${line}${C.reset}`)
-        } else if (line.trim()) {
-          console.log(`  ${C.gray}${line}${C.reset}`)
-        }
-      })
-    }
-
-    logError('Server NOT restarted — fix the errors above')
-    changedFiles.clear()
-    return false
+/** tsc diagnostics: "error TS…" lines red, the rest muted. */
+function printCompileErrors(output: string): void {
+  for (const line of output.split('\n')) {
+    const text = line.replace(/\s+$/, '')
+    if (text.includes('error TS')) console.log(`    ${ui.c.red(text)}`)
+    else if (text.trim()) console.log(`    ${ui.muted(text)}`)
   }
 }
 
@@ -228,8 +220,21 @@ function findEntryPoint(cwd: string): string | null {
 
 // ── App Server Process ────────────────────────────────────────────────────────
 
-async function startServer(cwd: string): Promise<void> {
-  if (serverProcess) {
+// A crashed child never emits 'exit' again, so waiting on it would always
+// hit the kill timeout (and the 'exit' listener would never fire).
+function hasExited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null
+}
+
+/**
+ * (Re)start the app. `announce` runs right before the child is spawned so
+ * the CLI's status line comes before the app's own output.
+ */
+async function startServer(
+  cwd: string,
+  announce: (relEntry: string, restarts: number) => void
+): Promise<boolean> {
+  if (serverProcess && !hasExited(serverProcess)) {
     serverProcess.kill('SIGTERM')
 
     await new Promise<void>(done => {
@@ -244,27 +249,18 @@ async function startServer(cwd: string): Promise<void> {
       })
     })
 
-    serverProcess = null
   }
+  serverProcess = null
 
   const entry = findEntryPoint(cwd)
 
   if (!entry) {
     logError('Could not find entry point (dist/main.js).')
-    return
+    return false
   }
 
   startCount++
-  const relEntry = relative(cwd, entry)
-
-  if (startCount === 1) {
-    log(`Starting ${C.bold}${relEntry}${C.reset}`)
-  } else {
-    log(
-      `Restarting ${C.bold}${relEntry}${C.reset} ` +
-      `${C.gray}(restart #${startCount - 1})${C.reset}`
-    )
-  }
+  announce(relative(cwd, entry).replace(/\\/g, '/'), startCount - 1)
 
   serverProcess = spawn('node', [entry], {
     cwd,
@@ -287,6 +283,8 @@ async function startServer(cwd: string): Promise<void> {
       logError(`Server exited with code ${code}`)
     }
   })
+
+  return true
 }
 
 // ── Watcher ───────────────────────────────────────────────────────────────────
@@ -299,49 +297,70 @@ function watchFiles(cwd: string): void {
     return
   }
 
-  log(`Watching ${C.bold}src/${C.reset} for changes...`)
+  log(`Watching ${ui.path('src/')} for changes`, 'Ctrl+C to stop')
 
   watch(srcDir, { recursive: true }, (event, filename) => {
     if (!filename) return
     if (!filename.endsWith('.ts') && !filename.endsWith('.tsx')) return
 
     changedFiles.add(filename)
+    scheduleRebuild(cwd)
+  })
+}
 
+function scheduleRebuild(cwd: string): void {
     if (restartTimer) clearTimeout(restartTimer)
 
     restartTimer = setTimeout(async () => {
-      if (isCompiling) return
+      // A rebuild/restart is still in progress — retry later instead of
+      // dropping this change (otherwise the save is silently ignored).
+      if (isCompiling) { scheduleRebuild(cwd); return }
       isCompiling = true
 
-      const files = Array.from(changedFiles)
-      if (files.length === 1) {
-        log(`Changed: ${C.yellow}${files[0]}${C.reset}`)
-      } else {
-        log(`Changed: ${C.yellow}${files.length} files${C.reset}`)
-        files.forEach(f => console.log(`  ${C.gray}→ ${f}${C.reset}`))
+      const files   = Array.from(changedFiles)
+      const changes = describeChanges(files)
+      changedFiles.clear()
+      const started = Date.now()
+
+      try {
+        const result = compile(cwd)
+        if (!result.ok) {
+          logError(`Compilation failed in ${ui.formatDuration(result.duration)}`, changes)
+          printCompileErrors(result.output)
+          logWarn('Server not restarted', 'fix the errors above and save again')
+        } else {
+          await startServer(cwd, (relEntry, restarts) => {
+            const took = ui.formatDuration(Date.now() - started)
+            if (restarts === 0) logSuccess(`Started ${ui.path(relEntry)} in ${took}`, changes)
+            else logSuccess(`Restarted in ${took}`, `${changes} ${ui.sym.dot} #${restarts}`)
+          })
+          // The first compile failed, so Studio was never started — start it
+          // now that the project builds (exactly once).
+          if (!studioInstance && !studioAttempted) {
+            studioAttempted = true
+            studioInstance = await startStudio(cwd, readAppPort(cwd))
+          }
+        }
+      } finally {
+        isCompiling = false
       }
-
-      const ok = compile(cwd)
-      if (ok) await startServer(cwd)
-
-      isCompiling = false
     }, 150)
-  })
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
 
 function validateProject(cwd: string): boolean {
+  const hint = 'Run axil run from the root of an AxilJS project.'
   if (!existsSync(join(cwd, 'package.json'))) {
-    logError('No package.json found.')
+    ui.error('No package.json found.', hint)
     return false
   }
   if (!existsSync(join(cwd, 'tsconfig.json'))) {
-    logError('No tsconfig.json found.')
+    ui.error('No tsconfig.json found.', hint)
     return false
   }
   if (!existsSync(join(cwd, 'src'))) {
-    logError('No src/ directory found.')
+    ui.error('No src/ directory found.', hint)
     return false
   }
   return true
@@ -354,16 +373,18 @@ function setupShutdown(studio: any): void {
   process.removeAllListeners('SIGTERM')
 
   async function shutdown(signal: string): Promise<void> {
-    console.log('')
+    ui.line()
     log(`${signal} received — shutting down...`)
 
-    if (studio) {
+    // Studio may have been started after setup (first compile failed)
+    const activeStudio = studio ?? studioInstance
+    if (activeStudio) {
       try {
-        await studio.stop()
+        await activeStudio.stop()
       } catch {}
     }
 
-    if (serverProcess) {
+    if (serverProcess && !hasExited(serverProcess)) {
       serverProcess.kill('SIGTERM')
 
       await new Promise<void>(done => {
@@ -379,7 +400,7 @@ function setupShutdown(studio: any): void {
       })
     }
 
-    console.log('')
+    ui.line()
     process.exit(0)
   }
 
@@ -392,32 +413,37 @@ function setupShutdown(studio: any): void {
 export async function runDev(): Promise<void> {
   const cwd = process.cwd()
 
-  console.log('')
-  console.log(`${C.cyan}${C.bold} AxilJS${C.reset} ${C.gray}development server${C.reset}`)
-  console.log(`${C.gray} ─────────────────────────────────────${C.reset}`)
-  console.log('')
+  ui.title('run', 'Development server with hot reload')
 
   if (!validateProject(cwd)) process.exit(1)
 
   const distDir = join(cwd, 'dist')
   if (!existsSync(distDir)) mkdirSync(distDir, { recursive: true })
 
-  log('Initial compilation...')
-  const success = compile(cwd)
+  const spin = ui.spinner('Initial compilation')
+  const result = compile(cwd)
 
-  if (!success) {
-    logError('Fix compilation errors then save a file to retry.')
+  if (!result.ok) {
+    spin.fail('Initial compilation failed', ui.formatDuration(result.duration))
+    printCompileErrors(result.output)
+    ui.line()
+    logWarn('Fix compilation errors then save a file to retry.')
     watchFiles(cwd)
     setupShutdown(null)
     return
   }
 
+  spin.succeed('Compiled project', ui.formatDuration(result.duration))
+
   const appPort = readAppPort(cwd)
+  ui.keyValue([['App', ui.cmd(`http://localhost:${appPort}`)]])
+  ui.line()
 
   // 1. Start App Server
-  await startServer(cwd)
+  await startServer(cwd, relEntry => log(`Starting ${ui.path(relEntry)}`))
 
   // 2. Start Studio
+  studioAttempted = true
   studioInstance = await startStudio(cwd, appPort)
 
   // 3. Watch for changes

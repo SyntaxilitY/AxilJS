@@ -17,7 +17,13 @@
  *   ])
  *
  *   const results = await store.search(queryEmbedding, { topK: 3 })
+ *
+ *   await store.save('./data/vectors.json')   // persist
+ *   await new VectorStore().load('./data/vectors.json')
  */
+
+import { promises as fsp } from 'fs';
+import * as nodePath from 'path';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,17 +61,21 @@ export interface SearchOptions {
 
 // ─── Similarity Functions ─────────────────────────────────────────────────────
 
+function assertSameDimension(a: number[], b: number[]): void {
+  if (a.length !== b.length) {
+    throw new Error(
+      `Vector dimension mismatch: ${a.length} vs ${b.length}`
+    );
+  }
+}
+
 /**
  * Compute cosine similarity between two vectors.
  * Returns a value between -1 and 1 (1 = identical direction).
  * We normalize to 0-1 for convenience.
  */
 function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(
-      `Vector dimension mismatch: ${a.length} vs ${b.length}`
-    );
-  }
+  assertSameDimension(a, b);
 
   let dotProduct = 0;
   let magnitudeA = 0;
@@ -91,7 +101,23 @@ function cosineSimilarity(a: number[], b: number[]): number {
  * Faster than cosine when vectors are already normalized.
  */
 function dotProduct(a: number[], b: number[]): number {
-  return a.reduce((sum, val, i) => sum + val * b[i], 0);
+  assertSameDimension(a, b);
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += a[i] * b[i];
+  return sum;
+}
+
+/**
+ * Euclidean distance converted to a 0-1 similarity score.
+ */
+function euclideanSimilarity(a: number[], b: number[]): number {
+  assertSameDimension(a, b);
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const d = a[i] - b[i];
+    sum += d * d;
+  }
+  return 1 / (1 + Math.sqrt(sum));
 }
 
 // ─── Vector Store ─────────────────────────────────────────────────────────────
@@ -106,8 +132,18 @@ export interface VectorStoreOptions {
   maxDocuments?: number;
 }
 
+// Serialized form produced by toJSON() / save()
+export interface VectorStoreJSON {
+  version: 1;
+  metric: SimilarityMetric;
+  // null = unlimited
+  maxDocuments: number | null;
+  documents: VectorDocument[];
+}
+
 export class VectorStore {
-  private documents: VectorDocument[] = [];
+  // Insertion-ordered id -> document index (O(1) add/get/delete/upsert)
+  private documents: Map<string, VectorDocument> = new Map();
   private metric: SimilarityMetric;
   private maxDocuments: number;
 
@@ -120,23 +156,21 @@ export class VectorStore {
 
   /**
    * Add documents to the vector store.
+   * A document whose ID already exists replaces it (keeping its position).
    */
   async add(documents: VectorDocument[]): Promise<void> {
     for (const doc of documents) {
-      // Replace existing document with same ID
-      const existingIndex = this.documents.findIndex(d => d.id === doc.id);
-
-      if (existingIndex !== -1) {
-        this.documents[existingIndex] = doc;
-      } else {
-        this.documents.push(doc);
-      }
+      this.documents.set(doc.id, doc);
     }
 
-    // Enforce max document limit (remove oldest)
-    if (this.documents.length > this.maxDocuments) {
-      this.documents = this.documents.slice(-this.maxDocuments);
-    }
+    this.enforceLimit();
+  }
+
+  /**
+   * Insert or replace documents by ID (same semantics as add()).
+   */
+  async upsert(documents: VectorDocument[]): Promise<void> {
+    await this.add(documents);
   }
 
   /**
@@ -164,15 +198,15 @@ export class VectorStore {
       filter
     } = options;
 
-    if (this.documents.length === 0) {
+    if (this.documents.size === 0) {
       return [];
     }
 
     // Apply metadata filter first to reduce computation
-    let candidates = this.documents;
+    let candidates = Array.from(this.documents.values());
 
     if (filter && Object.keys(filter).length > 0) {
-      candidates = this.documents.filter(doc => {
+      candidates = candidates.filter(doc => {
         if (!doc.metadata) return false;
         return Object.entries(filter).every(
           ([key, value]) => doc.metadata![key] === value
@@ -201,41 +235,131 @@ export class VectorStore {
    * Delete a document by ID.
    */
   async delete(id: string): Promise<boolean> {
-    const index = this.documents.findIndex(d => d.id === id);
-    if (index === -1) return false;
-    this.documents.splice(index, 1);
-    return true;
+    return this.documents.delete(id);
   }
 
   /**
    * Get a document by ID.
    */
   async get(id: string): Promise<VectorDocument | null> {
-    return this.documents.find(d => d.id === id) || null;
+    return this.documents.get(id) || null;
   }
 
   /**
    * Get total document count.
    */
   get size(): number {
-    return this.documents.length;
+    return this.documents.size;
   }
 
   /**
    * Clear all documents.
    */
   async clear(): Promise<void> {
-    this.documents = [];
+    this.documents.clear();
   }
 
   /**
    * Get all documents (for debugging/inspection).
    */
   getAll(): VectorDocument[] {
-    return [...this.documents];
+    return Array.from(this.documents.values());
+  }
+
+  // ─── Persistence ─────────────────────────────────────────────────────────────
+
+  /**
+   * Serialize the store (metric, limit and documents) to a plain object.
+   */
+  toJSON(): VectorStoreJSON {
+    return {
+      version: 1,
+      metric: this.metric,
+      maxDocuments: Number.isFinite(this.maxDocuments) ? this.maxDocuments : null,
+      documents: this.getAll()
+    };
+  }
+
+  /**
+   * Create a store from toJSON() output (object or JSON string).
+   * `options` override the serialized metric / maxDocuments.
+   */
+  static fromJSON(
+    data: VectorStoreJSON | string,
+    options: VectorStoreOptions = {}
+  ): VectorStore {
+    const parsed = VectorStore.parseJSON(data);
+    const store = new VectorStore({
+      metric: options.metric || parsed.metric,
+      maxDocuments: options.maxDocuments ?? parsed.maxDocuments ?? undefined
+    });
+    store.replaceDocuments(parsed.documents);
+    return store;
+  }
+
+  /**
+   * Write the store to a JSON file (parent directories are created).
+   * Writes a temp file and renames it, so a crash never leaves a
+   * half-written file behind.
+   */
+  async save(filePath: string): Promise<void> {
+
+    await fsp.mkdir(nodePath.dirname(filePath), { recursive: true });
+    const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await fsp.writeFile(tmp, JSON.stringify(this.toJSON()), 'utf8');
+      await fsp.rename(tmp, filePath);
+    } catch (err) {
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw err;
+    }
+  }
+
+  /**
+   * Replace this store's documents with those saved at `filePath`.
+   * The store keeps its own metric / maxDocuments settings
+   * (use VectorStore.fromJSON to restore those too).
+   */
+  async load(filePath: string): Promise<this> {
+    const parsed = VectorStore.parseJSON(await fsp.readFile(filePath, 'utf8'));
+    this.replaceDocuments(parsed.documents);
+    return this;
   }
 
   // ─── Internal ────────────────────────────────────────────────────────────────
+
+  private static parseJSON(data: VectorStoreJSON | string): VectorStoreJSON {
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    if (!parsed || !Array.isArray(parsed.documents)) {
+      throw new Error('Invalid VectorStore data: expected { documents: [...] }');
+    }
+    return parsed;
+  }
+
+  private replaceDocuments(documents: VectorDocument[]): void {
+    const next = new Map<string, VectorDocument>();
+    for (const doc of documents) {
+      if (!doc || typeof doc.id !== 'string' || !Array.isArray(doc.embedding)) {
+        throw new Error('Invalid VectorStore document: id and embedding are required');
+      }
+      next.set(doc.id, doc);
+    }
+    this.documents = next;
+    this.enforceLimit();
+  }
+
+  /**
+   * Enforce max document limit (remove oldest).
+   */
+  private enforceLimit(): void {
+    let excess = this.documents.size - this.maxDocuments;
+    if (excess <= 0) return;
+
+    for (const id of this.documents.keys()) {
+      if (excess-- <= 0) break;
+      this.documents.delete(id);
+    }
+  }
 
   private computeSimilarity(a: number[], b: number[]): number {
     switch (this.metric) {
@@ -245,13 +369,8 @@ export class VectorStore {
       case 'dot':
         return dotProduct(a, b);
 
-      case 'euclidean': {
-        // Convert euclidean distance to similarity score (0-1)
-        const distance = Math.sqrt(
-          a.reduce((sum, val, i) => sum + Math.pow(val - b[i], 2), 0)
-        );
-        return 1 / (1 + distance);
-      }
+      case 'euclidean':
+        return euclideanSimilarity(a, b);
 
       default:
         return cosineSimilarity(a, b);

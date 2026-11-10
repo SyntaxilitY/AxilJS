@@ -155,13 +155,17 @@ export class QuotaManager {
   private isPeriodExpired(start: number, period: string): boolean {
     const now = Date.now();
     if (period === 'daily') return now - start > 86_400_000;
-    if (period === 'monthly') return now - start > 2_592_000_000;
+    // Calendar month (UTC): usage resets at the start of the next month
+    if (period === 'monthly') return now >= this.getNextReset(start, period);
     return false; // lifetime never expires
   }
 
   private getNextReset(start: number, period: string): number {
     if (period === 'daily') return start + 86_400_000;
-    if (period === 'monthly') return start + 2_592_000_000;
+    if (period === 'monthly') {
+      const d = new Date(start);
+      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+    }
     return 0;
   }
 }

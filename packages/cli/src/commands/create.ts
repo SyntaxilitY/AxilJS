@@ -7,21 +7,28 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
-import { createInterface } from 'node:readline'
-import { spawnSync } from 'node:child_process'
+import { join, resolve, sep } from 'node:path'
+import * as prompts from '../prompts'
+import { closest } from '../args'
+import { TEMPLATES, TEMPLATE_IDS, findTemplate } from '../templates'
+import type { ProjectTemplate, TemplateContext } from '../templates'
 
 import fs from 'node:fs'
 import path from 'node:path'
+
+import * as ui from '../ui'
+import { npmSummary, printCaptured, runCaptured } from '../utils/exec'
 
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type Database = 'none' | 'sqlite' | 'postgres' | 'mysql'
+export type Database = 'none' | 'sqlite' | 'postgres' | 'mysql'
 
-interface ProjectOptions {
+export const DATABASES: Database[] = ['none', 'sqlite', 'postgres', 'mysql']
+
+export interface ProjectOptions {
   database:         Database
   includeAuth:      boolean
   includeAI:        boolean
@@ -29,130 +36,41 @@ interface ProjectOptions {
   includeQueue:     boolean
 }
 
-
-// ---------------------------------------------------------------------------
-// ANSI primitives
-// ---------------------------------------------------------------------------
-
-const ANSI = {
-  reset:    '\x1b[0m',
-  bold:     '\x1b[1m',
-  dim:      '\x1b[2m',
-  italic:   '\x1b[3m',
-  underline:'\x1b[4m',
-  cyan:     '\x1b[36m',
-  green:    '\x1b[32m',
-  yellow:   '\x1b[33m',
-  red:      '\x1b[31m',
-  white:    '\x1b[37m',
-  magenta:  '\x1b[35m',
-  blue:     '\x1b[34m',
-  gray:     '\x1b[90m',
-  bgCyan:   '\x1b[46m',
-  bgBlue:   '\x1b[44m',
-  black:    '\x1b[30m'
-} as const
-
-function s(value: string, ...codes: string[]): string {
-  return `${codes.join('')}${value}${ANSI.reset}`
+/**
+ * Non-interactive options for createProject(). Every field is optional:
+ * a field that is set skips its prompt.
+ */
+export interface CreateOptions {
+  // Accept defaults for every option not given explicitly (no prompts)
+  yes?:         boolean
+  // Database driver (default: none)
+  db?:          Database
+  // JWT + RBAC (default: true)
+  auth?:        boolean
+  // AI platform (default: false)
+  ai?:          boolean
+  // WebSocket support (default: false)
+  ws?:          boolean
+  // Queue and Scheduler (default: false)
+  queue?:       boolean
+  // Skip `npm install` (default: false)
+  skipInstall?: boolean
+  // Allow an existing non-empty target directory (default: false)
+  force?:       boolean
+  // Parent directory of the project (default: process.cwd())
+  cwd?:         string
+  // Force prompting on/off (default: process.stdin.isTTY)
+  interactive?: boolean
+  // Project template id (see templates/); excludes db/auth/ai/ws/queue
+  template?:    string
 }
 
-function visibleLength(str: string): number {
-  return str.replace(/\x1b\[[0-9;]*m/g, '').length
-}
-
-function blank(): void {
-  console.log('')
-}
-
-
-// ---------------------------------------------------------------------------
-// Layout primitives
-// ---------------------------------------------------------------------------
-
-const COL_WIDTH = 64
-
-function line(char = '─'): void {
-  console.log(s(char.repeat(COL_WIDTH), ANSI.gray))
-}
-
-function thinLine(): void {
-  console.log(s('  ' + '·'.repeat(COL_WIDTH - 4), ANSI.gray))
-}
-
-function labelValue(label: string, value: string, indent = 2): void {
-  const lbl = s(label.padEnd(14), ANSI.gray)
-  console.log(' '.repeat(indent) + lbl + value)
-}
-
-function bullet(text: string, indent = 4): void {
-  console.log(' '.repeat(indent) + s('-', ANSI.gray) + ' ' + text)
-}
-
-function numberedItem(
-  n: number,
-  command: string,
-  hint?: string,
-  indent = 4
-): void {
-  const num = s(String(n).padStart(2) + '.', ANSI.gray)
-  const cmd = s(command, ANSI.white + ANSI.bold)
-  console.log(' '.repeat(indent) + num + ' ' + cmd)
-  if (hint) {
-    console.log(
-      ' '.repeat(indent) +
-      '    ' +
-      s(hint, ANSI.yellow)
-    )
-  }
-}
-
-
-// ---------------------------------------------------------------------------
-// Step indicators
-// ---------------------------------------------------------------------------
-
-function stepStart(n: number, total: number, msg: string): void {
-  const tag = s(` ${n}/${total} `, ANSI.bgCyan + ANSI.black + ANSI.bold)
-  console.log(`  ${tag}  ${msg}`)
-}
-
-function stepDone(msg: string): void {
-  console.log(`         ${s('done', ANSI.green + ANSI.bold)}  ${s(msg, ANSI.gray)}`)
-}
-
-function stepFail(msg: string): void {
-  console.error(`         ${s('fail', ANSI.red + ANSI.bold)}  ${msg}`)
-}
-
-function stepWarn(msg: string): void {
-  console.log(`         ${s('warn', ANSI.yellow + ANSI.bold)}  ${s(msg, ANSI.gray)}`)
-}
-
-
-// ---------------------------------------------------------------------------
-// ASCII banner
-// ---------------------------------------------------------------------------
-
-function c(text: string, ...codes: string[]): string {
-  return `${codes.join('')}${text}${ANSI.reset}`
-}
-
-const H_LINE_DIM = '─'.repeat(COL_WIDTH)
-
-function printBanner(name: string, location: string, version: string): void {
-  console.log('')
-  console.log(c('  █████╗ ██╗  ██╗██╗██╗          ██╗███████╗', ANSI.cyan + ANSI.bold))
-  console.log(c(' ██╔══██╗╚██╗██╔╝██║██║          ██║██╔════╝', ANSI.cyan + ANSI.bold))
-  console.log(c(' ███████║ ╚███╔╝ ██║██║          ██║███████╗', ANSI.cyan + ANSI.bold))
-  console.log(c(' ██╔══██║ ██╔██╗ ██║██║     ██╗  ██║╚════██║', ANSI.cyan + ANSI.bold))
-  console.log(c(' ██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║', ANSI.cyan + ANSI.bold))
-  console.log(c(' ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝', ANSI.cyan + ANSI.bold))
-  console.log('')
-  console.log(`  ${c('AxilJS CLI', ANSI.bold)} ${c(`v${version}`, ANSI.dim)}`)
-  console.log(`  Creating app ${c(name, ANSI.bold + ANSI.white)} in ${c(location, ANSI.dim)}`)
-  console.log('')
-  console.log(H_LINE_DIM)
+export const CREATE_DEFAULTS: ProjectOptions = {
+  database:         'none',
+  includeAuth:      true,
+  includeAI:        false,
+  includeWebsocket: false,
+  includeQueue:     false
 }
 
 
@@ -160,74 +78,14 @@ function printBanner(name: string, location: string, version: string): void {
 // Prompts
 // ---------------------------------------------------------------------------
 
-function prompt(question: string, fallback: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
+type Feature = 'auth' | 'ai' | 'ws' | 'queue'
 
-  return new Promise((res) => {
-    const q = `  ${s('?', ANSI.cyan + ANSI.bold)}  ${question} ${s(`(${fallback})`, ANSI.gray)} `
-    rl.question(q, (raw) => {
-      rl.close()
-      res(raw.trim() || fallback)
-    })
-  })
-}
-
-function confirmPrompt(question: string, fallback = false): Promise<boolean> {
-  const hint = fallback
-    ? s('Y', ANSI.green + ANSI.bold) + s('/n', ANSI.gray)
-    : s('y', ANSI.gray) + s('/N', ANSI.white + ANSI.bold)
-
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-
-  return new Promise((res) => {
-    const q = `  ${s('?', ANSI.cyan + ANSI.bold)}  ${question} ${hint} `
-    rl.question(q, (raw) => {
-      rl.close()
-      const a = raw.trim().toLowerCase()
-      if (['y', 'yes'].includes(a)) return res(true)
-      if (['n', 'no'].includes(a))  return res(false)
-      res(fallback)
-    })
-  })
-}
-
-async function databasePrompt(): Promise<Database> {
-  blank()
-  console.log(`  ${s('?', ANSI.cyan + ANSI.bold)}  ${s('Database driver', ANSI.white + ANSI.bold)}`)
-  blank()
-
-  const items: Array<{ n: string; name: string; desc: string }> = [
-    { n: '1', name: 'none',     desc: 'No database'            },
-    { n: '2', name: 'sqlite',   desc: 'Embedded file database' },
-    { n: '3', name: 'postgres', desc: 'PostgreSQL'             },
-    { n: '4', name: 'mysql',    desc: 'MySQL / MariaDB'        }
-  ]
-
-  for (const it of items) {
-    const num   = s(` ${it.n} `, ANSI.bgCyan + ANSI.black + ANSI.bold)
-    const label = s(it.name.padEnd(12), ANSI.white + ANSI.bold)
-    const desc  = s(it.desc, ANSI.gray)
-    console.log(`      ${num} ${label} ${desc}`)
-  }
-
-  blank()
-
-  const map: Record<string, Database> = {
-    '1': 'none', '2': 'sqlite', '3': 'postgres', '4': 'mysql'
-  }
-
-  const raw = await prompt('Select', '1')
-
-  if (map[raw]) return map[raw]
-
-  const norm = raw.toLowerCase()
-  if (['none', 'sqlite', 'postgres', 'mysql'].includes(norm)) {
-    return norm as Database
-  }
-
-  stepWarn('Invalid selection, using none.')
-  return 'none'
-}
+const FEATURE_OPTIONS: Array<prompts.Option<Feature>> = [
+  { value: 'auth',  label: 'Authentication', hint: 'JWT + RBAC' },
+  { value: 'ws',    label: 'WebSocket',      hint: 'RFC 6455 server with rooms' },
+  { value: 'queue', label: 'Queue',          hint: 'Jobs + cron scheduler' },
+  { value: 'ai',    label: 'AI platform',    hint: 'LLM providers, RAG, agents' }
+]
 
 
 // ---------------------------------------------------------------------------
@@ -256,17 +114,6 @@ function writeFile(dir: string, rel: string, content: string): void {
   writeFileSync(fp, content, 'utf8')
 }
 
-function run(cmd: string, args: string[], cwd: string): void {
-  const r = spawnSync(cmd, args, {
-    cwd,
-    stdio: 'inherit',
-    shell: process.platform === 'win32'
-  })
-  if (r.error) throw r.error
-  if (r.status !== 0)
-    throw new Error(`${cmd} ${args.join(' ')} exited with code ${r.status ?? 1}.`)
-}
-
 
 // ---------------------------------------------------------------------------
 // Version
@@ -284,34 +131,109 @@ function getAxilJSVersion(): string {
 
 const axilVersion = getAxilJSVersion()
 
+// Range for sibling @axiljs/* packages. The CLI can be published at a newer
+// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.1), so pin to the
+// minor line instead of the CLI's exact patch to keep `npm install` resolvable.
+const axilRange = `^${axilVersion.split('.').slice(0, 2).join('.')}.0`
+
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
-export async function createProject(name: string): Promise<void> {
+export async function createProject(name: string, opts: CreateOptions = {}): Promise<void> {
   validateProjectName(name)
 
-  const projectDir = join(process.cwd(), name)
-
-  if (existsSync(projectDir)) {
-    throw new Error(`Directory "${name}" already exists.`)
+  if (opts.db !== undefined && !DATABASES.includes(opts.db)) {
+    throw new Error(`Invalid database "${opts.db}". Expected one of: ${DATABASES.join(', ')}.`)
   }
 
-  // ── Banner ───────────────────────────────────────────────────────────
-  printBanner(name, projectDir, axilVersion)
+  const projectDir = join(opts.cwd || process.cwd(), name)
+
+  if (existsSync(projectDir)) {
+    const empty = fs.statSync(projectDir).isDirectory() && fs.readdirSync(projectDir).length === 0
+    if (!fs.statSync(projectDir).isDirectory()) {
+      throw new Error(`"${name}" already exists and is not a directory.`)
+    }
+    if (!empty && !opts.force) {
+      throw new Error(`Directory "${name}" already exists and is not empty. Use --force to create into it anyway.`)
+    }
+  }
+
+  // Prompt only on a TTY and without --yes; otherwise use flags + defaults
+  const interactive = opts.interactive ?? (!opts.yes && process.stdin.isTTY === true)
+  const startedAt   = Date.now()
+
+  // ── Header ───────────────────────────────────────────────────────────
+  ui.title('create', `AxilJS v${axilVersion}`)
+  ui.step(`Creating ${ui.c.bold(name)}`, opts.cwd ? projectDir : `.${sep}${name}`)
+
+  // ── Template ─────────────────────────────────────────────────────────
+  let template = opts.template !== undefined ? resolveTemplate(opts.template) : undefined
+  const featureFlagsGiven = [opts.db, opts.auth, opts.ai, opts.ws, opts.queue].some(v => v !== undefined)
+
+  if (template && featureFlagsGiven) {
+    throw new Error(
+      `--template ${template.id} defines its own stack; drop --db/--auth/--ai/--ws/--queue, or create without --template.`
+    )
+  }
+
+  if (!template && interactive && !featureFlagsGiven) {
+    const choice = await prompts.select<string>({
+      message: 'Starter',
+      initial: 'custom',
+      options: [
+        { value: 'custom', label: 'Custom', hint: 'Pick a database and features' },
+        ...TEMPLATES.map(t => ({ value: t.id, label: t.title, hint: t.summary }))
+      ]
+    })
+    if (choice !== 'custom') template = findTemplate(choice)
+  }
+
+  if (template) {
+    await createFromTemplate(name, projectDir, template, opts, interactive, startedAt)
+    return
+  }
 
   // ── Features ─────────────────────────────────────────────────────────
-  blank()
-  console.log(s('  CONFIGURE', ANSI.gray + ANSI.bold))
-  thinLine()
+  const database = opts.db ?? (interactive
+    ? await prompts.select<Database>({
+        message: 'Database',
+        initial: CREATE_DEFAULTS.database,
+        options: [
+          { value: 'none',     label: 'None',     hint: 'No database' },
+          { value: 'sqlite',   label: 'SQLite',   hint: 'Embedded file database' },
+          { value: 'postgres', label: 'Postgres', hint: 'PostgreSQL' },
+          { value: 'mysql',    label: 'MySQL',    hint: 'MySQL / MariaDB' }
+        ]
+      })
+    : CREATE_DEFAULTS.database)
 
-  const database         = await databasePrompt()
-  blank()
-  const includeAuth      = await confirmPrompt('Authentication (JWT + RBAC)?', true)
-  const includeAI        = await confirmPrompt('AI platform?',                 false)
-  const includeWebsocket = await confirmPrompt('WebSocket support?',           false)
-  const includeQueue     = await confirmPrompt('Queue and Scheduler?',         false)
+  // Ask (in one multi-select) only for features not already set by a flag
+  const featureFlags: Record<Feature, boolean | undefined> = {
+    auth: opts.auth, ai: opts.ai, ws: opts.ws, queue: opts.queue
+  }
+  const featureDefaults: Record<Feature, boolean> = {
+    auth:  CREATE_DEFAULTS.includeAuth,
+    ai:    CREATE_DEFAULTS.includeAI,
+    ws:    CREATE_DEFAULTS.includeWebsocket,
+    queue: CREATE_DEFAULTS.includeQueue
+  }
+  const askable = FEATURE_OPTIONS.filter(f => featureFlags[f.value] === undefined)
+  const picked = interactive && askable.length > 0
+    ? await prompts.multiselect<Feature>({
+        message: 'Features',
+        options: askable,
+        initial: askable.filter(f => featureDefaults[f.value]).map(f => f.value)
+      })
+    : undefined
+  const feature = (f: Feature): boolean =>
+    featureFlags[f] ?? (picked ? picked.includes(f) : featureDefaults[f])
+
+  const includeAuth      = feature('auth')
+  const includeAI        = feature('ai')
+  const includeWebsocket = feature('ws')
+  const includeQueue     = feature('queue')
 
   const options: ProjectOptions = {
     database,
@@ -322,44 +244,31 @@ export async function createProject(name: string): Promise<void> {
   }
 
   // ── Summary ──────────────────────────────────────────────────────────
-  blank()
-  console.log(s('  SUMMARY', ANSI.gray + ANSI.bold))
-  thinLine()
-  blank()
+  ui.section('Summary')
 
-  const on  = s('on',  ANSI.green + ANSI.bold)
-  const off = s('-',   ANSI.gray)
+  const on  = ui.c.green('on')
+  const off = ui.muted('-')
 
-  const dbVal = database === 'none'
-    ? s('none', ANSI.gray)
-    : s(database, ANSI.cyan + ANSI.bold)
+  ui.keyValue([
+    ['Database',  database === 'none' ? ui.muted('none') : ui.cmd(database)],
+    ['Auth',      includeAuth      ? on : off],
+    ['AI',        includeAI        ? on : off],
+    ['WebSocket', includeWebsocket ? on : off],
+    ['Queue',     includeQueue     ? on : off]
+  ])
 
-  labelValue('Database',  dbVal,                                 4)
-  labelValue('Auth',      includeAuth      ? on : off,           4)
-  labelValue('AI',        includeAI        ? on : off,           4)
-  labelValue('WebSocket', includeWebsocket ? on : off,           4)
-  labelValue('Queue',     includeQueue     ? on : off,           4)
 
-  blank()
-  thinLine()
-  blank()
-
-  const ok = await confirmPrompt('Create project?', true)
+  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true }) : true
 
   if (!ok) {
-    blank()
-    stepWarn('Cancelled.')
-    blank()
+    ui.warn('Cancelled.')
+    ui.line()
     return
   }
 
   // ── Scaffold ─────────────────────────────────────────────────────────
-  blank()
-  console.log(s('  CREATING', ANSI.gray + ANSI.bold))
-  line()
-  blank()
+  ui.section('Scaffold')
 
-  const total = 4
   const dirs  = [
     'src',
     'src/config',
@@ -370,114 +279,242 @@ export async function createProject(name: string): Promise<void> {
   ]
   if (database !== 'none') dirs.push('src/db', 'src/migrations')
 
+  let written = 0
+  const write = (rel: string, content: string): void => {
+    writeFile(projectDir, rel, content)
+    written++
+  }
+
   try {
-    stepStart(1, total, 'Project structure')
     for (const d of dirs) mkdirSync(join(projectDir, d), { recursive: true })
-    stepDone('Directories created')
+    ui.success('Project structure', `${dirs.length} directories`)
 
-    blank()
-    stepStart(2, total, 'Application files')
+    write('package.json',           generatePackageJson(name, options))
+    write('tsconfig.json',           generateTsConfig())
+    write('.gitignore',               generateGitignore())
+    write('.env.example',             generateEnvExample(options))
+    write('README.md',                generateReadme(name, options))
+    write('src/main.ts',              generateMainFile(name, options))
+    write('src/config/app.config.ts', generateAppConfig())
 
-    writeFile(projectDir, 'package.json',           generatePackageJson(name, options))
-    writeFile(projectDir, 'tsconfig.json',           generateTsConfig())
-    writeFile(projectDir, '.gitignore',               generateGitignore())
-    writeFile(projectDir, '.env.example',             generateEnvExample(options))
-    writeFile(projectDir, 'README.md',                generateReadme(name, options))
-    writeFile(projectDir, 'src/main.ts',              generateMainFile(name, options))
-    writeFile(projectDir, 'src/config/app.config.ts', generateAppConfig())
-
-    writeFile(
-      projectDir,
+    write(
       'src/modules/users/controllers/users.controller.ts',
       generateUsersController(options)
     )
-    writeFile(
-      projectDir,
+    write(
       'src/modules/users/services/users.service.ts',
       generateUsersService(options)
     )
 
     if (database !== 'none') {
-      writeFile(projectDir, 'src/db/connection.ts',              generateDbConnection(database))
-      writeFile(projectDir, 'src/migrations/001_create_users.ts', generateUsersMigration(database))
+      write('src/db/connection.ts',              generateDbConnection(database))
+      write('src/migrations/001_create_users.ts', generateUsersMigration(database))
     }
 
-    stepDone('Files written')
+    ui.success('Application files', `${written} files written`)
 
-    blank()
-    stepStart(3, total, 'Dependencies')
-    blank()
-    run('npm', ['install'], projectDir)
-    blank()
-    stepDone('Installed')
-
-    blank()
-    stepStart(4, total, 'Finalising')
-    stepDone('Ready')
-
+    if (opts.skipInstall) {
+      ui.warn('Skipped (--skip-install)', 'run npm install inside the project')
+    } else {
+      const installStart = Date.now()
+      const spin = ui.spinner('Installing dependencies')
+      const result = await runCaptured('npm install', projectDir)
+      if (result.code !== 0) {
+        spin.fail('Dependency install failed', 'npm install')
+        printCaptured(result.output, l => console.error(l))
+        throw new Error(`npm install exited with code ${result.code}.`)
+      }
+      spin.succeed(
+        'Dependencies installed',
+        npmSummary(result.output) ?? ui.formatDuration(Date.now() - installStart)
+      )
+    }
   } catch (err) {
-    blank()
-    stepFail(err instanceof Error ? err.message : String(err))
-    blank()
-    stepWarn(`Left at: ${projectDir}`)
-    stepWarn('Remove it manually before retrying.')
-    blank()
+    ui.line()
+    ui.warn(`Left at: ${projectDir}`)
+    ui.detail('Remove it manually before retrying.')
     throw err
   }
 
-  // ── Next steps ───────────────────────────────────────────────────────
-  blank()
-  line()
-  blank()
-  console.log(s('  NEXT STEPS', ANSI.gray + ANSI.bold))
-  thinLine()
-  blank()
+  ui.done(`Created ${name}`, startedAt)
 
+  // ── Next steps ───────────────────────────────────────────────────────
   const isWin   = process.platform === 'win32'
   const copyCmd = isWin ? 'Copy-Item .env.example .env' : 'cp .env.example .env'
 
-  let step = 1
-
-  numberedItem(step++, `cd ${name}`)
-  numberedItem(step++, copyCmd)
+  const steps: Array<[string, string?]> = [[`cd ${name}`]]
+  if (opts.skipInstall) steps.push(['npm install'])
+  steps.push([copyCmd])
 
   if (database === 'postgres') {
-    numberedItem(step++, 'Edit .env', 'Set DATABASE_URL to your PostgreSQL connection string')
+    steps.push(['Edit .env', 'Set DATABASE_URL to your PostgreSQL connection string'])
   } else if (database === 'mysql') {
-    numberedItem(step++, 'Edit .env', 'Set DATABASE_URL to your MySQL connection string')
+    steps.push(['Edit .env', 'Set DATABASE_URL to your MySQL connection string'])
   } else if (database === 'sqlite') {
-    numberedItem(step++, 'Review .env', 'DATABASE_FILENAME defaults to ./dev.db')
+    steps.push(['Review .env', 'DATABASE_FILENAME defaults to ./dev.db'])
   }
 
   if (options.includeAuth) {
-    numberedItem(step++, 'Edit .env', 'Set JWT_SECRET to a random string (32+ characters)')
+    steps.push(['Edit .env', 'Set JWT_SECRET to a random string (32+ characters)'])
   }
 
-  numberedItem(step++, 'npm run dev')
+  if (database !== 'none') {
+    steps.push(['npm run migrate', 'Creates the users table (axil migrate)'])
+  }
+
+  steps.push(['npm run dev'])
+
+  const lines: string[] = []
+  steps.forEach(([command, hint], i) => {
+    const isCommand = !/^(Edit|Review) /.test(command)
+    lines.push(`${ui.muted(`${i + 1}.`)} ${isCommand ? ui.cmd(command) : ui.c.bold(command)}`)
+    if (hint) lines.push(`   ${ui.muted(hint)}`)
+  })
+  ui.box('Next steps', lines)
 
   // ── Links ────────────────────────────────────────────────────────────
-  blank()
-  line()
-  blank()
+  ui.keyValue([
+    ['Local', ui.cmd('http://localhost:3000')],
+    ['Docs',  ui.path('https://github.com/SyntaxilitY/AxilJS')],
+    ['npm',   ui.path('https://www.npmjs.com/org/axiljs')]
+  ])
+  ui.line()
+  ui.line(`${ui.muted('Run')} ${ui.cmd('npm run dev')} ${ui.muted('inside')} ${ui.c.bold(name)} ${ui.muted('to start developing.')}`)
+  ui.line()
+}
 
-  labelValue('Local',  s('http://localhost:3000',               ANSI.cyan + ANSI.underline))
-  labelValue('Docs',   s('https://github.com/SyntaxilitY/AxilJS', ANSI.gray + ANSI.underline))
-  labelValue('npm',    s('https://www.npmjs.com/org/axiljs',    ANSI.gray + ANSI.underline))
 
-  blank()
-  thinLine()
-  blank()
-  console.log(
-    '  ' +
-    s('Run ', ANSI.gray) +
-    s('npm run dev', ANSI.cyan + ANSI.bold) +
-    s(' inside ', ANSI.gray) +
-    s(name, ANSI.white + ANSI.bold) +
-    s(' to start developing.', ANSI.gray)
+// ---------------------------------------------------------------------------
+// Templates (--template <id>)
+// ---------------------------------------------------------------------------
+
+function resolveTemplate(id: string): ProjectTemplate {
+  const found = findTemplate(id)
+  if (found) return found
+  const guess = closest(id, TEMPLATE_IDS)
+  throw new Error(
+    `Unknown template "${id}".${guess ? ` Did you mean "${guess}"?` : ''} Available: ${TEMPLATE_IDS.join(', ')}.`
   )
-  blank()
-  line()
-  blank()
+}
+
+const REQUIRED_TEMPLATE_FILES = ['src/main.ts', 'README.md', '.env.example']
+
+async function createFromTemplate(
+  name: string,
+  projectDir: string,
+  template: ProjectTemplate,
+  opts: CreateOptions,
+  interactive: boolean,
+  startedAt: number
+): Promise<void> {
+  const ctx: TemplateContext = { name, axilRange, cliVersion: axilVersion }
+
+  ui.section('Summary')
+  ui.keyValue([
+    ['Template', `${ui.c.bold(template.title)}  ${ui.muted(template.id)}`],
+    ['Packages', template.packages.join(', ')],
+    ['Port',     String(template.port)]
+  ])
+
+  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true }) : true
+  if (!ok) {
+    ui.warn('Cancelled.')
+    ui.outro()
+    return
+  }
+
+  const files = template.files(ctx)
+  const missing = REQUIRED_TEMPLATE_FILES.filter(f => !(f in files))
+  if (missing.length > 0) {
+    throw new Error(`Template "${template.id}" is incomplete: missing ${missing.join(', ')}.`)
+  }
+
+  ui.section('Scaffold')
+  try {
+    writeFile(projectDir, 'package.json',  generateTemplatePackageJson(name, template, ctx))
+    writeFile(projectDir, 'tsconfig.json', generateTsConfig())
+    writeFile(projectDir, '.gitignore',    generateGitignore())
+    for (const [rel, content] of Object.entries(files)) writeFile(projectDir, rel, content)
+    ui.success('Application files', `${Object.keys(files).length + 3} files written`)
+
+    await installDependencies(projectDir, opts.skipInstall === true)
+  } catch (err) {
+    ui.line()
+    ui.warn(`Left at: ${projectDir}`)
+    ui.detail('Remove it manually before retrying.')
+    throw err
+  }
+
+  ui.done(`Created ${name}`, startedAt)
+
+  const copyCmd = process.platform === 'win32' ? 'Copy-Item .env.example .env' : 'cp .env.example .env'
+  const steps: Array<[string, string?]> = [[`cd ${name}`]]
+  if (opts.skipInstall) steps.push(['npm install'])
+  steps.push([copyCmd], ...template.nextSteps(ctx), ['npm run dev', `http://localhost:${template.port}`])
+  printNextSteps(steps)
+
+  ui.keyValue([
+    ['Template', ui.cmd(template.id)],
+    ['Docs',     ui.path('README.md')]
+  ])
+  ui.line()
+}
+
+function generateTemplatePackageJson(name: string, template: ProjectTemplate, ctx: TemplateContext): string {
+  const sortKeys = (o: Record<string, string>): Record<string, string> =>
+    Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)))
+
+  return JSON.stringify({
+    name,
+    version: '1.0.0',
+    private: true,
+    type: 'module',
+    description: `${name} - AxilJS ${template.title} (template: ${template.id})`,
+    scripts: {
+      dev:   'axil run',
+      build: 'tsc',
+      start: 'node dist/main.js',
+      test:  'axil test',
+      ...template.scripts
+    },
+    dependencies: sortKeys(template.dependencies(ctx)),
+    devDependencies: sortKeys({
+      '@axiljs/cli':     `^${axilVersion}`,
+      '@axiljs/testing': axilRange,
+      '@types/node':     '^26.2.0',
+      typescript:        '^7.0.2',
+      ...template.devDependencies?.(ctx)
+    })
+  }, null, 2) + '\n'
+}
+
+async function installDependencies(projectDir: string, skip: boolean): Promise<void> {
+  if (skip) {
+    ui.warn('Skipped (--skip-install)', 'run npm install inside the project')
+    return
+  }
+  const installStart = Date.now()
+  const spin = ui.spinner('Installing dependencies')
+  const result = await runCaptured('npm install', projectDir)
+  if (result.code !== 0) {
+    spin.fail('Dependency install failed', 'npm install')
+    printCaptured(result.output, l => console.error(l))
+    throw new Error(`npm install exited with code ${result.code}.`)
+  }
+  spin.succeed(
+    'Dependencies installed',
+    npmSummary(result.output) ?? ui.formatDuration(Date.now() - installStart)
+  )
+}
+
+function printNextSteps(steps: Array<[string, string?]>): void {
+  const lines: string[] = []
+  steps.forEach(([command, hint], i) => {
+    const isCommand = !/^(Edit|Review|Open|Start|Set) /.test(command)
+    lines.push(`${ui.muted(`${i + 1}.`)} ${isCommand ? ui.cmd(command) : ui.c.bold(command)}`)
+    if (hint) lines.push(`   ${ui.muted(hint)}`)
+  })
+  ui.box('Next steps', lines)
 }
 
 
@@ -487,21 +524,21 @@ export async function createProject(name: string): Promise<void> {
 
 function generatePackageJson(name: string, options: ProjectOptions): string {
   const deps: Record<string, string> = {
-    '@axiljs/core':   `^${axilVersion}`,
-    '@axiljs/config': `^${axilVersion}`
+    '@axiljs/core':   axilRange,
+    '@axiljs/config': axilRange
   }
 
   if (options.database !== 'none') {
-    deps['@axiljs/orm'] = `^${axilVersion}`
+    deps['@axiljs/orm'] = axilRange
     if (options.database === 'postgres') deps['pg']             = '^8.23.0'
     if (options.database === 'mysql')    deps['mysql2']         = '^3.23.3'
     if (options.database === 'sqlite')   deps['better-sqlite3'] = '^13.0.3'
   }
 
-  if (options.includeAuth)      deps['@axiljs/auth']      = `^${axilVersion}`
-  if (options.includeAI)        deps['@axiljs/ai']        = `^${axilVersion}`
-  if (options.includeWebsocket) deps['@axiljs/websocket'] = `^${axilVersion}`
-  if (options.includeQueue)     deps['@axiljs/queue']     = `^${axilVersion}`
+  if (options.includeAuth)      deps['@axiljs/auth']      = axilRange
+  if (options.includeAI)        deps['@axiljs/ai']        = axilRange
+  if (options.includeWebsocket) deps['@axiljs/websocket'] = axilRange
+  if (options.includeQueue)     deps['@axiljs/queue']     = axilRange
 
   return JSON.stringify({
     name,
@@ -513,13 +550,16 @@ function generatePackageJson(name: string, options: ProjectOptions): string {
       dev:   'axil run',
       build: 'tsc',
       start: 'node dist/main.js',
-      test:  'axil test'
+      test:  'axil test',
+      ...(options.database !== 'none' ? { migrate: 'axil migrate' } : {})
     },
     dependencies: deps,
     devDependencies: {
-      '@axiljs/cli': `^${axilVersion}`,
-      '@types/node': '^26.2.0',
-      typescript:    '^7.0.2'
+      '@axiljs/cli':     `^${axilVersion}`,
+      // `npm test` → `axil test` loads the project's @axiljs/testing
+      '@axiljs/testing': axilRange,
+      '@types/node':     '^26.2.0',
+      typescript:        '^7.0.2'
     }
   }, null, 2) + '\n'
 }
@@ -607,6 +647,24 @@ function generateReadme(name: string, options: ProjectOptions): string {
     : options.database === 'mysql'
       ? '\nUpdate `DATABASE_URL` in `.env` with your MySQL credentials before starting.\n' : ''
 
+  const hasDb = options.database !== 'none'
+
+  const migrateBlock = hasDb
+    ? '\nCreate the database tables (runs `src/migrations/*` via `axil migrate`):\n\n```bash\nnpm run migrate\n```\n'
+    : ''
+
+  const migrationsSection = hasDb
+    ? '## Migrations\n\n' +
+      'Migrations live in `src/migrations/` and run with the `@axiljs/orm` MigrationRunner.\n' +
+      'Connection settings come from `.env` (`DATABASE_URL`, `DATABASE_FILENAME`, optional `DB_DRIVER`).\n\n' +
+      '```bash\n' +
+      'npx axil migrate          # apply pending migrations\n' +
+      'npx axil migrate status   # show applied / pending\n' +
+      'npx axil migrate down     # roll back the last batch\n' +
+      'npx axil g migration add_price_to_products\n' +
+      '```\n\n'
+    : ''
+
   const authNote = options.includeAuth
     ? '\nSet `JWT_SECRET` in `.env` to a securely generated random string (32+ characters).\n' : ''
 
@@ -624,7 +682,7 @@ ${f.map(x => `- ${x}`).join('\n')}
 npm install
 cp .env.example .env
 \`\`\`
-${dbNote}${authNote}
+${dbNote}${authNote}${migrateBlock}
 \`\`\`bash
 npm run dev
 \`\`\`
@@ -633,7 +691,7 @@ npm run dev
 
 \`\`\`powershell
 npm install
-Copy-Item .env.example .env
+Copy-Item .env.example .env${hasDb ? '\nnpm run migrate' : ''}
 npm run dev
 \`\`\`
 
@@ -647,6 +705,19 @@ The server starts at <http://localhost:3000>.
 | \`npm run build\` | Compile TypeScript to \`dist/\`    |
 | \`npm start\`     | Run the compiled application       |
 | \`npm test\`      | Run the test suite                 |
+${hasDb ? '| `npm run migrate` | Apply pending migrations (`axil migrate`) |\n' : ''}
+${migrationsSection}## Generators
+
+\`\`\`bash
+npx axil generate module products     # controller + service (+ migration with a database)
+npx axil g controller orders
+npx axil g service billing
+npx axil g entity product
+npx axil g migration add_price_to_products
+\`\`\`
+
+Register a generated controller in \`src/main.ts\`, e.g.
+\`new ProductsController().register(app)\`.
 
 ## Project structure
 
@@ -678,6 +749,7 @@ function generateMainFile(name: string, options: ProjectOptions): string {
   if (options.includeWebsocket)    imp.push(`import { WSServer } from '@axiljs/websocket'`)
   if (options.includeQueue)        imp.push(`import { Queue, Scheduler } from '@axiljs/queue'`)
   if (options.database !== 'none') imp.push(`import { connectDB } from './db/connection.js'`)
+  imp.push(`import { UsersController } from './modules/users/controllers/users.controller.js'`)
 
   const cfg = [
     `  PORT:     { type: 'number', default: 3000 }`,
@@ -711,6 +783,7 @@ function generateMainFile(name: string, options: ProjectOptions): string {
     `app.get('/health', (_req, res) => {`,
     `  res.json({ status: 'ok', service: '${name}', timestamp: new Date().toISOString() })`,
     `})`, ``,
+    `new UsersController().register(app)`, ``,
     `await app.listen()`
   )
 
@@ -762,174 +835,406 @@ export const appConfig: AppConfig = {
 `
 }
 
-function generateUsersController(options: ProjectOptions): string {
+// ---------------------------------------------------------------------------
+// Resource templates (shared by `axil create` and `axil generate`)
+// ---------------------------------------------------------------------------
+
+export interface ResourceNames {
+  // Directory + file base name, kebab-case ("users", "order-items")
+  file:      string
+  // Class prefix ("Users" → UsersController / UsersService)
+  className: string
+  // Record type name ("User")
+  entity:    string
+  // Route path without leading slash ("users")
+  route:     string
+  // SQL table name ("users", "order_items")
+  table:     string
+  // Human label for list messages ("Users")
+  plural:    string
+  // Human label for single-record messages ("User")
+  singular:  string
+}
+
+export function toKebab(input: string): string {
+  return input
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase()
+}
+
+export function toPascal(input: string): string {
+  return toKebab(input).split('-').filter(Boolean)
+    .map(p => p[0].toUpperCase() + p.slice(1)).join('')
+}
+
+export function toSnake(input: string): string {
+  return toKebab(input).replace(/-/g, '_')
+}
+
+function singularize(word: string): string {
+  if (/ies$/.test(word)) return word.slice(0, -3) + 'y'
+  if (/(ss|us|is)$/.test(word)) return word
+  if (/(ch|sh|x|z)es$/.test(word)) return word.slice(0, -2)
+  if (/s$/.test(word)) return word.slice(0, -1)
+  return word
+}
+
+function pluralize(word: string): string {
+  if (/[^aeiou]y$/.test(word)) return word.slice(0, -1) + 'ies'
+  if (/(s|ch|sh|x|z)$/.test(word)) return /(ss|ch|sh|x|z)$/.test(word) || !/s$/.test(word) ? word + 'es' : word
+  return word + 's'
+}
+
+/** Derive file/class/route/table names from a user-supplied resource name. */
+export function resourceNames(input: string): ResourceNames {
+  const file = toKebab(input)
+  if (!file) throw new Error(`Invalid name "${input}". Use letters, numbers and dashes.`)
+  if (/^\d/.test(file)) throw new Error(`Invalid name "${input}". Names cannot start with a digit.`)
+
+  const parts    = file.split('-')
+  const last     = parts[parts.length - 1]
+  const single   = [...parts.slice(0, -1), singularize(last)].join('-')
+  const many     = [...parts.slice(0, -1), pluralize(singularize(last))].join('-')
+
+  return {
+    file,
+    className: toPascal(file),
+    entity:    toPascal(single),
+    route:     many,
+    table:     toSnake(many),
+    plural:    toPascal(many),
+    singular:  toPascal(single)
+  }
+}
+
+const USERS: ResourceNames = resourceNames('users')
+const USER_FIELDS = ['name', 'email']
+
+export function generateResourceController(
+  options: ProjectOptions,
+  n: ResourceNames
+): string {
   const ai = options.includeAuth ? `\nimport { JWT, authenticate } from '@axiljs/auth'` : ''
   const jf = options.includeAuth
     ? `\n  private readonly jwt = new JWT(\n` +
       `    process.env.JWT_SECRET ||\n` +
       `      'change-this-secret-to-a-random-value-with-at-least-32-characters'\n  )\n` : ''
   const lr = options.includeAuth
-    ? `    app.get('/users', authenticate(this.jwt), this.list.bind(this) as any)`
-    : `    app.get('/users', this.list.bind(this) as any)`
+    ? `    app.get('/${n.route}', authenticate(this.jwt), this.list.bind(this) as any)`
+    : `    app.get('/${n.route}', this.list.bind(this) as any)`
+  const svc = `${n.className[0].toLowerCase()}${n.className.slice(1)}Service`
 
   return `/**
- * Users Controller.
+ * ${n.className} Controller.
  */
 
 import { Application } from '@axiljs/core'
 import type { axilRequest as Request, axilResponse as Response } from '@axiljs/core'
-import { UsersService } from '../services/users.service.js'${ai}
+import { ${n.className}Service } from '../services/${n.file}.service.js'${ai}
 
-export class UsersController {
-  private readonly usersService = new UsersService()
+export class ${n.className}Controller {
+  private readonly ${svc} = new ${n.className}Service()
 ${jf}
   register(app: Application): void {
 ${lr}
-    app.get('/users/:id',    this.getById.bind(this) as any)
-    app.post('/users',       this.create.bind(this)  as any)
-    app.put('/users/:id',    this.update.bind(this)  as any)
-    app.delete('/users/:id', this.remove.bind(this)  as any)
+    app.get('/${n.route}/:id',    this.getById.bind(this) as any)
+    app.post('/${n.route}',       this.create.bind(this)  as any)
+    app.put('/${n.route}/:id',    this.update.bind(this)  as any)
+    app.delete('/${n.route}/:id', this.remove.bind(this)  as any)
   }
 
   async list(_req: Request, res: Response): Promise<void> {
-    const users = await this.usersService.findAll()
-    res.success({ data: users, total: users.length }, 'Users retrieved successfully')
+    const items = await this.${svc}.findAll()
+    res.success({ data: items, total: items.length }, '${n.plural} retrieved successfully')
   }
 
   async getById(req: Request, res: Response): Promise<void> {
-    const user = await this.usersService.findById(req.params.id)
-    res.success({ data: user }, 'User retrieved successfully')
+    const item = await this.${svc}.findById(req.params.id)
+    res.success({ data: item }, '${n.singular} retrieved successfully')
   }
 
   async create(req: Request, res: Response): Promise<void> {
-    const user = await this.usersService.create(req.body as any)
-    res.created({ data: user }, 'User created successfully')
+    const item = await this.${svc}.create(req.body as any)
+    res.created({ data: item }, '${n.singular} created successfully')
   }
 
   async update(req: Request, res: Response): Promise<void> {
-    const user = await this.usersService.update(req.params.id, req.body as any)
-    res.success({ data: user }, 'User updated successfully')
+    const item = await this.${svc}.update(req.params.id, req.body as any)
+    res.success({ data: item }, '${n.singular} updated successfully')
   }
 
   async remove(req: Request, res: Response): Promise<void> {
-    await this.usersService.delete(req.params.id)
+    await this.${svc}.delete(req.params.id)
     res.noContent()
   }
 }
 `
 }
 
-function generateUsersService(options: ProjectOptions): string {
+export function generateResourceService(
+  options: ProjectOptions,
+  n: ResourceNames,
+  fields: string[] = ['name']
+): string {
+  const E = n.entity
+  const fieldTypes = fields.map(f => `${f}: string`).join('; ')
+
   if (options.database === 'none') {
+    const sample = fields.map(f => `${f}: ${f === 'email' ? `'user@example.com'` : `'Example ${n.singular}'`}`).join(', ')
+    const assign = fields.map(f => `${f}: data.${f} || ''`).join(', ')
     return `/**
- * Users Service.
+ * ${n.className} Service.
  * In-memory implementation (no database configured).
  */
 
 import { NotFoundError } from '@axiljs/core'
 
-export interface User {
-  id: string; name: string; email: string; createdAt: string
+export interface ${E} {
+  id: string; ${fieldTypes}; createdAt: string
 }
 
-export class UsersService {
-  private users: User[] = [
-    { id: '1', name: 'Example User', email: 'user@example.com', createdAt: new Date().toISOString() }
+export class ${n.className}Service {
+  private items: ${E}[] = [
+    { id: '1', ${sample}, createdAt: new Date().toISOString() }
   ]
+  private nextId = 2
 
-  async findAll(): Promise<User[]> { return this.users }
+  async findAll(): Promise<${E}[]> { return this.items }
 
-  async findById(id: string): Promise<User> {
-    const u = this.users.find((x) => x.id === id)
-    if (!u) throw new NotFoundError(\`User \${id} not found.\`)
-    return u
+  async findById(id: string): Promise<${E}> {
+    const item = this.items.find((x) => x.id === id)
+    if (!item) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+    return item
   }
 
-  async create(data: Partial<User>): Promise<User> {
-    const u: User = {
-      id: String(this.users.length + 1),
-      name: data.name || '', email: data.email || '',
+  async create(data: Partial<${E}>): Promise<${E}> {
+    const item: ${E} = {
+      id: String(this.nextId++),
+      ${assign},
       createdAt: new Date().toISOString()
     }
-    this.users.push(u)
-    return u
+    this.items.push(item)
+    return item
   }
 
-  async update(id: string, data: Partial<User>): Promise<User> {
-    const i = this.users.findIndex((x) => x.id === id)
-    if (i === -1) throw new NotFoundError(\`User \${id} not found.\`)
-    this.users[i] = { ...this.users[i], ...data }
-    return this.users[i]
+  async update(id: string, data: Partial<${E}>): Promise<${E}> {
+    const i = this.items.findIndex((x) => x.id === id)
+    if (i === -1) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+    const { id: _ignored, ...changes } = data
+    this.items[i] = { ...this.items[i], ...changes }
+    return this.items[i]
   }
 
   async delete(id: string): Promise<void> {
-    const i = this.users.findIndex((x) => x.id === id)
-    if (i === -1) throw new NotFoundError(\`User \${id} not found.\`)
-    this.users.splice(i, 1)
+    const i = this.items.findIndex((x) => x.id === id)
+    if (i === -1) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+    this.items.splice(i, 1)
   }
 }
 `
   }
 
-  const p = options.database === 'postgres' ? '$1' : '?'
+  // Placeholders: $1, $2, … for postgres; ? for sqlite/mysql
+  const pg = options.database === 'postgres'
+  const ph = (i: number): string => pg ? `$${i}` : '?'
+  const cols      = fields.join(', ')
+  const values    = fields.map((_, i) => ph(i + 1)).join(', ')
+  const setList   = fields.map((f, i) => `${f} = COALESCE(${ph(i + 1)}, ${f})`).join(', ')
+  const idPh      = ph(fields.length + 1)
+  const createArgs = fields.map(f => `data.${f} ?? ''`).join(', ')
+  const updateArgs = fields.map(f => `data.${f} ?? null`).join(', ')
+  const mapFields  = fields.map(f => `${f}: String(row.${f} ?? '')`).join(',\n    ')
+
+  // MySQL has no RETURNING: insert, then read the row back by insertId;
+  // update/delete check existence / affectedRows instead.
+  const writeMethods = options.database === 'mysql'
+    ? `  async create(data: Partial<${E}>): Promise<${E}> {
+    const r = await this.driver.query(
+      'INSERT INTO ${n.table} (${cols}) VALUES (${values})',
+      [${createArgs}]
+    )
+    return this.findById(String(r.insertId))
+  }
+
+  async update(id: string, data: Partial<${E}>): Promise<${E}> {
+    await this.findById(id)
+    await this.driver.query(
+      'UPDATE ${n.table} SET ${setList} WHERE id = ${idPh}',
+      [${updateArgs}, id]
+    )
+    return this.findById(id)
+  }
+
+  async delete(id: string): Promise<void> {
+    const r = await this.driver.query('DELETE FROM ${n.table} WHERE id = ?', [id])
+    if (r.affectedRows === 0) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+  }`
+    : `  async create(data: Partial<${E}>): Promise<${E}> {
+    const r = await this.driver.query(
+      'INSERT INTO ${n.table} (${cols}) VALUES (${values}) RETURNING *',
+      [${createArgs}]
+    )
+    return to${E}(r.rows[0])
+  }
+
+  async update(id: string, data: Partial<${E}>): Promise<${E}> {
+    const r = await this.driver.query(
+      'UPDATE ${n.table} SET ${setList} WHERE id = ${idPh} RETURNING *',
+      [${updateArgs}, id]
+    )
+    if (r.rows.length === 0) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+    return to${E}(r.rows[0])
+  }
+
+  async delete(id: string): Promise<void> {
+    const r = await this.driver.query('DELETE FROM ${n.table} WHERE id = ${ph(1)} RETURNING id', [id])
+    if (r.rows.length === 0) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+  }`
+
   return `/**
- * Users Service.
- * Database-backed implementation.
+ * ${n.className} Service.
+ * Database-backed implementation (${options.database}).
  */
 
 import { NotFoundError } from '@axiljs/core'
 import { getDB } from '../../../db/connection.js'
 
-export interface User {
-  id: string; name: string; email: string; createdAt: string
+export interface ${E} {
+  id: string; ${fieldTypes}; createdAt: string
 }
 
-function toUser(row: Record<string, unknown>): User {
+function to${E}(row: Record<string, unknown>): ${E} {
   return {
-    id: String(row.id), name: String(row.name ?? ''),
-    email: String(row.email ?? ''),
+    id: String(row.id),
+    ${mapFields},
     createdAt: String(row.createdAt ?? row.created_at ?? '')
   }
 }
 
-export class UsersService {
+export class ${n.className}Service {
   private get driver() { return getDB().getDriver() }
 
-  async findAll(): Promise<User[]> {
-    const r = await this.driver.query('SELECT * FROM users ORDER BY id DESC')
-    return r.rows.map(toUser)
+  async findAll(): Promise<${E}[]> {
+    const r = await this.driver.query('SELECT * FROM ${n.table} ORDER BY id DESC')
+    return r.rows.map(to${E})
   }
 
-  async findById(id: string): Promise<User> {
-    const r = await this.driver.query('SELECT * FROM users WHERE id = ${p}', [id])
-    if (r.rows.length === 0) throw new NotFoundError(\`User \${id} not found.\`)
-    return toUser(r.rows[0])
+  async findById(id: string): Promise<${E}> {
+    const r = await this.driver.query('SELECT * FROM ${n.table} WHERE id = ${ph(1)}', [id])
+    if (r.rows.length === 0) throw new NotFoundError(\`${n.singular} \${id} not found.\`)
+    return to${E}(r.rows[0])
   }
 
-  async create(data: Partial<User>): Promise<User> {
-    const r = await this.driver.query(
-      'INSERT INTO users (name, email) VALUES (${p}, ${p}) RETURNING *',
-      [data.name || '', data.email || '']
-    )
-    return toUser(r.rows[0])
-  }
+${writeMethods}
+}
+`
+}
 
-  async update(id: string, data: Partial<User>): Promise<User> {
-    const r = await this.driver.query(
-      'UPDATE users SET name = COALESCE(${p}, name), email = COALESCE(${p}, email) WHERE id = ${p} RETURNING *',
-      [data.name, data.email, id]
-    )
-    if (r.rows.length === 0) throw new NotFoundError(\`User \${id} not found.\`)
-    return toUser(r.rows[0])
-  }
+export function generateEntity(n: ResourceNames, fields: string[] = ['name']): string {
+  const cols = fields.map(f => `  @Column({ type: 'string', length: 255 })\n  ${f}!: string\n`).join('\n')
+  return `/**
+ * ${n.entity} entity (table: ${n.table}).
+ * Requires "experimentalDecorators": true in tsconfig.json.
+ */
 
-  async delete(id: string): Promise<void> {
-    const r = await this.driver.query('DELETE FROM users WHERE id = ${p} RETURNING id', [id])
-    if (r.rows.length === 0) throw new NotFoundError(\`User \${id} not found.\`)
+import { BaseModel, Entity, PrimaryKey, Column, CreatedAt } from '@axiljs/orm'
+
+@Entity('${n.table}')
+export class ${n.entity} extends BaseModel {
+  @PrimaryKey()
+  id!: number
+
+${cols}
+  @CreatedAt()
+  createdAt!: Date
+}
+`
+}
+
+function idColumn(database: Database): string {
+  if (database === 'sqlite') return 'INTEGER PRIMARY KEY AUTOINCREMENT'
+  if (database === 'mysql')  return 'INT AUTO_INCREMENT PRIMARY KEY'
+  return 'SERIAL PRIMARY KEY'
+}
+
+export function generateCreateTableMigration(
+  database: Database,
+  migrationName: string,
+  table: string,
+  fields: string[] = ['name'],
+  uniqueFields: string[] = []
+): string {
+  const width = Math.max(10, ...fields.map(f => f.length))
+  const colLines = [
+    `        ${'id'.padEnd(width)} ${idColumn(database)}`,
+    ...fields.map(f =>
+      `        ${f.padEnd(width)} VARCHAR(255) NOT NULL${uniqueFields.includes(f) ? ' UNIQUE' : ''}`
+    ),
+    `        ${'created_at'.padEnd(width)} TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP`
+  ]
+
+  return `/**
+ * Migration: ${migrationName}
+ */
+
+import type { Migration } from '@axiljs/orm'
+
+const migration: Migration = {
+  async up(db) {
+    await db.query(\`
+      CREATE TABLE IF NOT EXISTS ${table} (
+${colLines.join(',\n')}
+      )
+    \`)
+  },
+
+  async down(db) {
+    await db.query('DROP TABLE IF EXISTS ${table}')
   }
 }
-`.replaceAll('${p}', p)
+
+export default migration
+`
 }
+
+export function generateEmptyMigration(migrationName: string): string {
+  return `/**
+ * Migration: ${migrationName}
+ */
+
+import type { Migration } from '@axiljs/orm'
+
+const migration: Migration = {
+  async up(db) {
+    // await db.query('ALTER TABLE ... ADD COLUMN ...')
+    void db
+  },
+
+  async down(db) {
+    // Reverse whatever up() did
+    void db
+  }
+}
+
+export default migration
+`
+}
+
+function generateUsersController(options: ProjectOptions): string {
+  return generateResourceController(options, USERS)
+}
+
+function generateUsersService(options: ProjectOptions): string {
+  return generateResourceService(options, USERS, USER_FIELDS)
+}
+
+function generateUsersMigration(database: Database): string {
+  return generateCreateTableMigration(database, '001_create_users', 'users', USER_FIELDS, ['email'])
+}
+
 
 function generateDbConnection(database: Database): string {
   if (database === 'sqlite') {
@@ -1015,37 +1320,5 @@ export function getDB(): ConnectionManager {
   if (!db) throw new Error('Database is not connected. Call connectDB() first.')
   return db
 }
-`
-}
-
-function generateUsersMigration(database: Database): string {
-  const idType = database === 'sqlite'
-    ? 'INTEGER PRIMARY KEY AUTOINCREMENT'
-    : 'SERIAL PRIMARY KEY'
-
-  return `/**
- * Migration: 001_create_users
- */
-
-import { Migration } from '@axiljs/orm'
-
-const migration: Migration = {
-  async up(db) {
-    await db.query(\`
-      CREATE TABLE IF NOT EXISTS users (
-        id         ${idType},
-        name       VARCHAR(255) NOT NULL,
-        email      VARCHAR(255) NOT NULL UNIQUE,
-        created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )
-    \`)
-  },
-
-  async down(db) {
-    await db.query('DROP TABLE IF EXISTS users')
-  }
-}
-
-export default migration
 `
 }

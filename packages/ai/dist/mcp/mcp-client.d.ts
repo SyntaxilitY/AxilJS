@@ -62,6 +62,7 @@ export declare class MCPClient {
     private clientInfo;
     private timeoutMs;
     private connected;
+    private sessionId?;
     private cachedTools;
     constructor(options: MCPClientOptions);
     /**
@@ -115,22 +116,34 @@ export declare class MCPClient {
         }>;
     }>;
     /**
-     * Convert MCP tools to @axiljsJS agent Tool format.
+     * Convert MCP tools to AxilJS agent Tool format.
      * Use this to add MCP tools to an Agent.
      *
      * Usage:
      *   const mcpTools = await client.asAgentTools()
      *   const agent = new Agent({ provider, tools: mcpTools })
      */
-    asAgentTools(): Promise<any[]>;
+    asAgentTools(): Promise<import("../agents/tool").Tool[]>;
     private ensureConnected;
     /**
      * Send a JSON-RPC 2.0 request to the MCP server.
+     * Handles both plain JSON responses and Streamable HTTP SSE responses;
+     * for SSE the request resolves as soon as the matching message arrives,
+     * even if the server keeps the stream open.
      */
     private request;
     /**
      * Send a JSON-RPC notification (no response expected).
      */
     private notify;
+    /**
+     * POST to the exact serverUrl (path and query string preserved).
+     */
+    private openRequest;
+    /**
+     * Request headers. Streamable HTTP servers reject POSTs (406) unless the
+     * client accepts both JSON and SSE, and require the session ID afterwards.
+     */
+    private buildHeaders;
 }
 //# sourceMappingURL=mcp-client.d.ts.map

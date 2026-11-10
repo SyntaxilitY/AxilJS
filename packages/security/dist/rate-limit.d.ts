@@ -22,6 +22,27 @@ export interface RateLimitOptions {
         method: string;
     }) => boolean;
     headers?: boolean;
+    store?: RateLimitStore;
+}
+export interface RateLimitRecord {
+    count: number;
+    resetAt: number;
+}
+export interface RateLimitStore {
+    increment(key: string, windowMs: number): Promise<RateLimitRecord> | RateLimitRecord;
+    reset(key: string): Promise<void> | void;
+}
+/**
+ * Default in-process store. Counts are per process - use a shared store
+ * when running several instances behind a load balancer.
+ */
+export declare class MemoryStore implements RateLimitStore {
+    private records;
+    constructor();
+    increment(key: string, windowMs: number): RateLimitRecord;
+    reset(key: string): void;
+    /** Drop every record and stop tracking this store in the cleanup timer. */
+    shutdown(): void;
 }
 export declare class TooManyRequestsError extends axilError {
     constructor(message?: string);

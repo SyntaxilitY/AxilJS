@@ -3,51 +3,88 @@
  * axil run
  * Development server with hot reload and automatic Studio launcher.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.readEnvValue = readEnvValue;
+exports.readAppPort = readAppPort;
 exports.runDev = runDev;
 const child_process_1 = require("child_process");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const url_1 = require("url");
+const ui = __importStar(require("../ui"));
+const env_1 = require("../utils/env");
 // ── State ─────────────────────────────────────────────────────────────────────
 let serverProcess = null;
 let restartTimer = null;
 let isCompiling = false;
 let startCount = 0;
 let studioInstance = null;
+let studioAttempted = false;
 const changedFiles = new Set();
-// ── Colors ────────────────────────────────────────────────────────────────────
-const C = {
-    reset: '\x1b[0m',
-    bold: '\x1b[1m',
-    dim: '\x1b[2m',
-    green: '\x1b[32m',
-    yellow: '\x1b[33m',
-    red: '\x1b[31m',
-    cyan: '\x1b[36m',
-    gray: '\x1b[90m'
-};
 // ── Logging ───────────────────────────────────────────────────────────────────
-function log(msg) {
+// Compact timestamped one-liners, e.g. "  12:04:31 ✔ Restarted in 320ms".
+// The app's own output (child process stdio) passes through untouched.
+function stamped(icon, msg, details) {
     const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.log(`${C.gray}${time}${C.reset} ${C.cyan}[axil run]${C.reset} ${msg}`);
+    console.log(`  ${ui.muted(time)} ${icon} ${msg}${details ? `  ${ui.muted(details)}` : ''}`);
 }
-function logError(msg) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.log(`${C.gray}${time}${C.reset} ${C.red}[axil run]${C.reset} ${msg}`);
+function log(msg, details) {
+    stamped(ui.muted(ui.sym.arrow), msg, details);
 }
-function logSuccess(msg) {
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    console.log(`${C.gray}${time}${C.reset} ${C.green}[axil run]${C.reset} ${msg}`);
+function logWarn(msg, details) {
+    stamped(ui.c.yellow(ui.sym.warn), ui.c.yellow(msg), details);
+}
+function logError(msg, details) {
+    stamped(ui.c.red(ui.sym.cross), ui.c.red(msg), details);
+}
+function logSuccess(msg, details) {
+    stamped(ui.c.green(ui.sym.tick), msg, details);
+}
+/** "src/a.ts" · "src/a.ts, src/b.ts" · "src/a.ts, src/b.ts +3 more" */
+function describeChanges(files) {
+    if (files.length === 0)
+        return 'project';
+    const shown = files.slice(0, 2).map(f => f.replace(/\\/g, '/'));
+    return shown.join(', ') + (files.length > 2 ? ` +${files.length - 2} more` : '');
 }
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Values are unquoted (PORT="4000" → 4000) and inline comments stripped.
 function readEnvValue(cwd, key) {
-    const envPath = (0, path_1.join)(cwd, '.env');
-    if (!(0, fs_1.existsSync)(envPath))
-        return undefined;
-    const content = (0, fs_1.readFileSync)(envPath, 'utf-8');
-    const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
-    return match ? match[1].trim() : undefined;
+    const value = (0, env_1.readEnvFile)(cwd)[key];
+    return value === undefined || value === '' ? undefined : value;
 }
 function readAppPort(cwd) {
     const raw = readEnvValue(cwd, 'PORT');
@@ -103,7 +140,7 @@ async function startStudio(cwd, appPort) {
     try {
         const StudioServer = await loadStudioClass(cwd);
         if (!StudioServer) {
-            log(`${C.yellow}[Studio]${C.reset} @axiljs/studio not detected. Studio skipped.`);
+            log('Studio skipped', '@axiljs/studio not detected');
             return null;
         }
         const pkgPath = (0, path_1.join)(cwd, 'package.json');
@@ -143,11 +180,11 @@ async function startStudio(cwd, appPort) {
         return studio;
     }
     catch (err) {
-        log(`${C.yellow}[Studio error]${C.reset} ${err.message}`);
+        logWarn('Studio error', err.message);
         return null;
     }
 }
-// ── Compiler ──────────────────────────────────────────────────────────────────
+/** Run tsc; prints nothing (callers report success/failure their own way). */
 function compile(cwd) {
     const start = Date.now();
     try {
@@ -155,30 +192,22 @@ function compile(cwd) {
             cwd,
             stdio: 'pipe'
         });
-        const duration = Date.now() - start;
-        logSuccess(`Compiled ${C.bold}${changedFiles.size > 0 ? changedFiles.size + ' file(s)' : 'project'}${C.reset}${C.green} in ${C.bold}${duration}ms${C.reset}`);
-        changedFiles.clear();
-        return true;
+        return { ok: true, duration: Date.now() - start, output: '' };
     }
     catch (error) {
-        const duration = Date.now() - start;
         const output = error.stdout?.toString() ?? '';
         const stderr = error.stderr?.toString() ?? '';
-        const errorOutput = output || stderr;
-        logError(`Compilation failed in ${duration}ms`);
-        if (errorOutput) {
-            errorOutput.split('\n').forEach((line) => {
-                if (line.includes('error TS')) {
-                    console.log(`  ${C.red}${line}${C.reset}`);
-                }
-                else if (line.trim()) {
-                    console.log(`  ${C.gray}${line}${C.reset}`);
-                }
-            });
-        }
-        logError('Server NOT restarted — fix the errors above');
-        changedFiles.clear();
-        return false;
+        return { ok: false, duration: Date.now() - start, output: output || stderr };
+    }
+}
+/** tsc diagnostics: "error TS…" lines red, the rest muted. */
+function printCompileErrors(output) {
+    for (const line of output.split('\n')) {
+        const text = line.replace(/\s+$/, '');
+        if (text.includes('error TS'))
+            console.log(`    ${ui.c.red(text)}`);
+        else if (text.trim())
+            console.log(`    ${ui.muted(text)}`);
     }
 }
 // ── Entry Point Finder ────────────────────────────────────────────────────────
@@ -198,8 +227,17 @@ function findEntryPoint(cwd) {
     return null;
 }
 // ── App Server Process ────────────────────────────────────────────────────────
-async function startServer(cwd) {
-    if (serverProcess) {
+// A crashed child never emits 'exit' again, so waiting on it would always
+// hit the kill timeout (and the 'exit' listener would never fire).
+function hasExited(child) {
+    return child.exitCode !== null || child.signalCode !== null;
+}
+/**
+ * (Re)start the app. `announce` runs right before the child is spawned so
+ * the CLI's status line comes before the app's own output.
+ */
+async function startServer(cwd, announce) {
+    if (serverProcess && !hasExited(serverProcess)) {
         serverProcess.kill('SIGTERM');
         await new Promise(done => {
             const timer = setTimeout(() => {
@@ -212,22 +250,15 @@ async function startServer(cwd) {
                 done();
             });
         });
-        serverProcess = null;
     }
+    serverProcess = null;
     const entry = findEntryPoint(cwd);
     if (!entry) {
         logError('Could not find entry point (dist/main.js).');
-        return;
+        return false;
     }
     startCount++;
-    const relEntry = (0, path_1.relative)(cwd, entry);
-    if (startCount === 1) {
-        log(`Starting ${C.bold}${relEntry}${C.reset}`);
-    }
-    else {
-        log(`Restarting ${C.bold}${relEntry}${C.reset} ` +
-            `${C.gray}(restart #${startCount - 1})${C.reset}`);
-    }
+    announce((0, path_1.relative)(cwd, entry).replace(/\\/g, '/'), startCount - 1);
     serverProcess = (0, child_process_1.spawn)('node', [entry], {
         cwd,
         stdio: 'inherit',
@@ -248,6 +279,7 @@ async function startServer(cwd) {
             logError(`Server exited with code ${code}`);
         }
     });
+    return true;
 }
 // ── Watcher ───────────────────────────────────────────────────────────────────
 function watchFiles(cwd) {
@@ -256,46 +288,72 @@ function watchFiles(cwd) {
         logError(`src/ directory not found at ${srcDir}`);
         return;
     }
-    log(`Watching ${C.bold}src/${C.reset} for changes...`);
+    log(`Watching ${ui.path('src/')} for changes`, 'Ctrl+C to stop');
     (0, fs_1.watch)(srcDir, { recursive: true }, (event, filename) => {
         if (!filename)
             return;
         if (!filename.endsWith('.ts') && !filename.endsWith('.tsx'))
             return;
         changedFiles.add(filename);
-        if (restartTimer)
-            clearTimeout(restartTimer);
-        restartTimer = setTimeout(async () => {
-            if (isCompiling)
-                return;
-            isCompiling = true;
-            const files = Array.from(changedFiles);
-            if (files.length === 1) {
-                log(`Changed: ${C.yellow}${files[0]}${C.reset}`);
+        scheduleRebuild(cwd);
+    });
+}
+function scheduleRebuild(cwd) {
+    if (restartTimer)
+        clearTimeout(restartTimer);
+    restartTimer = setTimeout(async () => {
+        // A rebuild/restart is still in progress — retry later instead of
+        // dropping this change (otherwise the save is silently ignored).
+        if (isCompiling) {
+            scheduleRebuild(cwd);
+            return;
+        }
+        isCompiling = true;
+        const files = Array.from(changedFiles);
+        const changes = describeChanges(files);
+        changedFiles.clear();
+        const started = Date.now();
+        try {
+            const result = compile(cwd);
+            if (!result.ok) {
+                logError(`Compilation failed in ${ui.formatDuration(result.duration)}`, changes);
+                printCompileErrors(result.output);
+                logWarn('Server not restarted', 'fix the errors above and save again');
             }
             else {
-                log(`Changed: ${C.yellow}${files.length} files${C.reset}`);
-                files.forEach(f => console.log(`  ${C.gray}→ ${f}${C.reset}`));
+                await startServer(cwd, (relEntry, restarts) => {
+                    const took = ui.formatDuration(Date.now() - started);
+                    if (restarts === 0)
+                        logSuccess(`Started ${ui.path(relEntry)} in ${took}`, changes);
+                    else
+                        logSuccess(`Restarted in ${took}`, `${changes} ${ui.sym.dot} #${restarts}`);
+                });
+                // The first compile failed, so Studio was never started — start it
+                // now that the project builds (exactly once).
+                if (!studioInstance && !studioAttempted) {
+                    studioAttempted = true;
+                    studioInstance = await startStudio(cwd, readAppPort(cwd));
+                }
             }
-            const ok = compile(cwd);
-            if (ok)
-                await startServer(cwd);
+        }
+        finally {
             isCompiling = false;
-        }, 150);
-    });
+        }
+    }, 150);
 }
 // ── Validation ────────────────────────────────────────────────────────────────
 function validateProject(cwd) {
+    const hint = 'Run axil run from the root of an AxilJS project.';
     if (!(0, fs_1.existsSync)((0, path_1.join)(cwd, 'package.json'))) {
-        logError('No package.json found.');
+        ui.error('No package.json found.', hint);
         return false;
     }
     if (!(0, fs_1.existsSync)((0, path_1.join)(cwd, 'tsconfig.json'))) {
-        logError('No tsconfig.json found.');
+        ui.error('No tsconfig.json found.', hint);
         return false;
     }
     if (!(0, fs_1.existsSync)((0, path_1.join)(cwd, 'src'))) {
-        logError('No src/ directory found.');
+        ui.error('No src/ directory found.', hint);
         return false;
     }
     return true;
@@ -305,15 +363,17 @@ function setupShutdown(studio) {
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
     async function shutdown(signal) {
-        console.log('');
+        ui.line();
         log(`${signal} received — shutting down...`);
-        if (studio) {
+        // Studio may have been started after setup (first compile failed)
+        const activeStudio = studio ?? studioInstance;
+        if (activeStudio) {
             try {
-                await studio.stop();
+                await activeStudio.stop();
             }
             catch { }
         }
-        if (serverProcess) {
+        if (serverProcess && !hasExited(serverProcess)) {
             serverProcess.kill('SIGTERM');
             await new Promise(done => {
                 const timer = setTimeout(() => {
@@ -326,7 +386,7 @@ function setupShutdown(studio) {
                 });
             });
         }
-        console.log('');
+        ui.line();
         process.exit(0);
     }
     process.on('SIGINT', () => { void shutdown('SIGINT'); });
@@ -335,27 +395,31 @@ function setupShutdown(studio) {
 // ── Main Entry ────────────────────────────────────────────────────────────────
 async function runDev() {
     const cwd = process.cwd();
-    console.log('');
-    console.log(`${C.cyan}${C.bold} AxilJS${C.reset} ${C.gray}development server${C.reset}`);
-    console.log(`${C.gray} ─────────────────────────────────────${C.reset}`);
-    console.log('');
+    ui.title('run', 'Development server with hot reload');
     if (!validateProject(cwd))
         process.exit(1);
     const distDir = (0, path_1.join)(cwd, 'dist');
     if (!(0, fs_1.existsSync)(distDir))
         (0, fs_1.mkdirSync)(distDir, { recursive: true });
-    log('Initial compilation...');
-    const success = compile(cwd);
-    if (!success) {
-        logError('Fix compilation errors then save a file to retry.');
+    const spin = ui.spinner('Initial compilation');
+    const result = compile(cwd);
+    if (!result.ok) {
+        spin.fail('Initial compilation failed', ui.formatDuration(result.duration));
+        printCompileErrors(result.output);
+        ui.line();
+        logWarn('Fix compilation errors then save a file to retry.');
         watchFiles(cwd);
         setupShutdown(null);
         return;
     }
+    spin.succeed('Compiled project', ui.formatDuration(result.duration));
     const appPort = readAppPort(cwd);
+    ui.keyValue([['App', ui.cmd(`http://localhost:${appPort}`)]]);
+    ui.line();
     // 1. Start App Server
-    await startServer(cwd);
+    await startServer(cwd, relEntry => log(`Starting ${ui.path(relEntry)}`));
     // 2. Start Studio
+    studioAttempted = true;
     studioInstance = await startStudio(cwd, appPort);
     // 3. Watch for changes
     watchFiles(cwd);

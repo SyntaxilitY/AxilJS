@@ -1,6 +1,6 @@
 "use strict";
 /**
- * AI middleware for @axiljsJS applications.
+ * AI middleware for AxilJS applications.
  * Provides AI-powered HTTP endpoints out of the box.
  *
  * Usage:

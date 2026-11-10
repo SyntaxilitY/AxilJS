@@ -3,16 +3,76 @@
  * axil deploy
  * Generates Docker + Kubernetes deployment files.
  */
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.DOCKERIGNORE = void 0;
 exports.deploy = deploy;
 const fs_1 = require("fs");
 const path_1 = require("path");
-async function deploy() {
-    console.log('\n\x1b[36m[AxilJS Deploy]\x1b[0m Generating deployment artifacts...\n');
-    const cwd = process.cwd();
+const ui = __importStar(require("../ui"));
+function positiveInt(value, fallback, label, max) {
+    if (value === undefined || value === '')
+        return fallback;
+    const n = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isInteger(n) || n < 1 || n > max) {
+        throw new Error(`Invalid ${label} "${value}". Expected an integer between 1 and ${max}.`);
+    }
+    return n;
+}
+exports.DOCKERIGNORE = `node_modules
+npm-debug.log*
+dist
+coverage
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.db
+*.log
+.DS_Store
+`;
+async function deploy(options = {}) {
+    const port = positiveInt(options.port, 3000, '--port', 65535);
+    const replicas = positiveInt(options.replicas, 3, '--replicas', 1000);
+    const force = options.force === true;
+    ui.title('deploy', 'Generate Docker + Kubernetes files');
+    const cwd = options.cwd || process.cwd();
     const pkgPath = (0, path_1.join)(cwd, 'package.json');
     if (!(0, fs_1.existsSync)(pkgPath)) {
-        console.error('\x1b[31mError:\x1b[0m No package.json found.');
+        ui.error('No package.json found.', 'Run axil deploy from the project root.');
         process.exit(1);
     }
     let pkg;
@@ -20,15 +80,21 @@ async function deploy() {
         pkg = JSON.parse((0, fs_1.readFileSync)(pkgPath, 'utf-8'));
     }
     catch {
-        console.error('\x1b[31mError:\x1b[0m Could not parse package.json');
+        ui.error('Could not parse package.json', ui.path(pkgPath));
         process.exit(1);
     }
-    const appName = pkg.name || 'axil-app';
+    // Docker image names and Kubernetes resource names must be lowercase
+    // DNS-1123 labels — a scoped npm name like "@org/api" is invalid as-is.
+    const appName = String(pkg.name || 'axil-app')
+        .toLowerCase().replace(/^@/, '').replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'axil-app';
     const version = pkg.version || '1.0.0';
-    const port = 3000;
-    const replicas = 3;
     const dir = (0, path_1.join)(cwd, 'deploy');
     (0, fs_1.mkdirSync)(dir, { recursive: true });
+    for (const f of ['Dockerfile', 'deployment.yaml', 'deploy.sh']) {
+        if (!force && (0, fs_1.existsSync)((0, path_1.join)(dir, f))) {
+            ui.warn(`Overwriting existing deploy/${f}`, 'use --force to skip this warning');
+        }
+    }
     // Dockerfile
     (0, fs_1.writeFileSync)((0, path_1.join)(dir, 'Dockerfile'), `# AxilJS Production Dockerfile
 FROM node:20-alpine AS builder
@@ -45,6 +111,7 @@ RUN npm ci --production
 COPY --from=builder /app/dist ./dist
 EXPOSE ${port}
 ENV NODE_ENV=production
+ENV PORT=${port}
 CMD ["node", "dist/main.js"]
 `);
     // Kubernetes manifest
@@ -101,21 +168,40 @@ spec:
 set -e
 APP="${appName}"
 VERSION="${version}"
+# Build context is the project root (package.json, src/), not deploy/
+cd "$(dirname "$0")/.."
 echo "Building $APP:$VERSION..."
-docker build -t $APP:$VERSION .
+docker build -f deploy/Dockerfile -t $APP:$VERSION .
 echo "Applying Kubernetes manifests..."
-kubectl apply -f deployment.yaml
+kubectl apply -f deploy/deployment.yaml
 echo "Deployment complete."
 `);
-    console.log('\x1b[32m✓\x1b[0m Deployment files generated:\n');
-    console.log(`  \x1b[36m${dir}\x1b[0m`);
-    console.log('  ├── Dockerfile');
-    console.log('  ├── deployment.yaml');
-    console.log('  └── deploy.sh\n');
-    console.log('Next steps:\n');
-    console.log('  npm run build');
-    console.log(`  docker build -t ${appName} .`);
-    console.log(`  docker run -p ${port}:${port} ${appName}`);
-    console.log('');
+    // .dockerignore lives next to package.json (the docker build context root)
+    const dockerignorePath = (0, path_1.join)(cwd, '.dockerignore');
+    let dockerignoreStatus = 'kept existing';
+    if (!(0, fs_1.existsSync)(dockerignorePath)) {
+        (0, fs_1.writeFileSync)(dockerignorePath, exports.DOCKERIGNORE);
+        dockerignoreStatus = 'created';
+    }
+    else if (force) {
+        (0, fs_1.writeFileSync)(dockerignorePath, exports.DOCKERIGNORE);
+        dockerignoreStatus = 'overwritten';
+    }
+    ui.success('Deployment files generated', ui.path('deploy/'));
+    ui.table([
+        [ui.c.green('write'), ui.path('deploy/Dockerfile'), ui.muted(`node:20-alpine, port ${port}`)],
+        [ui.c.green('write'), ui.path('deploy/deployment.yaml'), ui.muted(`${appName}:${version}, ${replicas} replica(s)`)],
+        [ui.c.green('write'), ui.path('deploy/deploy.sh'), ui.muted('build + kubectl apply')],
+        [
+            dockerignoreStatus === 'kept existing' ? ui.muted('keep') : ui.c.green('write'),
+            ui.path('.dockerignore'),
+            ui.muted(`(${dockerignoreStatus})`)
+        ]
+    ], { indent: 4, gap: 2 });
+    ui.box('Next steps', [
+        ui.cmd('npm run build'),
+        ui.cmd(`docker build -f deploy/Dockerfile -t ${appName} .`),
+        ui.cmd(`docker run -p ${port}:${port} ${appName}`)
+    ]);
 }
 //# sourceMappingURL=deploy.js.map

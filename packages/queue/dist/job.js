@@ -9,7 +9,7 @@ const crypto_1 = require("crypto");
 function createJob(queue, name, data, options = {}) {
     const now = new Date();
     const delay = options.delay || 0;
-    return {
+    const job = {
         id: (0, crypto_1.randomUUID)(),
         queue,
         name,
@@ -22,5 +22,9 @@ function createJob(queue, name, data, options = {}) {
         createdAt: now,
         runAt: options.runAt || new Date(now.getTime() + delay)
     };
+    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+        job.timeoutMs = options.timeoutMs;
+    }
+    return job;
 }
 //# sourceMappingURL=job.js.map

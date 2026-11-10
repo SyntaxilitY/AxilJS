@@ -162,6 +162,15 @@ export interface TenantRateLimiterOptions {
   tenantRules?: Record<string, RateLimitRule>;
   /** Custom key extractor. Default: `${tenantId}:${method}:${path}`. */
   keyExtractor?: (req: any) => string;
+  /**
+   * Counting algorithm (default: 'fixed').
+   *  - 'fixed':   fixed window per key; every request (including rejected
+   *               ones) counts until the window resets.
+   *  - 'sliding': sliding window counter; the previous window's count is
+   *               weighted by how much of it still overlaps the sliding
+   *               window. Rejected requests are not counted.
+   */
+  algorithm?: 'fixed' | 'sliding';
 }
 
 // ─── Secrets Manager ─────────────────────────────────────────────────────────

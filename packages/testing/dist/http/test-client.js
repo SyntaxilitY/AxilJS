@@ -1,7 +1,7 @@
 "use strict";
 /**
  * HTTP test client.
- * Makes requests to a running @axiljsJS application in tests.
+ * Makes requests to a running AxilJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:
@@ -19,8 +19,10 @@ const http_1 = require("http");
 class TestRequest {
     method;
     path;
+    // Keys are lowercase so set('Content-Type', ...) overrides the default
+    // instead of sending two content-type headers
     _headers = {
-        'Content-Type': 'application/json'
+        'content-type': 'application/json'
     };
     _body;
     // Store app reference explicitly to avoid closure issues
@@ -57,7 +59,9 @@ class TestRequest {
      * Allows: const res = await client.get('/users')
      */
     then(resolve, reject) {
-        this.execute().then(resolve).catch(reject);
+        // Return the promise so `.then(cb)` without a reject handler doesn't
+        // cause an unhandled rejection and `.then().catch()` chains work
+        return this.execute().then(resolve, reject);
     }
     /**
      * Execute the request against the app.
@@ -106,7 +110,19 @@ class TestRequest {
      */
     makeRequest(port) {
         return new Promise((resolve, reject) => {
-            const bodyStr = this._body !== undefined ? JSON.stringify(this._body) : '';
+            // Strings and Buffers are sent as-is when a non-JSON content-type is
+            // set (form bodies, plain text, XML…); everything else is JSON-encoded.
+            const contentType = this._headers['content-type'] || '';
+            const isJson = /\bjson\b/i.test(contentType);
+            let bodyStr = '';
+            if (this._body !== undefined) {
+                if (!isJson && (typeof this._body === 'string' || Buffer.isBuffer(this._body))) {
+                    bodyStr = this._body;
+                }
+                else {
+                    bodyStr = JSON.stringify(this._body);
+                }
+            }
             const headers = { ...this._headers };
             if (bodyStr) {
                 headers['content-length'] = String(Buffer.byteLength(bodyStr));
@@ -121,8 +137,10 @@ class TestRequest {
                 headers
             }, (res) => {
                 let data = '';
+                // Stream decoding keeps multi-byte UTF-8 chars split across chunks intact
+                res.setEncoding('utf8');
                 res.on('data', (chunk) => {
-                    data += chunk.toString();
+                    data += chunk;
                 });
                 res.on('end', () => {
                     let body = data;

@@ -33,8 +33,11 @@ class MemoryMonitor extends events_1.EventEmitter {
     running = false;
     reports = [];
     maxReports = 100;
+    // Only enforced when the caller sets it explicitly
+    maxHeapMb;
     constructor(options = {}) {
         super();
+        this.maxHeapMb = options.maxHeapMb;
         this.options = {
             intervalMs: options.intervalMs ?? 30000,
             warnThresholdPercent: options.warnThresholdPercent ?? 70,
@@ -55,12 +58,19 @@ class MemoryMonitor extends events_1.EventEmitter {
         if (this.running)
             return;
         this.running = true;
-        console.log(`${C.cyan}[@axiljsJS Memory]${C.reset} Monitor started ` +
+        console.log(`${C.cyan}[AxilJS Memory]${C.reset} Monitor started ` +
             `${C.gray}(scan every ${this.options.intervalMs / 1000}s)${C.reset}`);
+        // Background scans must not reject unhandled (e.g. a throwing onLeak
+        // callback) — that would crash the process on Node >= 15
+        const runScan = () => {
+            this.scan().catch(err => {
+                console.error(`${C.red}[AxilJS Memory]${C.reset} Scan failed: ${err?.message || err}`);
+            });
+        };
         // Immediate first scan
-        this.scan();
+        runScan();
         // Recurring scans
-        this.timer = setInterval(() => this.scan(), this.options.intervalMs);
+        this.timer = setInterval(runScan, this.options.intervalMs);
         // Prevent this interval from keeping Node.js alive if nothing else is running
         if (this.timer.unref) {
             this.timer.unref();
@@ -77,7 +87,7 @@ class MemoryMonitor extends events_1.EventEmitter {
             clearInterval(this.timer);
             this.timer = undefined;
         }
-        console.log(`${C.cyan}[@axiljsJS Memory]${C.reset} Monitor stopped`);
+        console.log(`${C.cyan}[AxilJS Memory]${C.reset} Monitor stopped`);
     }
     // ─── Scan ─────────────────────────────────────────────────────────────────
     /**
@@ -97,9 +107,13 @@ class MemoryMonitor extends events_1.EventEmitter {
         const after = (0, snapshot_1.takeSnapshot)();
         const diff = (0, snapshot_1.diffSnapshots)(before, after);
         const scanMs = Date.now() - scanStart;
-        // Determine status
+        // Determine status. Pressure is measured against the V8 heap limit
+        // (heapUsed/heapTotal is ~90% in a healthy process, since heapTotal
+        // only grows on demand); maxHeapMb is an optional absolute cap.
         let status = 'clean';
-        if (after.usagePercent >= this.options.criticalThresholdPercent) {
+        const pressurePercent = after.heapLimitPercent ?? after.usagePercent;
+        const overMaxHeap = this.maxHeapMb !== undefined && after.heapUsedMb >= this.maxHeapMb;
+        if (pressurePercent >= this.options.criticalThresholdPercent || overMaxHeap) {
             status = 'critical';
         }
         else if (leaks.length > 0 && fixedCount < leaks.length) {
@@ -132,6 +146,9 @@ class MemoryMonitor extends events_1.EventEmitter {
             this.options.onLeak(leaks);
             this.emit('leak', leaks);
         }
+        if (status !== 'critical' && pressurePercent >= this.options.warnThresholdPercent) {
+            this.emit('warning', after);
+        }
         if (status === 'critical') {
             this.options.onCritical(after);
             this.emit('critical', after);
@@ -155,10 +172,12 @@ class MemoryMonitor extends events_1.EventEmitter {
             status === 'leaks-fixed' ? '✓ Leaks Fixed' :
                 status === 'leaks-detected' ? '⚠ Leaks Found' :
                     '✗ Critical';
-        console.log(`${C.cyan}[@axiljsJS Memory]${C.reset} ` +
+        console.log(`${C.cyan}[AxilJS Memory]${C.reset} ` +
             `${statusColor}${statusLabel}${C.reset} ` +
             `${C.gray}heap: ${after.heapUsedMb}MB/${after.heapTotalMb}MB ` +
-            `(${after.usagePercent}%)${C.reset}` +
+            `(${after.usagePercent}%` +
+            (after.heapLimitPercent !== undefined ? `, ${after.heapLimitPercent}% of limit` : '') +
+            `)${C.reset}` +
             (freedMb > 0 ? ` ${C.green}freed: ${freedMb}MB${C.reset}` : ''));
         // Log each leak
         for (const leak of leaks) {
@@ -167,7 +186,7 @@ class MemoryMonitor extends events_1.EventEmitter {
         }
         // Critical warning
         if (status === 'critical') {
-            console.log(`${C.red}${C.bold}[@axiljsJS Memory] CRITICAL: ` +
+            console.log(`${C.red}${C.bold}[AxilJS Memory] CRITICAL: ` +
                 `${after.heapUsedMb}MB used — running emergency optimization${C.reset}`);
         }
     }

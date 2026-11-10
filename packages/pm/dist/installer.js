@@ -3,33 +3,100 @@
  * Package installer.
  * Orchestrates the full install process:
  *   1. Read package.json
- *   2. Resolve versions (from lock file or registry)
- *   3. Download packages (with checksum verification)
- *   4. Extract to node_modules
- *   5. Update lock file
+ *   2. Resolve the full dependency tree (from lock file or registry),
+ *      deduplicated by name@version
+ *   3. Plan a flat node_modules layout; a version that conflicts with the
+ *      hoisted one is nested under the package that needs it
+ *   4. Download packages (local cache first, checksum/integrity verified)
+ *   5. Extract each .tgz into node_modules (node:zlib + built-in tar reader)
+ *   6. Update lock file
+ *
+ * Cache: ~/.axiljs/cache (or $AXILJS_CACHE_DIR). Tarballs cached by older
+ * versions under ~/.@axiljsjs/cache are still read, never written.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Installer = void 0;
+exports.defaultCacheDir = defaultCacheDir;
+exports.legacyCacheDir = legacyCacheDir;
+exports.verifyIntegrity = verifyIntegrity;
 const fs_1 = require("fs");
+const crypto_1 = require("crypto");
+const os_1 = require("os");
 const path_1 = require("path");
 const lockfile_1 = require("./lockfile");
 const registry_1 = require("./registry");
+const tar_1 = require("./tar");
+const MAX_DEPTH = 64;
+/** Default cache directory: $AXILJS_CACHE_DIR or ~/.axiljs/cache. */
+function defaultCacheDir() {
+    if (process.env.AXILJS_CACHE_DIR)
+        return process.env.AXILJS_CACHE_DIR;
+    return (0, path_1.join)(homeDir(), '.axiljs', 'cache');
+}
+/** Pre-0.3.x cache path, kept readable for back-compat. */
+function legacyCacheDir() {
+    return (0, path_1.join)(homeDir(), '.@axiljsjs', 'cache');
+}
+function homeDir() {
+    return process.env.HOME || process.env.USERPROFILE || (0, os_1.homedir)() || process.cwd();
+}
+/**
+ * Verify a registry SRI string ("sha512-<base64>") or a hex sha1 shasum.
+ * Unknown/empty values are accepted (nothing to check against).
+ */
+function verifyIntegrity(data, integrity, shasum, packageName) {
+    if (integrity) {
+        for (const part of integrity.trim().split(/\s+/)) {
+            const dash = part.indexOf('-');
+            if (dash === -1)
+                continue;
+            const algo = part.slice(0, dash);
+            if (!['sha512', 'sha384', 'sha256', 'sha1'].includes(algo))
+                continue;
+            const expected = part.slice(dash + 1);
+            const actual = (0, crypto_1.createHash)(algo).update(data).digest('base64');
+            if (actual === expected)
+                return;
+            throw new Error(`Integrity check failed for ${packageName} (${algo}).\n` +
+                `  Expected: ${expected}\n  Got:      ${actual}`);
+        }
+    }
+    if (shasum) {
+        const actual = (0, crypto_1.createHash)('sha1').update(data).digest('hex');
+        if (actual !== shasum.toLowerCase()) {
+            throw new Error(`Shasum check failed for ${packageName}.\n  Expected: ${shasum}\n  Got:      ${actual}`);
+        }
+    }
+}
 class Installer {
     cwd;
     lockManager;
     registry;
     cacheDir;
+    legacyCacheDir;
+    transitive;
+    silent;
     constructor(options = {}) {
         this.cwd = options.cwd || process.cwd();
         this.lockManager = new lockfile_1.LockFileManager(this.cwd);
-        this.registry = new registry_1.RegistryClient();
-        // Local cache directory: ~/.@axiljsjs/cache
-        this.cacheDir = (0, path_1.join)(process.env.HOME || process.env.USERPROFILE || this.cwd, '.@axiljsjs', 'cache');
+        this.registry =
+            options.registry instanceof registry_1.RegistryClient
+                ? options.registry
+                : new registry_1.RegistryClient(options.registry);
+        this.transitive = options.transitive !== false;
+        this.silent = options.silent === true;
+        // Local cache directory: ~/.axiljs/cache (old ~/.@axiljsjs/cache is read-only)
+        this.cacheDir = options.cacheDir || defaultCacheDir();
+        this.legacyCacheDir = legacyCacheDir();
         // Ensure cache directory exists
         (0, fs_1.mkdirSync)(this.cacheDir, { recursive: true });
     }
+    log(message) {
+        if (!this.silent)
+            console.log(message);
+    }
     /**
-     * Install all dependencies from package.json.
+     * Install all dependencies from package.json (plus their dependencies).
      */
     async install(options = {}) {
         const { includeDev = true, force = false, verbose = false } = options;
@@ -45,120 +112,239 @@ class Installer {
             ...(pkgJson.dependencies || {}),
             ...(includeDev ? pkgJson.devDependencies || {} : {})
         };
+        const result = {
+            installed: 0,
+            cached: 0,
+            failed: 0,
+            placements: [],
+            errors: []
+        };
         if (Object.keys(toInstall).length === 0) {
-            console.log('[@axiljsJS PM] No dependencies to install.');
-            return;
+            this.log('[AxilJS PM] No dependencies to install.');
+            return result;
         }
-        console.log(`\n\x1b[36m[@axiljsJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`);
+        this.log(`\n\x1b[36m[AxilJS PM]\x1b[0m Installing ${Object.keys(toInstall).length} packages...\n`);
         const nodeModulesDir = (0, path_1.join)(this.cwd, 'node_modules');
         (0, fs_1.mkdirSync)(nodeModulesDir, { recursive: true });
-        let installed = 0;
-        let cached = 0;
-        let failed = 0;
-        // Install each package
-        for (const [name, range] of Object.entries(toInstall)) {
+        // ── 1. Resolve + plan ────────────────────────────────────────────────
+        const placements = await this.resolveTree(toInstall, force, verbose, result);
+        result.placements = placements.map(p => ({
+            name: p.pkg.name,
+            version: p.pkg.version,
+            path: p.path
+        }));
+        // ── 2. Fetch + extract (parents before children) ─────────────────────
+        const tarballs = new Map();
+        const ordered = [...placements].sort((a, b) => a.path.split('/').length - b.path.split('/').length || a.path.localeCompare(b.path));
+        for (const placement of ordered) {
+            const { pkg } = placement;
+            const id = `${pkg.name}@${pkg.version}`;
             try {
-                const wasCached = await this.installPackage(name, range, nodeModulesDir, force, verbose);
-                if (wasCached)
-                    cached++;
+                let entry = tarballs.get(id);
+                if (!entry) {
+                    entry = await this.fetchTarball(pkg, force, verbose);
+                    tarballs.set(id, entry);
+                }
+                // Update lock file with exact version and checksum
+                for (const range of placement.ranges) {
+                    this.lockManager.set(pkg.name, range, {
+                        version: pkg.version,
+                        resolved: pkg.tarball,
+                        checksum: (0, lockfile_1.calculateChecksum)(entry.data),
+                        dependencies: pkg.dependencies
+                    });
+                }
+                await this.extractTo(entry.data, (0, path_1.join)(this.cwd, ...placement.path.split('/')));
+                if (entry.fromCache)
+                    result.cached++;
                 else
-                    installed++;
-                const status = wasCached ? '\x1b[90m(cached)\x1b[0m' : '\x1b[32m✓\x1b[0m';
-                console.log(`  ${status} ${name}@${range}`);
+                    result.installed++;
+                const status = entry.fromCache ? '\x1b[90m(cached)\x1b[0m' : '\x1b[32m✓\x1b[0m';
+                const nested = placement.path.split('/node_modules/').length > 1
+                    ? ` \x1b[90m(${placement.path})\x1b[0m`
+                    : '';
+                this.log(`  ${status} ${id}${nested}`);
             }
             catch (error) {
-                failed++;
-                console.error(`  \x1b[31m✗\x1b[0m ${name}@${range}: ${error.message}`);
+                result.failed++;
+                result.errors.push({ name: pkg.name, range: placement.ranges[0] || pkg.version, error: error });
+                this.log(`  \x1b[31m✗\x1b[0m ${id}: ${error.message}`);
             }
         }
         // Save updated lock file
         this.lockManager.save();
         // Print summary
-        console.log('');
-        console.log(`\x1b[36m[@axiljsJS PM]\x1b[0m Done. ` +
-            `${installed} installed, ${cached} from cache` +
-            (failed > 0 ? `, \x1b[31m${failed} failed\x1b[0m` : '') +
+        this.log('');
+        this.log(`\x1b[36m[AxilJS PM]\x1b[0m Done. ` +
+            `${result.installed} installed, ${result.cached} from cache` +
+            (result.failed > 0 ? `, \x1b[31m${result.failed} failed\x1b[0m` : '') +
             '.');
-        console.log('');
+        this.log('');
+        return result;
+    }
+    // ── Resolution ──────────────────────────────────────────────────────────
+    resolveCache = new Map();
+    /** Resolve name@range via the lock file (unless forced) or the registry. */
+    resolve(name, range, force, verbose) {
+        const key = `${name}@${range}`;
+        let pending = this.resolveCache.get(key);
+        if (pending)
+            return pending;
+        pending = (async () => {
+            const locked = this.lockManager.get(name, range);
+            if (locked && !force) {
+                return {
+                    name,
+                    version: locked.version,
+                    tarball: locked.resolved,
+                    integrity: '',
+                    shasum: '',
+                    dependencies: locked.dependencies || {},
+                    lockedChecksum: locked.checksum
+                };
+            }
+            if (verbose)
+                this.log(`  Resolving ${name}@${range} from registry...`);
+            const metadata = await this.registry.getMetadata(name, range);
+            return {
+                name,
+                version: metadata.version,
+                tarball: metadata.dist.tarball,
+                integrity: metadata.dist.integrity || '',
+                shasum: metadata.dist.shasum || '',
+                dependencies: metadata.dependencies || {}
+            };
+        })();
+        this.resolveCache.set(key, pending);
+        return pending;
     }
     /**
-     * Install a single package.
-     * Returns true if the package was served from cache.
+     * Breadth-first resolution of the whole tree. Root dependencies claim the
+     * top-level slots first; a transitive dependency reuses the copy visible
+     * from its parent (walking up like Node's resolver) when the version
+     * matches its range, is hoisted when the top-level slot is free, and is
+     * nested under its parent otherwise.
      */
-    async installPackage(name, range, nodeModulesDir, force, verbose) {
-        // Check lock file first - use locked version for reproducibility
-        const locked = this.lockManager.get(name, range);
-        let metadata;
-        if (locked && !force) {
-            // Use locked version
-            metadata = {
-                version: locked.version,
-                dist: { tarball: locked.resolved, shasum: '' },
-                dependencies: locked.dependencies
-            };
-        }
-        else {
-            // Resolve from registry
-            if (verbose) {
-                console.log(`  Resolving ${name}@${range} from registry...`);
+    async resolveTree(rootDeps, force, verbose, result) {
+        // path → placement
+        const placed = new Map();
+        let queue = Object.entries(rootDeps).map(([name, range]) => ({
+            name, range, parentPath: null, depth: 0
+        }));
+        const slot = (base, name) => base ? `${base}/node_modules/${name}` : `node_modules/${name}`;
+        /** Directories Node would search from `parentPath`, nearest first. */
+        const lookupChain = (parentPath, name) => {
+            const chain = [];
+            let base = parentPath;
+            while (base) {
+                chain.push(slot(base, name));
+                const idx = base.lastIndexOf('/node_modules/');
+                base = idx === -1 ? null : base.slice(0, idx);
             }
-            metadata = await this.registry.getMetadata(name, range);
+            chain.push(slot(null, name));
+            return chain;
+        };
+        while (queue.length > 0) {
+            const next = [];
+            // Resolve one BFS level concurrently, place it in declaration order
+            const resolved = await Promise.all(queue.map(job => this.resolve(job.name, job.range, force, verbose).then(pkg => ({ job, pkg, error: null }), error => ({ job, pkg: null, error: error }))));
+            for (const { job, pkg, error } of resolved) {
+                if (error || !pkg) {
+                    result.failed++;
+                    result.errors.push({ name: job.name, range: job.range, error: error });
+                    this.log(`  \x1b[31m✗\x1b[0m ${job.name}@${job.range}: ${error.message}`);
+                    continue;
+                }
+                // The nearest copy visible from the parent shadows any further up
+                const nearest = lookupChain(job.parentPath, job.name)
+                    .map(candidate => placed.get(candidate))
+                    .find(Boolean);
+                if (nearest && (nearest.pkg.version === pkg.version || (0, registry_1.satisfiesRange)(nearest.pkg.version, job.range))) {
+                    if (!nearest.ranges.includes(job.range))
+                        nearest.ranges.push(job.range);
+                    continue;
+                }
+                if (job.depth > MAX_DEPTH) {
+                    result.failed++;
+                    result.errors.push({
+                        name: job.name,
+                        range: job.range,
+                        error: new Error('Dependency tree too deep (possible cycle)')
+                    });
+                    continue;
+                }
+                // Hoist when nothing is visible yet (the top-level slot is free),
+                // otherwise nest under the parent to avoid the conflicting copy
+                const path = nearest ? slot(job.parentPath, job.name) : slot(null, job.name);
+                if (placed.has(path))
+                    continue;
+                placed.set(path, { pkg, path, ranges: [job.range] });
+                if (this.transitive) {
+                    for (const [depName, depRange] of Object.entries(pkg.dependencies || {})) {
+                        next.push({ name: depName, range: depRange, parentPath: path, depth: job.depth + 1 });
+                    }
+                }
+            }
+            queue = next;
         }
+        return [...placed.values()];
+    }
+    // ── Fetching ────────────────────────────────────────────────────────────
+    cachePaths(pkg) {
         // Build cache key from package name and exact version
-        const cacheKey = `${name.replace('/', '_').replace('@', '')}_${metadata.version}`;
-        const cachePath = (0, path_1.join)(this.cacheDir, `${cacheKey}.tgz`);
-        let tarball;
+        const cacheKey = `${pkg.name.replace('/', '_').replace('@', '')}_${pkg.version}`;
+        return {
+            primary: (0, path_1.join)(this.cacheDir, `${cacheKey}.tgz`),
+            legacy: (0, path_1.join)(this.legacyCacheDir, `${cacheKey}.tgz`)
+        };
+    }
+    async fetchTarball(pkg, force, verbose) {
+        const { primary, legacy } = this.cachePaths(pkg);
+        let data = null;
         let fromCache = false;
-        if ((0, fs_1.existsSync)(cachePath) && !force) {
-            // Load from local cache
-            tarball = (0, fs_1.readFileSync)(cachePath);
-            fromCache = true;
+        if (!force) {
+            if ((0, fs_1.existsSync)(primary))
+                data = (0, fs_1.readFileSync)(primary);
+            else if ((0, fs_1.existsSync)(legacy))
+                data = (0, fs_1.readFileSync)(legacy);
+            fromCache = data !== null;
         }
-        else {
-            // Download from registry
-            if (verbose) {
-                console.log(`  Downloading ${name}@${metadata.version}...`);
-            }
-            tarball = await this.registry.download(metadata.dist.tarball);
-            // Save to cache for future installs
-            (0, fs_1.writeFileSync)(cachePath, tarball);
+        if (!data) {
+            if (!pkg.tarball)
+                throw new Error(`No tarball URL for ${pkg.name}@${pkg.version}`);
+            if (verbose)
+                this.log(`  Downloading ${pkg.name}@${pkg.version}...`);
+            data = await this.registry.download(pkg.tarball);
         }
-        // Update lock file with exact version and checksum
-        const checksum = (0, lockfile_1.calculateChecksum)(tarball);
-        this.lockManager.set(name, range, {
-            version: metadata.version,
-            resolved: metadata.dist.tarball,
-            checksum,
-            dependencies: metadata.dependencies || {}
-        });
-        // Extract to node_modules
-        await this.extract(tarball, name, nodeModulesDir);
-        return fromCache;
+        // Registry-provided integrity (sha512 SRI / sha1 shasum) — checked for
+        // cached tarballs too, whenever the version came from the registry
+        verifyIntegrity(data, pkg.integrity, pkg.shasum, pkg.name);
+        // Verify integrity against the locked checksum before trusting the
+        // tarball (and before overwriting the lock entry with a new checksum)
+        if (pkg.lockedChecksum && !force) {
+            (0, lockfile_1.verifyChecksum)(data, pkg.lockedChecksum, pkg.name);
+        }
+        // Save to cache for future installs
+        if (!fromCache || !(0, fs_1.existsSync)(primary)) {
+            (0, fs_1.writeFileSync)(primary, data);
+        }
+        return { data, fromCache };
+    }
+    // ── Extraction ──────────────────────────────────────────────────────────
+    async extractTo(tarball, packageDir) {
+        // Replace the previous copy so stale files from an older version don't linger
+        if ((0, fs_1.existsSync)(packageDir))
+            (0, fs_1.rmSync)(packageDir, { recursive: true, force: true });
+        (0, tar_1.extractTarball)(tarball, packageDir, { strip: 1 });
     }
     /**
      * Extract a tarball into node_modules.
-     * npm tarballs contain a 'package/' directory - we rename it to the package name.
-     *
-     * Note: This is a simplified extractor.
-     * Full tar/gzip extraction requires the built-in zlib module.
+     * npm tarballs contain a 'package/' directory - it is stripped, so the
+     * files land in node_modules/<packageName>/ (scoped names included).
+     * Entries that would escape that directory are rejected.
      */
     async extract(tarball, packageName, nodeModulesDir) {
-        // For scoped packages: @axiljs/core → @axiljs/core directory structure
-        const packageDir = (0, path_1.join)(nodeModulesDir, packageName);
-        (0, fs_1.mkdirSync)(packageDir, { recursive: true });
-        // In production this would use Node's built-in zlib to extract the .tgz
-        // For Phase 2 we delegate to npm's tarball extraction logic
-        // This is a placeholder that marks the package as "installed"
-        // Full implementation extracts the tarball using zlib + tar parser
-        // Write a marker file so the package appears installed
-        // Real implementation: extract all files from the tarball
-        if (!(0, fs_1.existsSync)((0, path_1.join)(packageDir, 'package.json'))) {
-            (0, fs_1.writeFileSync)((0, path_1.join)(packageDir, 'package.json'), JSON.stringify({
-                name: packageName,
-                _axiljs_installed: true,
-                _axiljs_note: 'Installed by @axiljsJS PM'
-            }, null, 2));
-        }
+        await this.extractTo(tarball, (0, path_1.join)(nodeModulesDir, packageName));
     }
 }
 exports.Installer = Installer;

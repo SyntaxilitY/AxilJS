@@ -4,7 +4,7 @@
  * Triggers Node.js GC programmatically and safely.
  *
  * Node.js exposes global.gc() ONLY when started with --expose-gc flag.
- * @axiljsJS handles both cases gracefully.
+ * AxilJS handles both cases gracefully.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isGCAvailable = isGCAvailable;

@@ -45,7 +45,7 @@ class LockFileManager {
             return JSON.parse(content);
         }
         catch {
-            console.warn('[@axiljsJS PM] Warning: Could not parse @axiljs.lock - creating new one');
+            console.warn('[AxilJS PM] Warning: Could not parse @axiljs.lock - creating new one');
             return {
                 lockfileVersion: LOCKFILE_VERSION,
                 updatedAt: new Date().toISOString(),

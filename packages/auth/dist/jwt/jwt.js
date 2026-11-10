@@ -13,6 +13,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.JWT = void 0;
 const crypto_1 = require("crypto");
 const common_1 = require("@axiljs/common");
+const HMAC_DIGESTS = {
+    HS256: 'sha256',
+    HS384: 'sha384',
+    HS512: 'sha512'
+};
 // ─── Time Parser ─────────────────────────────────────────────────────────────
 /**
  * Parse a time string or number into seconds.
@@ -50,15 +55,22 @@ function base64UrlDecode(str) {
     return Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 }
 // ─── JWT ──────────────────────────────────────────────────────────────────────
-const JWT_HEADER = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
 class JWT {
     secret;
-    constructor(secret) {
+    algorithm;
+    encodedHeader;
+    constructor(secret, options = {}) {
         if (!secret || secret.length < 32) {
             throw new Error('JWT secret must be at least 32 characters long.\n' +
                 'Generate one: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"');
         }
         this.secret = secret;
+        const algorithm = options.algorithm ?? 'HS256';
+        if (!Object.prototype.hasOwnProperty.call(HMAC_DIGESTS, algorithm)) {
+            throw new Error(`Unsupported JWT algorithm '${algorithm}'. Use HS256, HS384 or HS512.`);
+        }
+        this.algorithm = algorithm;
+        this.encodedHeader = base64UrlEncode(JSON.stringify({ alg: algorithm, typ: 'JWT' }));
     }
     /**
      * Sign a payload and return a JWT token string.
@@ -80,12 +92,14 @@ class JWT {
         if (options.notBefore !== undefined) {
             fullPayload.nbf = now + parseTime(options.notBefore);
         }
-        if (options.audience)
+        if (options.audience !== undefined &&
+            (Array.isArray(options.audience) ? options.audience.length > 0 : options.audience)) {
             fullPayload.aud = options.audience;
+        }
         if (options.issuer)
             fullPayload.iss = options.issuer;
         const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
-        const signingInput = `${JWT_HEADER}.${encodedPayload}`;
+        const signingInput = `${this.encodedHeader}.${encodedPayload}`;
         const signature = this.sign256(signingInput);
         return `${signingInput}.${signature}`;
     }
@@ -114,6 +128,17 @@ class JWT {
             !(0, crypto_1.timingSafeEqual)(sigBuffer, expectedBuffer)) {
             throw new common_1.UnauthorizedError('Invalid token signature');
         }
+        // Verify header: only the configured algorithm is accepted
+        let decodedHeader;
+        try {
+            decodedHeader = JSON.parse(base64UrlDecode(header));
+        }
+        catch {
+            throw new common_1.UnauthorizedError('Invalid token header');
+        }
+        if (!decodedHeader || typeof decodedHeader !== 'object' || decodedHeader.alg !== this.algorithm) {
+            throw new common_1.UnauthorizedError('Invalid token algorithm');
+        }
         // Decode payload
         let decoded;
         try {
@@ -122,18 +147,28 @@ class JWT {
         catch {
             throw new common_1.UnauthorizedError('Invalid token payload');
         }
+        if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+            throw new common_1.UnauthorizedError('Invalid token payload');
+        }
         const now = Math.floor(Date.now() / 1000);
-        // Check expiry
-        if (decoded.exp !== undefined && now > decoded.exp) {
+        // Check expiry (token is invalid on or after exp - RFC 7519 §4.1.4)
+        if (decoded.exp !== undefined &&
+            (typeof decoded.exp !== 'number' || now >= decoded.exp)) {
             throw new common_1.UnauthorizedError('Token has expired');
         }
         // Check not-before
-        if (decoded.nbf !== undefined && now < decoded.nbf) {
+        if (decoded.nbf !== undefined &&
+            (typeof decoded.nbf !== 'number' || now < decoded.nbf)) {
             throw new common_1.UnauthorizedError('Token not yet valid');
         }
-        // Check audience
-        if (options.audience && decoded.aud !== options.audience) {
-            throw new common_1.UnauthorizedError('Invalid token audience');
+        // Check audience (the token's aud may be a string or an array)
+        if (options.audience) {
+            const expected = (Array.isArray(options.audience) ? options.audience : [options.audience]).filter(Boolean);
+            const actual = Array.isArray(decoded.aud) ? decoded.aud : [decoded.aud];
+            if (expected.length > 0 &&
+                !actual.some(aud => typeof aud === 'string' && expected.includes(aud))) {
+                throw new common_1.UnauthorizedError('Invalid token audience');
+            }
         }
         // Check issuer
         if (options.issuer && decoded.iss !== options.issuer) {
@@ -157,10 +192,11 @@ class JWT {
         }
     }
     /**
-     * Compute HMAC-SHA256 signature.
+     * Compute the HMAC signature with the configured algorithm
+     * (name kept from when only HS256 was supported).
      */
     sign256(input) {
-        return (0, crypto_1.createHmac)('sha256', this.secret)
+        return (0, crypto_1.createHmac)(HMAC_DIGESTS[this.algorithm], this.secret)
             .update(input)
             .digest('base64')
             .replace(/\+/g, '-')

@@ -136,6 +136,43 @@ export class Span {
   isEnded(): boolean { return this.ended; }
 }
 
+// ─── Span Context ─────────────────────────────────────────────────────────────
+
+// Trace context as returned by Tracer.extractContext()
+export interface SpanContext {
+  traceId?: string;
+  spanId?: string;
+}
+
+export interface StartSpanOptions {
+  // Continue an existing trace: a local parent Span, or a context extracted
+  // from incoming headers. Invalid/missing context starts a new trace.
+  parent?: Span | SpanContext;
+}
+
+const TRACE_ID_32 = /^[0-9a-f]{32}$/;
+const TRACE_ID_16 = /^[0-9a-f]{16}$/;
+const SPAN_ID = /^[0-9a-f]{16}$/;
+
+/**
+ * Normalize a trace ID to 32 lowercase hex chars (64-bit B3 IDs are
+ * left-padded with zeros, as W3C requires). Returns undefined if invalid.
+ */
+function normalizeTraceId(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  const lower = id.trim().toLowerCase();
+  if (/^0+$/.test(lower)) return undefined;
+  if (TRACE_ID_32.test(lower)) return lower;
+  if (TRACE_ID_16.test(lower)) return '0000000000000000' + lower;
+  return undefined;
+}
+
+function normalizeSpanId(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  const lower = id.trim().toLowerCase();
+  return SPAN_ID.test(lower) && !/^0+$/.test(lower) ? lower : undefined;
+}
+
 // ─── Tracer ───────────────────────────────────────────────────────────────────
 
 export interface TracerOptions {
@@ -163,9 +200,24 @@ export class Tracer {
   }
 
   /**
-   * Start a new root span.
+   * Start a new span.
+   * Without options (or with an invalid parent context) this is a new root span.
+   *
+   *   const ctx  = tracer.extractContext(req.headers)
+   *   const span = tracer.startSpan('http.request', { parent: ctx })
    */
-  startSpan(name: string): Span {
+  startSpan(name: string, options: StartSpanOptions = {}): Span {
+    const parent = options.parent;
+
+    if (parent instanceof Span) {
+      return new Span(name, this.serviceName, parent.traceId, parent.spanId);
+    }
+
+    const traceId = normalizeTraceId(parent?.traceId);
+    if (traceId) {
+      return new Span(name, this.serviceName, traceId, normalizeSpanId(parent?.spanId));
+    }
+
     return new Span(name, this.serviceName);
   }
 
@@ -196,6 +248,14 @@ export class Tracer {
   }
 
   /**
+   * Hand a finished span to the configured exporter
+   * (used for spans not created via trace(), e.g. by middleware).
+   */
+  exportSpan(span: SpanData): void {
+    this.exporter(span);
+  }
+
+  /**
    * Get stored spans (when using default in-memory exporter).
    */
   getSpans(): SpanData[] {
@@ -211,10 +271,18 @@ export class Tracer {
     spanId?: string;
   } {
     // W3C Trace Context format
+    // version-traceid(32 hex)-parentid(16 hex)-flags; all-zero ids and version ff are invalid
     const traceparent = headers['traceparent'] as string;
     if (traceparent) {
-      const parts = traceparent.split('-');
-      if (parts.length === 4) {
+      const parts = traceparent.trim().split('-');
+      if (
+        parts.length >= 4 &&
+        /^[0-9a-f]{2}$/.test(parts[0]) && parts[0] !== 'ff' &&
+        /^[0-9a-f]{32}$/.test(parts[1]) && !/^0+$/.test(parts[1]) &&
+        /^[0-9a-f]{16}$/.test(parts[2]) && !/^0+$/.test(parts[2]) &&
+        /^[0-9a-f]{2}$/.test(parts[3]) &&
+        (parts[0] !== '00' || parts.length === 4)
+      ) {
         return { traceId: parts[1], spanId: parts[2] };
       }
     }

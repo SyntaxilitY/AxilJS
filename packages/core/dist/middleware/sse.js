@@ -25,15 +25,19 @@ exports.sseHeartbeat = sseHeartbeat;
 function createSSE(res) {
     let open = true;
     // Set SSE-required headers
-    res.raw.writeHead(200, {
+    const headers = {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Connection': 'keep-alive',
-        // Allow CORS for SSE
-        'Access-Control-Allow-Origin': '*',
         // Disable nginx buffering
         'X-Accel-Buffering': 'no'
-    });
+    };
+    // Allow CORS for SSE - unless cors() (or the handler) already decided
+    // the allowed origin; writeHead would otherwise override it
+    if (res.raw.getHeader('Access-Control-Allow-Origin') === undefined) {
+        headers['Access-Control-Allow-Origin'] = '*';
+    }
+    res.raw.writeHead(200, headers);
     // Send initial comment to establish connection
     res.raw.write(': connected\n\n');
     // Handle client disconnect
@@ -49,17 +53,19 @@ function createSSE(res) {
                 return;
             let message = '';
             // Event ID (for reconnection)
+            // Line breaks would inject extra SSE fields/events - strip them
             if (id !== undefined) {
-                message += `id: ${id}\n`;
+                message += `id: ${String(id).replace(/[\r\n]/g, '')}\n`;
             }
             // Event type
             if (event) {
-                message += `event: ${event}\n`;
+                message += `event: ${event.replace(/[\r\n]/g, '')}\n`;
             }
             // Data payload
-            const payload = typeof data === 'string' ? data : JSON.stringify(data);
-            // SSE data must have "data: " prefix and each line separated
-            payload.split('\n').forEach(line => {
+            const payload = typeof data === 'string' ? data : (JSON.stringify(data) ?? '');
+            // SSE data must have "data: " prefix and each line separated.
+            // SSE treats \r\n, \r and \n all as line terminators.
+            payload.split(/\r\n|\r|\n/).forEach(line => {
                 message += `data: ${line}\n`;
             });
             // Double newline marks end of event
@@ -70,7 +76,7 @@ function createSSE(res) {
             if (!open)
                 return;
             // SSE comments start with colon
-            res.raw.write(`: ${text}\n\n`);
+            res.raw.write(`: ${text.replace(/[\r\n]/g, ' ')}\n\n`);
         },
         close() {
             if (!open)

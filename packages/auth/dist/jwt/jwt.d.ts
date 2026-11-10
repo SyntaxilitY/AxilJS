@@ -16,19 +16,25 @@ export interface JWTPayload {
     jti?: string;
     [key: string]: unknown;
 }
+export type JWTAlgorithm = 'HS256' | 'HS384' | 'HS512';
+export interface JWTOptions {
+    algorithm?: JWTAlgorithm;
+}
 export interface JWTSignOptions {
     expiresIn?: string | number;
     notBefore?: string | number;
-    audience?: string;
+    audience?: string | string[];
     issuer?: string;
 }
 export interface JWTVerifyOptions {
-    audience?: string;
+    audience?: string | string[];
     issuer?: string;
 }
 export declare class JWT {
     private secret;
-    constructor(secret: string);
+    private algorithm;
+    private encodedHeader;
+    constructor(secret: string, options?: JWTOptions);
     /**
      * Sign a payload and return a JWT token string.
      *
@@ -51,7 +57,8 @@ export declare class JWT {
      */
     decode(token: string): JWTPayload | null;
     /**
-     * Compute HMAC-SHA256 signature.
+     * Compute the HMAC signature with the configured algorithm
+     * (name kept from when only HS256 was supported).
      */
     private sign256;
 }

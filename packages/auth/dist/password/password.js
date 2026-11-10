@@ -11,6 +11,18 @@ exports.hashPassword = hashPassword;
 exports.verifyPassword = verifyPassword;
 exports.isHashed = isHashed;
 const crypto_1 = require("crypto");
+// Async scrypt (runs on the libuv threadpool instead of blocking the
+// event loop like scryptSync did). Same inputs -> same output.
+function scryptAsync(password, salt, keylen, options) {
+    return new Promise((resolve, reject) => {
+        (0, crypto_1.scrypt)(password, salt, keylen, options, (err, key) => {
+            if (err)
+                reject(err);
+            else
+                resolve(key);
+        });
+    });
+}
 // ─── Config ───────────────────────────────────────────────────────────────────
 const SALT_LENGTH = 32; // 32 random bytes for the salt
 const KEY_LENGTH = 64; // 64 byte output key
@@ -38,7 +50,7 @@ async function hashPassword(password) {
     const salt = (0, crypto_1.randomBytes)(SALT_LENGTH);
     // Hash the password with scryptSync
     // Node.js scryptSync signature: (password, salt, keylen, options?)
-    const hash = (0, crypto_1.scryptSync)(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
+    const hash = await scryptAsync(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
     // Return salt:hash format (both hex encoded)
     return `${salt.toString('hex')}:${hash.toString('hex')}`;
 }
@@ -59,7 +71,7 @@ async function verifyPassword(password, storedHash) {
         const salt = Buffer.from(saltHex, 'hex');
         const storedHashBuffer = Buffer.from(hashHex, 'hex');
         // Hash the provided password with the same salt and options
-        const inputHash = (0, crypto_1.scryptSync)(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
+        const inputHash = await scryptAsync(password, salt, KEY_LENGTH, SCRYPT_OPTIONS);
         // Constant-time comparison to prevent timing attacks
         if (inputHash.length !== storedHashBuffer.length)
             return false;

@@ -16,6 +16,7 @@ export declare class MemoryMonitor extends EventEmitter {
     private running;
     private reports;
     private maxReports;
+    private maxHeapMb?;
     constructor(options?: MemoryMonitorOptions);
     /**
      * Start monitoring.

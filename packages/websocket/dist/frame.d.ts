@@ -36,6 +36,28 @@ export interface WSFrame {
     maskKey?: Buffer;
     payload: Buffer;
 }
+export interface WSFrameHeader {
+    fin: boolean;
+    rsv: number;
+    opcode: number;
+    masked: boolean;
+    payloadLength: number;
+    headerLength: number;
+}
+/**
+ * Parse only the frame header (without waiting for the payload).
+ * Lets callers enforce limits on the declared length before buffering it.
+ * Returns null if the buffer doesn't contain a complete header yet.
+ */
+export declare function parseFrameHeader(buffer: Buffer): WSFrameHeader | null;
+/**
+ * Is this one of the opcodes defined by RFC 6455?
+ */
+export declare function isKnownOpcode(opcode: number): opcode is Opcode;
+/**
+ * Is this a control frame opcode (close/ping/pong or reserved 0xB-0xF)?
+ */
+export declare function isControlOpcode(opcode: number): boolean;
 /**
  * Parse a WebSocket frame from a Buffer.
  * Returns the parsed frame and how many bytes were consumed.

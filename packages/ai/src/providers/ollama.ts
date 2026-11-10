@@ -20,8 +20,9 @@ import {
   CompletionStream,
   EmbeddingOptions,
   EmbeddingResponse,
-  StreamChunk
+  ToolCall
 } from '../types';
+import { requestJson, requestLines, linkSignal, AIHttpError, DEFAULT_MAX_RETRIES } from './http';
 
 export interface OllamaProviderOptions {
   // Ollama base URL (default: http://localhost:11434)
@@ -30,8 +31,14 @@ export interface OllamaProviderOptions {
   // Default model to use
   model?: string;
 
-  // Request timeout (default: 120000 - local models can be slow)
+  // Per-attempt socket idle timeout (default: 120000 - local models can be slow)
   timeoutMs?: number;
+
+  // Retries on 429 / 5xx / network errors (default: 2)
+  maxRetries?: number;
+
+  // Base delay for exponential backoff with jitter (default: 500)
+  retryBaseDelayMs?: number;
 }
 
 export class OllamaProvider implements AIProvider {
@@ -40,16 +47,24 @@ export class OllamaProvider implements AIProvider {
 
   private baseUrl: string;
   private timeoutMs: number;
+  private maxRetries: number;
+  private retryBaseDelayMs?: number;
+  private callCounter = 0;
+
+  // Set once the server answered 404 to /api/embed (Ollama < 0.3.4)
+  private legacyEmbeddings = false;
 
   constructor(options: OllamaProviderOptions = {}) {
     this.baseUrl = options.baseUrl || 'http://localhost:11434';
     this.defaultModel = options.model || 'llama3.2';
     this.timeoutMs = options.timeoutMs || 120000;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.retryBaseDelayMs = options.retryBaseDelayMs;
   }
 
   async complete(options: CompletionOptions): Promise<CompletionResponse> {
     const model = options.model || this.defaultModel;
-    const body = {
+    const body: Record<string, unknown> = {
       model,
       messages: this.formatMessages(options),
       stream: false,
@@ -59,12 +74,15 @@ export class OllamaProvider implements AIProvider {
         num_predict: options.maxTokens
       }
     };
+    this.addTools(body, options);
 
-    const data = await this.post('/api/chat', body);
+    const data = await this.post('/api/chat', body, options);
+    const toolCalls = this.parseToolCalls(data.message?.tool_calls);
 
     return {
       content: data.message?.content || '',
-      finishReason: data.done ? 'stop' : 'length',
+      toolCalls,
+      finishReason: toolCalls ? 'tool_use' : (data.done ? 'stop' : 'length'),
       usage: {
         promptTokens: data.prompt_eval_count || 0,
         completionTokens: data.eval_count || 0,
@@ -76,7 +94,7 @@ export class OllamaProvider implements AIProvider {
 
   async *stream(options: CompletionOptions): CompletionStream {
     const model = options.model || this.defaultModel;
-    const body = {
+    const body: Record<string, unknown> = {
       model,
       messages: this.formatMessages(options),
       stream: true,
@@ -85,51 +103,80 @@ export class OllamaProvider implements AIProvider {
         num_predict: options.maxTokens
       }
     };
+    this.addTools(body, options);
 
     let fullContent = '';
     let promptTokens = 0;
     let completionTokens = 0;
+    const toolCalls: ToolCall[] = [];
 
-    const lines = await this.postStream('/api/chat', body);
+    const lines = this.postStream('/api/chat', body, options);
+
+    let streamFailure: string | null = null;
 
     for await (const line of lines) {
       if (!line.trim()) continue;
 
+      let chunk: any;
       try {
-        const chunk = JSON.parse(line);
-
-        const delta = chunk.message?.content || '';
-        if (delta) {
-          fullContent += delta;
-          yield { delta, done: false };
-        }
-
-        if (chunk.done) {
-          promptTokens = chunk.prompt_eval_count || 0;
-          completionTokens = chunk.eval_count || 0;
-
-          yield {
-            delta: '',
-            done: true,
-            response: {
-              content: fullContent,
-              finishReason: 'stop',
-              usage: {
-                promptTokens,
-                completionTokens,
-                totalTokens: promptTokens + completionTokens
-              },
-              model: chunk.model || model
-            }
-          };
-          return;
-        }
+        chunk = JSON.parse(line);
       } catch {
         continue;
+      }
+
+      // Ollama reports errors (e.g. model unloaded mid-stream) as { error }
+      if (chunk.error) streamFailure = String(chunk.error);
+
+      const delta = chunk.message?.content || '';
+      if (delta) {
+        fullContent += delta;
+        yield { delta, done: false };
+      }
+
+      // Ollama sends complete tool calls (usually in one chunk)
+      for (const call of this.parseToolCalls(chunk.message?.tool_calls) || []) {
+        toolCalls.push(call);
+        yield {
+          delta: '',
+          done: false,
+          toolCallIndex: toolCalls.length - 1,
+          toolCallDelta: { ...call }
+        };
+      }
+
+      if (chunk.done) {
+        promptTokens = chunk.prompt_eval_count || 0;
+        completionTokens = chunk.eval_count || 0;
+
+        yield {
+          delta: '',
+          done: true,
+          response: {
+            content: fullContent,
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+            finishReason: toolCalls.length > 0 ? 'tool_use' : 'stop',
+            usage: {
+              promptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens
+            },
+            model: chunk.model || model
+          }
+        };
+        return;
+      }
+
+      if (streamFailure) {
+        throw new Error(`Ollama error: ${streamFailure}`);
       }
     }
   }
 
+  /**
+   * Embed with the batched /api/embed endpoint (`input: string[]`).
+   * Falls back to the legacy one-text-per-request /api/embeddings when the
+   * server answers 404 (Ollama older than 0.3.4).
+   */
   async embed(options: EmbeddingOptions): Promise<EmbeddingResponse> {
     const inputs = Array.isArray(options.input)
       ? options.input
@@ -137,24 +184,62 @@ export class OllamaProvider implements AIProvider {
 
     const model = options.model || 'nomic-embed-text';
 
-    // Ollama processes embeddings one at a time
-    const embeddings: number[][] = [];
-    let totalTokens = 0;
+    // One deadline / signal for the whole call
+    const { signal, cleanup } = linkSignal('Ollama', options.signal, options.timeoutMs);
 
-    for (const input of inputs) {
-      const data = await this.post('/api/embeddings', { model, prompt: input });
-      embeddings.push(data.embedding);
-      totalTokens += input.split(' ').length; // Approximate
+    try {
+      if (!this.legacyEmbeddings) {
+        try {
+          const data = await this.post('/api/embed', { model, input: inputs }, { signal });
+          return {
+            embeddings: data.embeddings || [],
+            model,
+            usage: {
+              totalTokens: data.prompt_eval_count ||
+                inputs.reduce((n, t) => n + t.split(' ').length, 0)
+            }
+          };
+        } catch (err) {
+          if (!(err instanceof AIHttpError && err.status === 404) || isModelNotFound(err)) throw err;
+          this.legacyEmbeddings = true;
+        }
+      }
+
+      // Legacy endpoint processes embeddings one at a time
+      const embeddings: number[][] = [];
+      let totalTokens = 0;
+
+      for (const input of inputs) {
+        const data = await this.post('/api/embeddings', { model, prompt: input }, { signal });
+        embeddings.push(data.embedding);
+        totalTokens += input.split(' ').length; // Approximate
+      }
+
+      return {
+        embeddings,
+        model,
+        usage: { totalTokens }
+      };
+    } finally {
+      cleanup();
     }
-
-    return {
-      embeddings,
-      model,
-      usage: { totalTokens }
-    };
   }
 
   // ─── Internal ────────────────────────────────────────────────────────────────
+
+  private addTools(body: Record<string, unknown>, options: CompletionOptions): void {
+    // Ollama has no tool_choice; 'none' means: don't offer the tools
+    if (!options.tools || options.tools.length === 0 || options.toolChoice === 'none') return;
+
+    body.tools = options.tools.map(tool => ({
+      type: 'function',
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }
+    }));
+  }
 
   private formatMessages(options: CompletionOptions): any[] {
     const messages = [...options.messages];
@@ -163,152 +248,105 @@ export class OllamaProvider implements AIProvider {
       messages.unshift({ role: 'system', content: options.system });
     }
 
-    return messages.map(m => ({ role: m.role, content: m.content }));
-  }
+    const callNames = new Map<string, string>();
 
-  private post(path: string, body: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const bodyStr = JSON.stringify(body);
-      const url = new URL(this.baseUrl + path);
-      const isHttps = url.protocol === 'https:';
-      const transport = isHttps ? require('https') : require('http');
+    return messages.map(m => {
+      const out: any = { role: m.role, content: m.content };
 
-      let responded = false;
+      if (m.toolCalls && m.toolCalls.length > 0) {
+        out.tool_calls = m.toolCalls.map(tc => {
+          callNames.set(tc.id, tc.name);
+          return { function: { name: tc.name, arguments: tc.arguments || {} } };
+        });
+      }
 
-      const req = transport.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (isHttps ? 443 : 11434),
-          path: url.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': String(Buffer.byteLength(bodyStr))
-          }
-        },
-        (res: any) => {
-          responded = true;
-          let data = '';
-          res.on('data', (chunk: string) => (data += chunk));
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(data));
-            } catch {
-              reject(new Error(
-                `Ollama: Invalid JSON response. ` +
-                `Is Ollama running at ${this.baseUrl}? ` +
-                `Start with: ollama serve`
-              ));
-            }
-          });
-          res.on('error', (err: Error) => {
-            if (!responded) reject(err);
-          });
-        }
-      );
+      if (m.role === 'tool') {
+        const name = m.name || (m.toolCallId ? callNames.get(m.toolCallId) : undefined);
+        if (name) out.tool_name = name;
+      }
 
-      // ✅ CRITICAL — always handle the error event on req
-      // Without this Node.js crashes with unhandled 'error' event
-      req.on('error', (err: Error) => {
-        reject(new Error(
-          `Cannot connect to Ollama at ${this.baseUrl}.\n` +
-          `Make sure Ollama is running: ollama serve\n` +
-          `Pull model: ollama pull ${this.defaultModel}\n` +
-          `Error: ${err.message}`
-        ));
-      });
-
-      req.setTimeout(this.timeoutMs, () => {
-        req.destroy(
-          new Error(
-            `Ollama request timed out after ${this.timeoutMs}ms. ` +
-            `Model may still be loading.`
-          )
-        );
-      });
-
-      req.write(bodyStr);
-      req.end();
+      return out;
     });
   }
 
-  private postStream(path: string, body: unknown): AsyncIterable<string> {
-  const bodyStr = JSON.stringify(body);
-  const url     = new URL(this.baseUrl + path);
-  const isHttps = url.protocol === 'https:';
-  const transport = isHttps ? require('https') : require('http');
+  private parseToolCalls(raw: unknown): ToolCall[] | undefined {
+    if (!Array.isArray(raw) || raw.length === 0) return undefined;
 
-  return {
-    [Symbol.asyncIterator]() {
-      return (async function* () {
-        const queue: string[] = [];
-        let notify: (() => void) | null = null;
-        let done        = false;
-        let streamError: Error | null = null;
-        let lineBuffer  = '';
+    return raw.map((tc: any) => {
+      let args = tc.function?.arguments ?? {};
+      if (typeof args === 'string') {
+        try { args = JSON.parse(args); } catch { args = {}; }
+      }
+      return {
+        id: tc.id || `ollama-call-${++this.callCounter}`,
+        name: tc.function?.name || '',
+        arguments: args && typeof args === 'object' ? args : {}
+      };
+    });
+  }
 
-        const req = transport.request(
-          {
-            hostname: url.hostname,
-            port:     url.port || (isHttps ? 443 : 11434),
-            path:     url.pathname,
-            method:   'POST',
-            headers: {
-              'Content-Type':   'application/json',
-              'Content-Length': String(Buffer.byteLength(bodyStr))
-            }
-          },
-          (res: any) => {
-            res.on('data', (chunk: Buffer) => {
-              lineBuffer += chunk.toString();
-              const parts = lineBuffer.split('\n');
-              lineBuffer  = parts.pop() || '';
+  private connectError(err: Error): Error {
+    return new Error(
+      `Cannot connect to Ollama at ${this.baseUrl}.\n` +
+      `Make sure Ollama is running: ollama serve\n` +
+      `Pull model: ollama pull ${this.defaultModel}\n` +
+      `Error: ${err.message}`
+    );
+  }
 
-              for (const part of parts) {
-                if (part.trim()) {
-                  queue.push(part.trim());
-                  if (notify) { notify(); notify = null; }
-                }
-              }
-            });
+  private post(
+    path: string,
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<any> {
+    return requestJson({
+      label: 'Ollama',
+      url: this.baseUrl + path,
+      body,
+      defaultPort: 11434,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      idleTimeoutMs: this.timeoutMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs,
+      // Ollama may also return { error } with a 2xx status
+      isErrorBody: parsed => Boolean(parsed?.error),
+      invalidJson: () => new Error(
+        `Ollama: Invalid JSON response. ` +
+        `Is Ollama running at ${this.baseUrl}? ` +
+        `Start with: ollama serve`
+      ),
+      wrapNetworkError: err => this.connectError(err)
+    });
+  }
 
-            res.on('end', () => {
-              done = true;
-              if (notify) { notify(); notify = null; }
-            });
-
-            res.on('error', (err: Error) => {
-              streamError = err;
-              done = true;
-              if (notify) { notify(); notify = null; }
-            });
-          }
-        );
-
-        // ✅ CRITICAL — handle error event on req
-        req.on('error', (err: Error) => {
-          streamError = new Error(
-            `Cannot connect to Ollama at ${url.origin}. ` +
-            `Start Ollama with: ollama serve`
-          );
-          done = true;
-          if (notify) { notify(); notify = null; }
-        });
-
-        req.write(bodyStr);
-        req.end();
-
-        while (!done || queue.length > 0) {
-          if (queue.length > 0) {
-            yield queue.shift()!;
-          } else if (!done) {
-            await new Promise<void>(r => { notify = r; });
-          }
-        }
-
-        if (streamError) throw streamError;
-      })();
-    }
-  };
+  private postStream(
+    path: string,
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): AsyncIterable<string> {
+    const url = new URL(this.baseUrl + path);
+    return requestLines({
+      label: 'Ollama',
+      url: this.baseUrl + path,
+      body,
+      defaultPort: 11434,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs,
+      wrapNetworkError: () => new Error(
+        `Cannot connect to Ollama at ${url.origin}. ` +
+        `Start Ollama with: ollama serve`
+      )
+    });
+  }
 }
+
+/**
+ * /api/embed answers 404 both when the endpoint is missing and when the
+ * model is not pulled; only the former should trigger the legacy fallback.
+ */
+function isModelNotFound(err: AIHttpError): boolean {
+  return /model\b.*not found|not found.*pull/i.test(err.message);
 }

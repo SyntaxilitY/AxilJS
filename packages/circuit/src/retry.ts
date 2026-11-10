@@ -12,7 +12,7 @@
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface RetryOptions {
-  // Number of attempts (default: 3)
+  // Number of attempts (default: 3). Values < 1 (or non-finite) run once.
   attempts?: number;
 
   // Base delay between attempts in ms (default: 1000)
@@ -56,9 +56,12 @@ export async function retry<T>(
     onRetry
   } = options;
 
+  // Always make at least one attempt (attempts: 0 used to throw undefined)
+  const totalAttempts = Number.isFinite(attempts) && attempts >= 1 ? Math.floor(attempts) : 1;
+
   let lastError: Error;
 
-  for (let attempt = 1; attempt <= attempts; attempt++) {
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
     try {
       return await fn();
     } catch (error) {
@@ -70,7 +73,7 @@ export async function retry<T>(
       }
 
       // Last attempt - don't delay, just throw
-      if (attempt === attempts) {
+      if (attempt === totalAttempts) {
         throw lastError;
       }
 

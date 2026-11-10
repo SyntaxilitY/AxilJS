@@ -44,6 +44,8 @@ export interface CompletionOptions {
     };
     system?: string;
     topP?: number;
+    signal?: AbortSignal;
+    timeoutMs?: number;
 }
 export interface CompletionResponse {
     content: string;
@@ -60,12 +62,16 @@ export interface StreamChunk {
     delta: string;
     done: boolean;
     toolCallDelta?: Partial<ToolCall>;
+    toolCallIndex?: number;
+    toolCallArgumentsDelta?: string;
     response?: CompletionResponse;
 }
 export type CompletionStream = AsyncGenerator<StreamChunk, void, unknown>;
 export interface EmbeddingOptions {
     input: string | string[];
     model?: string;
+    signal?: AbortSignal;
+    timeoutMs?: number;
 }
 export interface EmbeddingResponse {
     embeddings: number[][];

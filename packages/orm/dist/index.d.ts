@@ -12,8 +12,13 @@ export { Entity, PrimaryKey, Column, CreatedAt, UpdatedAt, DeletedAt, HasOne, Ha
 export type { ColumnType, ColumnOptions, PrimaryKeyOptions, RelationOptions, IndexOptions, ColumnMeta, RelationMeta, IndexMeta, EntityMeta, EntityMetadata } from './decorators/entity';
 export { QueryBuilder as ModelQueryBuilder } from './query/query-builder';
 export { QueryBuilder } from './query-builder/query-builder';
+export { assertSafeIdentifier, isSafeIdentifier, assertSortDirection, UnsafeIdentifierError } from './query/identifier';
+export { eagerLoad } from './relations/eager-loader';
+export type { EagerLoadOptions } from './relations/eager-loader';
 export { BaseRepository } from './repository/base-repository';
+export type { FindOptions } from './repository/base-repository';
 export { BaseModel } from './model/base-model';
+export type { ModelFindOptions } from './model/base-model';
 export { getEntityMeta, getOrCreateMeta } from './model/model-metadata';
 export { Schema, TableBuilder } from './schema/schema-builder';
 export { Transaction, TransactionScope } from './transaction/transaction-manager';

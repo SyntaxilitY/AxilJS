@@ -21,8 +21,10 @@ exports.withTimeout = withTimeout;
  */
 async function retry(fn, options = {}) {
     const { attempts = 3, delay = 1000, backoff = 'exponential', maxDelay = 30000, jitter = true, retryIf = () => true, onRetry } = options;
+    // Always make at least one attempt (attempts: 0 used to throw undefined)
+    const totalAttempts = Number.isFinite(attempts) && attempts >= 1 ? Math.floor(attempts) : 1;
     let lastError;
-    for (let attempt = 1; attempt <= attempts; attempt++) {
+    for (let attempt = 1; attempt <= totalAttempts; attempt++) {
         try {
             return await fn();
         }
@@ -33,7 +35,7 @@ async function retry(fn, options = {}) {
                 throw lastError;
             }
             // Last attempt - don't delay, just throw
-            if (attempt === attempts) {
+            if (attempt === totalAttempts) {
                 throw lastError;
             }
             // Calculate delay for next attempt

@@ -6,24 +6,41 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
+import * as ui from '../ui'
+import { npmSummary, printCaptured, runCaptured } from '../utils/exec'
+
 export async function installPackages(
   packages: string[],
   isDev: boolean = false
 ): Promise<void> {
-  const cwd = process.cwd()
+  const cwd     = process.cwd()
+  const started = Date.now()
+
+  ui.title('install', packages.length > 0 ? `Add ${packages.length} package(s)` : 'Install dependencies')
 
   if (packages.length > 0) {
     await addToPackageJson(packages, isDev, cwd)
   }
 
   // Delegate to npm for actual installation
-  const { execSync } = require('child_process')
+  const spin = ui.spinner('Installing dependencies')
+  let result
   try {
-    execSync('npm install', { cwd, stdio: 'inherit' })
-  } catch {
-    console.error('\x1b[31m[AxilJS]\x1b[0m Installation failed.')
+    result = await runCaptured('npm install', cwd)
+  } catch (error: any) {
+    result = { code: 1, output: error?.message ?? String(error) }
+  }
+
+  if (result.code !== 0) {
+    spin.fail('Installation failed', 'npm install')
+    console.error('')
+    printCaptured(result.output, l => console.error(l))
+    ui.error('Installation failed.', 'See the npm output above.')
     process.exit(1)
   }
+
+  spin.succeed('Dependencies installed', npmSummary(result.output))
+  ui.done('Install done', started)
 }
 
 async function addToPackageJson(
@@ -34,7 +51,7 @@ async function addToPackageJson(
   const pkgPath = join(cwd, 'package.json')
 
   if (!existsSync(pkgPath)) {
-    console.error('\x1b[31mError:\x1b[0m No package.json found.')
+    ui.error('No package.json found.', 'Run axil install from the project root.')
     process.exit(1)
   }
 
@@ -53,8 +70,10 @@ async function addToPackageJson(
       version = packageName.slice(atIndex + 1)
     }
 
-    pkg[section][name] = `^${version}`
-    console.log(`  \x1b[32m+\x1b[0m Added ${name}@${version} to ${section}`)
+    // Only exact versions get a caret; tags ("latest") and explicit ranges
+    // ("^1.2", "~1.2.3", ">=2") are written as-is ("^latest" is invalid).
+    pkg[section][name] = /^\d/.test(version) ? `^${version}` : version
+    ui.success(`Added ${ui.c.bold(`${name}@${version}`)} to ${section}`)
   }
 
   writeFileSync(pkgPath, JSON.stringify(pkg, null, 2), 'utf-8')

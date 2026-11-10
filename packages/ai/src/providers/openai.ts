@@ -1,9 +1,7 @@
 /**
  * OpenAI Provider.
  * Supports GPT-4o, GPT-4o-mini, GPT-4-turbo, GPT-3.5-turbo.
- * Uses the official openai npm package (peer dependency).
- *
- * Install: npm install openai
+ * Pure Node.js https - no SDK required.
  *
  * Usage:
  *   const provider = new OpenAIProvider({ apiKey: process.env.OPENAI_API_KEY })
@@ -13,7 +11,6 @@
  *   })
  */
 
-import { get } from 'https';
 import {
   AIProvider,
   CompletionOptions,
@@ -22,8 +19,9 @@ import {
   EmbeddingOptions,
   EmbeddingResponse,
   StreamChunk,
-  Message
+  ToolCall
 } from '../types';
+import { requestJson, requestLines, DEFAULT_MAX_RETRIES } from './http';
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
@@ -38,8 +36,14 @@ export interface OpenAIProviderOptions {
   // Organization ID (optional)
   organization?: string;
 
-  // Request timeout in ms (default: 60000)
+  // Per-attempt socket idle timeout in ms (default: 60000)
   timeoutMs?: number;
+
+  // Retries on 429 / 5xx / network errors (default: 2)
+  maxRetries?: number;
+
+  // Base delay for exponential backoff with jitter (default: 500)
+  retryBaseDelayMs?: number;
 }
 
 // ─── OpenAI Provider ──────────────────────────────────────────────────────────
@@ -52,6 +56,8 @@ export class OpenAIProvider implements AIProvider {
   private baseUrl: string;
   private organization?: string;
   private timeoutMs: number;
+  private maxRetries: number;
+  private retryBaseDelayMs?: number;
 
   constructor(options: OpenAIProviderOptions) {
     if (!options.apiKey) {
@@ -65,13 +71,15 @@ export class OpenAIProvider implements AIProvider {
     this.baseUrl = options.baseUrl || 'https://api.openai.com/v1';
     this.organization = options.organization;
     this.timeoutMs = options.timeoutMs || 60000;
+    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.retryBaseDelayMs = options.retryBaseDelayMs;
   }
 
   // ─── Complete ─────────────────────────────────────────────────────────────────
 
   async complete(options: CompletionOptions): Promise<CompletionResponse> {
     const body = this.buildRequestBody(options, false);
-    const data = await this.post('/chat/completions', body);
+    const data = await this.post('/chat/completions', body, options);
 
     const choice = data.choices[0];
     const message = choice.message;
@@ -94,13 +102,16 @@ export class OpenAIProvider implements AIProvider {
   async *stream(options: CompletionOptions): CompletionStream {
     const body = this.buildRequestBody(options, true);
 
-    // Use native https for streaming to avoid buffering
-    const lines = await this.postStream('/chat/completions', body);
+    const lines = this.postStream('/chat/completions', body, options);
 
     let fullContent = '';
     let promptTokens = 0;
     let completionTokens = 0;
     let model = options.model || this.defaultModel;
+    let finishReason = '';
+
+    // Tool calls arrive as fragments keyed by index
+    const toolCalls: Array<{ id: string; name: string; args: string }> = [];
 
     for await (const line of lines) {
       // SSE format: "data: {...}"
@@ -110,12 +121,14 @@ export class OpenAIProvider implements AIProvider {
 
       // [DONE] signals end of stream
       if (jsonStr === '[DONE]') {
+        const assembled = this.assembleToolCalls(toolCalls);
         yield {
           delta: '',
           done: true,
           response: {
             content: fullContent,
-            finishReason: 'stop',
+            toolCalls: assembled,
+            finishReason: this.mapFinishReason(finishReason),
             usage: {
               promptTokens,
               completionTokens,
@@ -127,30 +140,66 @@ export class OpenAIProvider implements AIProvider {
         return;
       }
 
+      let chunk: any;
       try {
-        const chunk = JSON.parse(jsonStr);
-        const delta = chunk.choices?.[0]?.delta;
-        model = chunk.model || model;
-
-        if (delta?.content) {
-          fullContent += delta.content;
-
-          const streamChunk: StreamChunk = {
-            delta: delta.content,
-            done: false
-          };
-
-          yield streamChunk;
-        }
-
-        // Track usage if provided mid-stream (some models do this)
-        if (chunk.usage) {
-          promptTokens = chunk.usage.prompt_tokens || 0;
-          completionTokens = chunk.usage.completion_tokens || 0;
-        }
+        chunk = JSON.parse(jsonStr);
       } catch {
         // Invalid JSON chunk - skip it
         continue;
+      }
+
+      const delta = chunk.choices?.[0]?.delta;
+      model = chunk.model || model;
+      finishReason = chunk.choices?.[0]?.finish_reason || finishReason;
+
+      if (delta?.content) {
+        fullContent += delta.content;
+
+        const streamChunk: StreamChunk = {
+          delta: delta.content,
+          done: false
+        };
+
+        yield streamChunk;
+      }
+
+      if (Array.isArray(delta?.tool_calls)) {
+        for (const tc of delta.tool_calls) {
+          const index = typeof tc.index === 'number' ? tc.index : toolCalls.length;
+          let entry = toolCalls[index];
+
+          if (!entry) {
+            entry = { id: tc.id || `call_${index}`, name: tc.function?.name || '', args: '' };
+            toolCalls[index] = entry;
+            yield {
+              delta: '',
+              done: false,
+              toolCallIndex: index,
+              toolCallDelta: { id: entry.id, name: entry.name }
+            };
+          } else {
+            if (tc.id) entry.id = tc.id;
+            if (tc.function?.name) entry.name += tc.function.name;
+          }
+
+          const argsDelta = tc.function?.arguments;
+          if (argsDelta) {
+            entry.args += argsDelta;
+            yield {
+              delta: '',
+              done: false,
+              toolCallIndex: index,
+              toolCallDelta: { id: entry.id },
+              toolCallArgumentsDelta: argsDelta
+            };
+          }
+        }
+      }
+
+      // Track usage if provided mid-stream (some models do this)
+      if (chunk.usage) {
+        promptTokens = chunk.usage.prompt_tokens || 0;
+        completionTokens = chunk.usage.completion_tokens || 0;
       }
     }
   }
@@ -163,7 +212,7 @@ export class OpenAIProvider implements AIProvider {
       model: options.model || 'text-embedding-3-small'
     };
 
-    const data = await this.post('/embeddings', body);
+    const data = await this.post('/embeddings', body, options);
 
     return {
       embeddings: data.data.map((d: any) => d.embedding),
@@ -231,17 +280,18 @@ export class OpenAIProvider implements AIProvider {
     return messages.map(msg => {
       const base: any = { role: msg.role, content: msg.content };
 
-      if (msg.toolCalls) {
+      if (msg.toolCalls && msg.toolCalls.length > 0) {
         base.tool_calls = msg.toolCalls.map(tc => ({
           id: tc.id,
           type: 'function',
           function: {
             name: tc.name,
-            arguments: JSON.stringify(tc.arguments)
+            arguments: JSON.stringify(tc.arguments ?? {})
           }
         }));
-        // Assistant messages with tool calls have null content in OpenAI API
-        base.content = null;
+        // Keep any assistant text that accompanied the tool calls;
+        // the API only needs null when there is no text at all
+        base.content = msg.content ? msg.content : null;
       }
 
       if (msg.toolCallId) {
@@ -255,7 +305,7 @@ export class OpenAIProvider implements AIProvider {
   /**
    * Parse OpenAI tool_calls format into our ToolCall format.
    */
-  private parseToolCalls(rawToolCalls?: any[]): any[] | undefined {
+  private parseToolCalls(rawToolCalls?: any[]): ToolCall[] | undefined {
     if (!rawToolCalls || rawToolCalls.length === 0) return undefined;
 
     return rawToolCalls.map(tc => ({
@@ -265,166 +315,90 @@ export class OpenAIProvider implements AIProvider {
     }));
   }
 
+  private assembleToolCalls(
+    calls: Array<{ id: string; name: string; args: string }>
+  ): ToolCall[] | undefined {
+    const list = calls.filter(Boolean);
+    if (list.length === 0) return undefined;
+    return list.map(c => ({ id: c.id, name: c.name, arguments: safeParseArgs(c.args) }));
+  }
+
   private mapFinishReason(
     reason: string
   ): CompletionResponse['finishReason'] {
     const map: Record<string, CompletionResponse['finishReason']> = {
       'stop':          'stop',
       'tool_calls':    'tool_use',
+      'function_call': 'tool_use',
       'length':        'length',
       'content_filter': 'stop'
     };
     return map[reason] || 'stop';
   }
 
+  private headers(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${this.apiKey}`
+    };
+    if (this.organization) {
+      headers['OpenAI-Organization'] = this.organization;
+    }
+    return headers;
+  }
+
   /**
-   * Make a POST request to the OpenAI API.
-   * Pure Node.js https - no external dependencies.
+   * POST to the OpenAI API (retries, abort and timeouts via ./http).
    */
-  private post(path: string, body: unknown): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const bodyStr = JSON.stringify(body);
-      const url = new URL(this.baseUrl + path);
-
-      const headers: Record<string, string> = {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Length': String(Buffer.byteLength(bodyStr))
-      };
-
-      if (this.organization) {
-        headers['OpenAI-Organization'] = this.organization;
-      }
-
-      const req = require('https').request(
-        {
-          hostname: url.hostname,
-          port: url.port || 443,
-          path: url.pathname + url.search,
-          method: 'POST',
-          headers
-        },
-        (res: any) => {
-          let data = '';
-          res.on('data', (chunk: string) => (data += chunk));
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(data);
-
-              if (res.statusCode >= 400) {
-                reject(new Error(
-                  `OpenAI API error ${res.statusCode}: ` +
-                  (parsed.error?.message || data)
-                ));
-                return;
-              }
-
-              resolve(parsed);
-            } catch {
-              reject(new Error(`OpenAI: Invalid JSON response: ${data}`));
-            }
-          });
-          res.on('error', reject);
-        }
-      );
-
-      req.on('error', reject);
-
-      // Set timeout
-      req.setTimeout(this.timeoutMs, () => {
-        req.destroy(new Error(`OpenAI request timed out after ${this.timeoutMs}ms`));
-      });
-
-      req.write(bodyStr);
-      req.end();
+  private post(
+    path: string,
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
+  ): Promise<any> {
+    return requestJson({
+      label: 'OpenAI',
+      url: this.baseUrl + path,
+      headers: this.headers(),
+      body,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      idleTimeoutMs: this.timeoutMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs,
+      invalidJson: raw => new Error(`OpenAI: Invalid JSON response: ${raw}`)
     });
   }
 
   /**
-   * Stream POST request - returns async iterable of SSE lines.
+   * Streaming POST - async iterable of SSE lines.
    */
   private postStream(
     path: string,
-    body: unknown
+    body: unknown,
+    call: { signal?: AbortSignal; timeoutMs?: number } = {}
   ): AsyncIterable<string> {
-    const bodyStr = JSON.stringify(body);
-    const url     = new URL(this.baseUrl + path);
+    return requestLines({
+      label: 'OpenAI',
+      url: this.baseUrl + path,
+      headers: this.headers(),
+      body,
+      maxRetries: this.maxRetries,
+      retryBaseDelayMs: this.retryBaseDelayMs,
+      signal: call.signal,
+      timeoutMs: call.timeoutMs
+    });
+  }
+}
 
-    const headers: Record<string, string> = {
-      'Content-Type':   'application/json',
-      'Authorization':  `Bearer ${this.apiKey}`,
-      'Content-Length': String(Buffer.byteLength(bodyStr))
-    };
-
-    if (this.organization) {
-      headers['OpenAI-Organization'] = this.organization;
-    }
-
-    return {
-      [Symbol.asyncIterator]() {
-        return (async function* () {
-          const lines: string[] = [];
-          let resolve: (() => void) | null = null;
-          let done        = false;
-          let streamError: Error | null = null;
-          let lineBuffer  = '';
-
-          const req = require('https').request(
-            {
-              hostname: url.hostname,
-              port:     url.port || 443,
-              path:     url.pathname,
-              method:   'POST',
-              headers
-            },
-            (res: any) => {
-              res.on('data', (chunk: Buffer) => {
-                lineBuffer += chunk.toString();
-                const parts = lineBuffer.split('\n');
-                lineBuffer  = parts.pop() || '';
-
-                for (const part of parts) {
-                  if (part.trim()) {
-                    lines.push(part.trim());
-                    if (resolve) { resolve(); resolve = null; }
-                  }
-                }
-              });
-
-              res.on('end', () => {
-                done = true;
-                if (resolve) { resolve(); resolve = null; }
-              });
-
-              res.on('error', (err: Error) => {
-                streamError = err;
-                done = true;
-                if (resolve) { resolve(); resolve = null; }
-              });
-            }
-          );
-
-          // ✅ CRITICAL — handle error event on req
-          req.on('error', (err: Error) => {
-            streamError = err;
-            done = true;
-            if (resolve) { resolve(); resolve = null; }
-          });
-
-          req.write(bodyStr);
-          req.end();
-
-          while (!done || lines.length > 0) {
-            if (lines.length > 0) {
-              yield lines.shift()!;
-            } else if (!done) {
-              await new Promise<void>(r => { resolve = r; });
-            }
-          }
-
-          if (streamError) throw streamError;
-        })();
-      }
-    };
+/**
+ * Parse a JSON arguments string; malformed or empty input yields {}.
+ */
+function safeParseArgs(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === 'object') return raw as Record<string, unknown>;
+  if (typeof raw !== 'string' || !raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : { value: parsed };
+  } catch {
+    return {};
   }
 }

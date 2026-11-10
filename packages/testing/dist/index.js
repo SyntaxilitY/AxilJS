@@ -3,7 +3,7 @@
  * @axiljs/testing - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTestClient = exports.TestClient = exports.AssertionError = exports.expect = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
+exports.createTestClient = exports.TestClient = exports.isMockFunction = exports.spyOn = exports.fn = exports.AssertionError = exports.expect = exports.DEFAULT_TIMEOUT = exports.resetTests = exports.runTestsWithResults = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fdescribe = exports.xdescribe = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
 // Test runner
 var test_runner_1 = require("./runner/test-runner");
 Object.defineProperty(exports, "describe", { enumerable: true, get: function () { return test_runner_1.describe; } });
@@ -11,15 +11,25 @@ Object.defineProperty(exports, "it", { enumerable: true, get: function () { retu
 Object.defineProperty(exports, "test", { enumerable: true, get: function () { return test_runner_1.test; } });
 Object.defineProperty(exports, "xit", { enumerable: true, get: function () { return test_runner_1.xit; } });
 Object.defineProperty(exports, "fit", { enumerable: true, get: function () { return test_runner_1.fit; } });
+Object.defineProperty(exports, "xdescribe", { enumerable: true, get: function () { return test_runner_1.xdescribe; } });
+Object.defineProperty(exports, "fdescribe", { enumerable: true, get: function () { return test_runner_1.fdescribe; } });
 Object.defineProperty(exports, "beforeAll", { enumerable: true, get: function () { return test_runner_1.beforeAll; } });
 Object.defineProperty(exports, "afterAll", { enumerable: true, get: function () { return test_runner_1.afterAll; } });
 Object.defineProperty(exports, "beforeEach", { enumerable: true, get: function () { return test_runner_1.beforeEach; } });
 Object.defineProperty(exports, "afterEach", { enumerable: true, get: function () { return test_runner_1.afterEach; } });
 Object.defineProperty(exports, "runTests", { enumerable: true, get: function () { return test_runner_1.runTests; } });
+Object.defineProperty(exports, "runTestsWithResults", { enumerable: true, get: function () { return test_runner_1.runTestsWithResults; } });
+Object.defineProperty(exports, "resetTests", { enumerable: true, get: function () { return test_runner_1.resetTests; } });
+Object.defineProperty(exports, "DEFAULT_TIMEOUT", { enumerable: true, get: function () { return test_runner_1.DEFAULT_TIMEOUT; } });
 // Assertions
 var expect_1 = require("./assertions/expect");
 Object.defineProperty(exports, "expect", { enumerable: true, get: function () { return expect_1.expect; } });
 Object.defineProperty(exports, "AssertionError", { enumerable: true, get: function () { return expect_1.AssertionError; } });
+// Mock functions and spies
+var mock_1 = require("./mock/mock");
+Object.defineProperty(exports, "fn", { enumerable: true, get: function () { return mock_1.fn; } });
+Object.defineProperty(exports, "spyOn", { enumerable: true, get: function () { return mock_1.spyOn; } });
+Object.defineProperty(exports, "isMockFunction", { enumerable: true, get: function () { return mock_1.isMockFunction; } });
 // HTTP test client
 var test_client_1 = require("./http/test-client");
 Object.defineProperty(exports, "TestClient", { enumerable: true, get: function () { return test_client_1.TestClient; } });

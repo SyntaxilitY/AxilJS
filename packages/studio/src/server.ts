@@ -5,7 +5,7 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { existsSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { resolve } from 'path'
 import { URL } from 'url'
 
 import { RouteCollector }              from './collectors/route-collector.js'
@@ -35,10 +35,15 @@ export class StudioServer {
   private cachedData:   StudioData | null = null
   private lastRefresh:  number = 0
   private cwd:          string
+  // Single in-flight connection attempt + throttle, so table requests made
+  // while the database is unreachable don't each open a new pool
+  private connecting:   Promise<void> | null = null
+  private lastConnectAttempt: number = 0
+  private dbClose:      (() => unknown) | null = null
 
   constructor(config: StudioConfig) {
     this.config = config
-    this.cwd    = process.cwd()
+    this.cwd    = config.cwd ?? process.cwd()
   }
 
   setDriver(driver: any, driverType: string): void {
@@ -46,19 +51,36 @@ export class StudioServer {
     this.dbCollector = new DbCollector(driver, driverType)
   }
 
+  /** Port Studio is listening on (useful with `port: 0`). */
+  getPort(): number {
+    const address = this.server?.address()
+    return address && typeof address === 'object' ? address.port : this.config.port
+  }
+
   /**
    * Connect to the database independently using .env config.
    * This is needed because the app runs in a child process
    * and Studio cannot share its driver instance.
    */
-  private async connectToDatabase(): Promise<void> {
+  private connectToDatabase(): Promise<void> {
+    if (this.dbCollector) return Promise.resolve()
+    if (this.connecting)  return this.connecting
+    this.lastConnectAttempt = Date.now()
+    this.connecting = this.doConnectToDatabase().finally(() => {
+      this.connecting = null
+    })
+    return this.connecting
+  }
+
+  private async doConnectToDatabase(): Promise<void> {
     const driverType = this.config.dbDriver
     if (!driverType) return
 
     try {
       if (driverType === 'sqlite') {
         const filename = this.config.dbFile || './dev.db'
-        const resolvedPath = join(this.cwd, filename)
+        // resolve() (not join) so an absolute dbFile is honoured
+        const resolvedPath = resolve(this.cwd, filename)
 
         if (!existsSync(resolvedPath)) {
           console.log(`\x1b[33m[Studio]\x1b[0m SQLite file not found: ${resolvedPath} — waiting for app to create it`)
@@ -68,7 +90,13 @@ export class StudioServer {
         try {
           const Database = require('better-sqlite3')
           const db = new Database(resolvedPath, { readonly: true })
-          db.pragma('journal_mode = WAL')
+          try {
+            // Changing journal mode is a write — fails on a readonly
+            // handle when the file is not already in WAL mode
+            db.pragma('journal_mode = WAL')
+          } catch {
+            // Read-only browsing works without WAL
+          }
 
           // Create a minimal driver wrapper that DbCollector can use
           const sqliteDriver = {
@@ -90,6 +118,7 @@ export class StudioServer {
 
           this.dbDriver    = sqliteDriver
           this.dbCollector = new DbCollector(sqliteDriver, 'sqlite')
+          this.dbClose     = () => db.close()
           console.log(`\x1b[32m[Studio]\x1b[0m Connected to SQLite: ${resolvedPath}`)
         } catch (err: any) {
           if (err.code === 'MODULE_NOT_FOUND') {
@@ -106,19 +135,40 @@ export class StudioServer {
           const { Pool } = require('pg')
           const pool = new Pool({ connectionString: url, max: 2 })
 
-          // Test connection
-          const client = await pool.connect()
-          client.release()
+          // Test connection — end the pool if it fails, otherwise every
+          // retry would leak another pool
+          try {
+            const client = await pool.connect()
+            client.release()
+          } catch (err) {
+            await pool.end().catch(() => {})
+            throw err
+          }
 
           const pgDriver = {
             query: async function(sql: string, params?: unknown[]) {
               const result = await pool.query(sql, params)
               return { rows: result.rows, affectedRows: result.rowCount || 0 }
+            },
+            // Used by the SQL console: a READ ONLY transaction blocks writes
+            // (incl. data-modifying CTEs) and the extended protocol rejects
+            // stacked statements such as "SELECT 1; DROP TABLE x"
+            queryReadOnly: async function(sql: string) {
+              const client = await pool.connect()
+              try {
+                await client.query('BEGIN TRANSACTION READ ONLY')
+                const result = await client.query({ text: sql, values: [], queryMode: 'extended' })
+                return { rows: result.rows, affectedRows: result.rowCount || 0 }
+              } finally {
+                await client.query('ROLLBACK').catch(() => {})
+                client.release()
+              }
             }
           }
 
           this.dbDriver    = pgDriver
           this.dbCollector = new DbCollector(pgDriver, 'postgres')
+          this.dbClose     = () => pool.end()
           console.log(`\x1b[32m[Studio]\x1b[0m Connected to PostgreSQL`)
         } catch (err: any) {
           if (err.code === 'MODULE_NOT_FOUND') {
@@ -142,11 +192,36 @@ export class StudioServer {
                 return { rows, affectedRows: 0 }
               }
               return { rows: [], affectedRows: (rows as any).affectedRows || 0 }
+            },
+            // Used by the SQL console: a READ ONLY transaction blocks table
+            // writes; INTO OUTFILE / DUMPFILE is rejected before we get here
+            queryReadOnly: async function(sql: string) {
+              const conn = await pool.getConnection()
+              try {
+                await conn.query('START TRANSACTION READ ONLY')
+                const [rows] = await conn.query(sql)
+                return Array.isArray(rows)
+                  ? { rows, affectedRows: 0 }
+                  : { rows: [], affectedRows: (rows as any).affectedRows || 0 }
+              } finally {
+                await conn.query('ROLLBACK').catch(() => {})
+                conn.release()
+              }
             }
+          }
+
+          // createPool() is lazy — test the connection like the pg branch does
+          try {
+            const conn = await pool.getConnection()
+            conn.release()
+          } catch (err) {
+            await pool.end().catch(() => {})
+            throw err
           }
 
           this.dbDriver    = mysqlDriver
           this.dbCollector = new DbCollector(mysqlDriver, 'mysql')
+          this.dbClose     = () => pool.end()
           console.log(`\x1b[32m[Studio]\x1b[0m Connected to MySQL`)
         } catch (err: any) {
           if (err.code === 'MODULE_NOT_FOUND') {
@@ -171,6 +246,7 @@ export class StudioServer {
     const maxRetries = 5
     for (let i = 0; i < maxRetries; i++) {
       await new Promise(resolve => setTimeout(resolve, 2000))
+      if (!this.server) return  // stopped
       await this.connectToDatabase()
       if (this.dbCollector) return
     }
@@ -194,19 +270,85 @@ export class StudioServer {
       this.server!.on('error', reject)
     })
 
-    const studioUrl = `http://${this.config.host}:${this.config.port}`
+    const studioUrl = `http://${this.config.host}:${this.getPort()}`
     console.log(
       `\x1b[36m[AxilJS Studio]\x1b[0m \x1b[1m${studioUrl}\x1b[0m`
     )
 
-    this.openBrowser(studioUrl)
+    if (this.config.openBrowser !== false) this.openBrowser(studioUrl)
   }
 
   async stop(): Promise<void> {
     if (this.server) {
-      await new Promise<void>(resolve => this.server!.close(() => resolve()))
+      const server = this.server
       this.server = null
+      await new Promise<void>(resolve => server.close(() => resolve()))
     }
+    // Release the database handle / pool Studio opened itself
+    if (this.dbClose) {
+      const close = this.dbClose
+      this.dbClose     = null
+      this.dbCollector = null
+      this.dbDriver    = null
+      try { await close() } catch { /* already closed */ }
+    }
+  }
+
+  /**
+   * Host names Studio answers to. Anything else is a DNS-rebinding attempt
+   * (a public domain resolving to 127.0.0.1) and is rejected.
+   */
+  private isAllowedHost(hostname: string): boolean {
+    const name    = hostname.toLowerCase()
+    const allowed = ['localhost', '127.0.0.1', '[::1]', ...(this.config.allowedHosts ?? [])]
+    if (this.config.host) {
+      allowed.push(this.config.host.includes(':') && !this.config.host.startsWith('[')
+        ? `[${this.config.host}]`
+        : this.config.host)
+    }
+    return allowed.some(h => h.toLowerCase() === name)
+  }
+
+  private hostnameOf(value: string, withScheme: boolean): string | null {
+    try {
+      return new URL(withScheme ? value : `http://${value}`).hostname
+    } catch {
+      return null
+    }
+  }
+
+  /** Read a request body, or null when it exceeds `limit` bytes. */
+  private readBody(req: IncomingMessage, limit: number): Promise<string | null> {
+    return new Promise((resolve, reject) => {
+      const declared = Number(req.headers['content-length'])
+      if (Number.isFinite(declared) && declared > limit) {
+        resolve(null)
+        return
+      }
+      const chunks: Buffer[] = []
+      let size = 0
+      let done = false
+      req.on('data', (chunk: Buffer) => {
+        if (done) return
+        size += chunk.length
+        if (size > limit) {
+          done = true
+          resolve(null)
+          return
+        }
+        chunks.push(chunk)
+      })
+      req.on('end', () => {
+        if (done) return
+        done = true
+        resolve(Buffer.concat(chunks).toString('utf8'))
+      })
+      req.on('error', err => {
+        if (done) return
+        done = true
+        reject(err)
+      })
+    })
   }
 
   private async refreshData(): Promise<StudioData> {
@@ -255,7 +397,30 @@ export class StudioServer {
     const path   = url.pathname
     const method = req.method ?? 'GET'
 
-    res.setHeader('Access-Control-Allow-Origin',  '*')
+    // DNS rebinding: a page on evil.example whose DNS later points at
+    // 127.0.0.1 is same-origin with Studio, so CORS alone does not help —
+    // only answer requests addressed to a local / configured host name.
+    const hostHeader = req.headers.host
+    if (hostHeader !== undefined) {
+      const hostname = this.hostnameOf(hostHeader, false)
+      if (!hostname || !this.isAllowedHost(hostname)) {
+        res.writeHead(403, { 'Content-Type': 'text/plain' })
+        res.end('Invalid Host header')
+        return
+      }
+    }
+
+    // Only allow cross-origin reads from local origins. A wildcard would let
+    // any website the developer visits read the database through Studio.
+    const origin = req.headers.origin
+    if (origin) {
+      const host = this.hostnameOf(origin, true)
+      if (host && this.isAllowedHost(host)) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+        res.setHeader('Vary', 'Origin')
+      }
+      // Malformed / foreign Origin — no CORS headers
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
@@ -296,8 +461,9 @@ export class StudioServer {
         const limit     = Number(url.searchParams.get('limit') ?? 50)
         const offset    = Number(url.searchParams.get('offset') ?? 0)
 
-        if (!this.dbCollector) {
-          // Try connecting again — maybe the file exists now
+        if (!this.dbCollector && Date.now() - this.lastConnectAttempt > 2000) {
+          // Try connecting again — maybe the file exists now (throttled,
+          // and reuses an in-flight attempt instead of opening a new pool)
           await this.connectToDatabase()
         }
 
@@ -321,14 +487,18 @@ export class StudioServer {
 
       // ── SQL Query ──
       if (path === '/api/studio/query' && method === 'POST') {
-        if (!this.dbCollector || !this.dbDriver) {
-          this.json(res, { error: 'No database connected', rows: [], affected: 0 })
+        const body = await this.readBody(req, this.config.maxBodyBytes ?? 1024 * 1024)
+        if (body === null) {
+          const payload = JSON.stringify({ error: 'Request body too large', rows: [], affected: 0 })
+          res.writeHead(413, { 'Content-Type': 'application/json', 'Connection': 'close' })
+          // Stop receiving the rest of an oversized upload
+          res.end(payload, () => req.destroy())
           return
         }
 
-        let body = ''
-        for await (const chunk of req) {
-          body += chunk.toString()
+        if (!this.dbCollector || !this.dbDriver) {
+          this.json(res, { error: 'No database connected', rows: [], affected: 0 })
+          return
         }
 
         try {
@@ -351,7 +521,16 @@ export class StudioServer {
             return
           }
 
-          const result = await this.dbDriver.query(sql)
+          // MySQL: SELECT ... INTO OUTFILE / DUMPFILE writes files on the
+          // database server (comments such as INTO/**/OUTFILE included)
+          if (/OUTFILE|DUMPFILE/i.test(sql)) {
+            this.json(res, { error: 'INTO OUTFILE / DUMPFILE is not allowed in Studio', rows: [], affected: 0 })
+            return
+          }
+
+          const result = typeof this.dbDriver.queryReadOnly === 'function'
+            ? await this.dbDriver.queryReadOnly(sql)
+            : await this.dbDriver.query(sql)
           this.json(res, {
             rows:     result.rows ?? [],
             affected: result.affectedRows ?? 0

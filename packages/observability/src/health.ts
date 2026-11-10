@@ -62,20 +62,41 @@ export interface HealthStatus {
 
 type CheckFn = () => Promise<void | { message?: string; details?: Record<string, unknown> }>;
 
+export interface CheckOptions {
+  // Fail the check (unhealthy) if it doesn't settle in time (default: 5000ms,
+  // or the HealthChecker's defaultTimeoutMs). 0 disables the timeout.
+  timeoutMs?: number;
+}
+
+export interface HealthCheckerOptions {
+  // Default per-check timeout in ms (default: 5000). 0 disables.
+  defaultTimeoutMs?: number;
+}
+
+const DEFAULT_CHECK_TIMEOUT_MS = 5000;
+
 // ─── Health Checker ───────────────────────────────────────────────────────────
 
 export class HealthChecker {
   private checks = new Map<string, CheckFn>();
+  private checkTimeouts = new Map<string, number>();
   private startTime = Date.now();
+  private defaultTimeoutMs: number;
+
+  constructor(options: HealthCheckerOptions = {}) {
+    this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS;
+  }
 
   /**
    * Register a health check.
    *
    * @param name   Check name (shown in response)
    * @param check  Async function - throw to indicate failure
+   * @param options  { timeoutMs } - a check that hangs longer is reported unhealthy
    */
-  addCheck(name: string, check: CheckFn): this {
+  addCheck(name: string, check: CheckFn, options: CheckOptions = {}): this {
     this.checks.set(name, check);
+    this.checkTimeouts.set(name, options.timeoutMs ?? this.defaultTimeoutMs);
     return this;
   }
 
@@ -91,7 +112,7 @@ export class HealthChecker {
         const start = Date.now();
 
         try {
-          const result = await fn();
+          const result = await this.runWithTimeout(name, fn);
           const responseTimeMs = Date.now() - start;
 
           results[name] = {
@@ -121,6 +142,27 @@ export class HealthChecker {
       version: process.version,
       checks: results
     };
+  }
+
+  /**
+   * Run a check, rejecting if it exceeds its timeout.
+   */
+  private runWithTimeout(name: string, fn: CheckFn): ReturnType<CheckFn> {
+    const timeoutMs = this.checkTimeouts.get(name) ?? this.defaultTimeoutMs;
+    const run = Promise.resolve().then(fn);
+    if (!timeoutMs || timeoutMs <= 0) return run;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`Health check '${name}' timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      timer.unref?.();
+    });
+
+    return Promise.race([run, timeout]).finally(() => {
+      if (timer) clearTimeout(timer);
+    });
   }
 
   /**

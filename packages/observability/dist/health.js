@@ -23,18 +23,26 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HealthChecker = void 0;
+const DEFAULT_CHECK_TIMEOUT_MS = 5000;
 // ─── Health Checker ───────────────────────────────────────────────────────────
 class HealthChecker {
     checks = new Map();
+    checkTimeouts = new Map();
     startTime = Date.now();
+    defaultTimeoutMs;
+    constructor(options = {}) {
+        this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_CHECK_TIMEOUT_MS;
+    }
     /**
      * Register a health check.
      *
      * @param name   Check name (shown in response)
      * @param check  Async function - throw to indicate failure
+     * @param options  { timeoutMs } - a check that hangs longer is reported unhealthy
      */
-    addCheck(name, check) {
+    addCheck(name, check, options = {}) {
         this.checks.set(name, check);
+        this.checkTimeouts.set(name, options.timeoutMs ?? this.defaultTimeoutMs);
         return this;
     }
     /**
@@ -46,7 +54,7 @@ class HealthChecker {
         await Promise.all(Array.from(this.checks.entries()).map(async ([name, fn]) => {
             const start = Date.now();
             try {
-                const result = await fn();
+                const result = await this.runWithTimeout(name, fn);
                 const responseTimeMs = Date.now() - start;
                 results[name] = {
                     status: 'healthy',
@@ -72,6 +80,26 @@ class HealthChecker {
             version: process.version,
             checks: results
         };
+    }
+    /**
+     * Run a check, rejecting if it exceeds its timeout.
+     */
+    runWithTimeout(name, fn) {
+        const timeoutMs = this.checkTimeouts.get(name) ?? this.defaultTimeoutMs;
+        const run = Promise.resolve().then(fn);
+        if (!timeoutMs || timeoutMs <= 0)
+            return run;
+        let timer;
+        const timeout = new Promise((_resolve, reject) => {
+            timer = setTimeout(() => {
+                reject(new Error(`Health check '${name}' timed out after ${timeoutMs}ms`));
+            }, timeoutMs);
+            timer.unref?.();
+        });
+        return Promise.race([run, timeout]).finally(() => {
+            if (timer)
+                clearTimeout(timer);
+        });
     }
     /**
      * Create a route handler for GET /health.

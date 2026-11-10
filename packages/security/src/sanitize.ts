@@ -45,6 +45,16 @@ export function sanitizeObject(obj: unknown): unknown {
   if (obj !== null && typeof obj === 'object') {
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
+      if (key === '__proto__') {
+        // Plain assignment would replace the prototype of `sanitized`
+        Object.defineProperty(sanitized, key, {
+          value: sanitizeObject(value),
+          enumerable: true,
+          writable: true,
+          configurable: true
+        });
+        continue;
+      }
       sanitized[key] = sanitizeObject(value);
     }
     return sanitized;

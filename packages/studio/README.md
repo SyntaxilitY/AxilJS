@@ -60,6 +60,26 @@ studio.setDriver(db.getDriver(), 'sqlite')
 await studio.stop()
 ```
 
+Optional settings:
+
+| Option          | Default          | Purpose |
+| --------------- | ---------------- | ------- |
+| `allowedHosts`  | `[]`             | Extra `Host` header names to answer (e.g. a LAN name). `localhost`, `127.0.0.1`, `[::1]` and `host` are always allowed |
+| `maxBodyBytes`  | `1048576`        | Max POST body size; larger requests get `413` |
+| `openBrowser`   | `true`           | Open Studio in the default browser on start |
+| `cwd`           | `process.cwd()`  | Project directory scanned for routes and used to resolve `dbFile` |
+
+`studio.getPort()` returns the bound port (useful with `port: 0`).
+
+## Security
+
+Studio is a local development tool:
+
+- Requests whose `Host` header is not a local/configured host are rejected with `403` (DNS-rebinding protection); CORS is only granted to the same local origins.
+- The SQL console is read-only: only `SELECT`/`WITH`/`SHOW`/`DESCRIBE`/`EXPLAIN`/`PRAGMA`, run in a read-only transaction (Postgres, MySQL) or on a read-only handle (SQLite). MySQL `INTO OUTFILE` / `INTO DUMPFILE` is blocked.
+- Table names in the browser are quoted as identifiers; the app name is HTML-escaped.
+- Studio keeps one database pool, reuses it across requests and closes it on `stop()` (a failed connection attempt ends its pool).
+
 ## Database Support
 
 Studio auto-detects your database from `.env`:

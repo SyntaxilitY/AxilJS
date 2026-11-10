@@ -1,7 +1,7 @@
 /**
  * Package registry client.
  * Fetches package metadata and downloads from the npm registry.
- * (Phase 2 uses npm registry; Phase 6 will have the official @axiljsJS registry)
+ * (Phase 2 uses npm registry; Phase 6 will have the official AxilJS registry)
  *
  * All network operations use Node's built-in https module.
  * Zero external dependencies.
@@ -41,4 +41,8 @@ export declare class RegistryClient {
      */
     private fetchJson;
 }
+/** Highest non-prerelease version in `versions` satisfying `range`. */
+export declare function maxSatisfying(versions: string[], range: string): string | null;
+/** Does `version` (exact "x.y.z") satisfy the semver `range`? */
+export declare function satisfiesRange(version: string, range: string): boolean;
 //# sourceMappingURL=registry.d.ts.map

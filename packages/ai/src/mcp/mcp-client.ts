@@ -19,6 +19,8 @@
  *   const result = await client.callTool('read_file', { path: '/etc/hosts' })
  */
 
+import { createTool } from '../agents/tool';
+
 // ─── MCP Types ────────────────────────────────────────────────────────────────
 
 export interface MCPTool {
@@ -82,13 +84,17 @@ export class MCPClient {
   private timeoutMs: number;
   private connected = false;
 
+  // Session ID assigned by Streamable HTTP servers (Mcp-Session-Id header)
+  private sessionId?: string;
+
   // Cache of discovered tools
   private cachedTools: MCPTool[] = [];
 
   constructor(options: MCPClientOptions) {
-    this.serverUrl = options.serverUrl.replace(/\/$/, ''); // Remove trailing slash
+    // Used exactly as given: path, trailing slash and query string are kept
+    this.serverUrl = options.serverUrl;
     this.clientInfo = {
-      name:    options.clientName    || '@axiljsJS-MCP-Client',
+      name:    options.clientName    || 'AxilJS-MCP-Client',
       version: options.clientVersion || '0.1.0'
     };
     this.timeoutMs = options.timeoutMs || 30000;
@@ -117,7 +123,7 @@ export class MCPClient {
     this.connected = true;
 
     console.log(
-      `\x1b[32m[@axiljsJS MCP]\x1b[0m Connected to MCP server: ${this.serverUrl}\n` +
+      `\x1b[32m[AxilJS MCP]\x1b[0m Connected to MCP server: ${this.serverUrl}\n` +
       `  Server: ${response.serverInfo?.name || 'Unknown'} v${response.serverInfo?.version || '?'}\n` +
       `  Protocol: ${response.protocolVersion}`
     );
@@ -131,7 +137,7 @@ export class MCPClient {
    */
   async disconnect(): Promise<void> {
     this.connected = false;
-    console.log('\x1b[33m[@axiljsJS MCP]\x1b[0m Disconnected from MCP server');
+    console.log('\x1b[33m[AxilJS MCP]\x1b[0m Disconnected from MCP server');
   }
 
   // ─── Tools ────────────────────────────────────────────────────────────────────
@@ -221,7 +227,7 @@ export class MCPClient {
   // ─── Bridge to Agent System ───────────────────────────────────────────────────
 
   /**
-   * Convert MCP tools to @axiljsJS agent Tool format.
+   * Convert MCP tools to AxilJS agent Tool format.
    * Use this to add MCP tools to an Agent.
    *
    * Usage:
@@ -229,8 +235,7 @@ export class MCPClient {
    *   const agent = new Agent({ provider, tools: mcpTools })
    */
   async asAgentTools() {
-    const { createTool } = require('../agents/tool');
-    const tools = await this.listTools();
+        const tools = await this.listTools();
 
     return tools.map(mcpTool => createTool({
       name: mcpTool.name,
@@ -264,6 +269,9 @@ export class MCPClient {
 
   /**
    * Send a JSON-RPC 2.0 request to the MCP server.
+   * Handles both plain JSON responses and Streamable HTTP SSE responses;
+   * for SSE the request resolves as soon as the matching message arrives,
+   * even if the server keeps the stream open.
    */
   private async request(method: string, params: unknown): Promise<any> {
     const id = Math.floor(Math.random() * 1000000);
@@ -276,45 +284,99 @@ export class MCPClient {
     });
 
     return new Promise((resolve, reject) => {
-      const url = new URL(`${this.serverUrl}/`);
-      const isHttps = url.protocol === 'https:';
-      const transport = isHttps ? require('https') : require('http');
+      let settled = false;
+      let res: any;
 
-      const req = transport.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (isHttps ? 443 : 80),
-          path: url.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type':   'application/json',
-            'Content-Length': String(Buffer.byteLength(body))
-          }
-        },
-        (res: any) => {
-          let data = '';
-          res.on('data', (chunk: string) => (data += chunk));
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(data);
+      const finish = (err: Error | null, value?: any) => {
+        if (settled) return;
+        settled = true;
+        if (err) reject(err); else resolve(value);
+        // Close an SSE stream the server may keep open
+        if (res && !res.complete) res.destroy();
+      };
 
-              if (parsed.error) {
-                reject(new Error(
-                  `MCP error ${parsed.error.code}: ${parsed.error.message}`
-                ));
-                return;
-              }
-
-              resolve(parsed.result);
-            } catch {
-              reject(new Error(`MCP: Invalid JSON response`));
-            }
-          });
-          res.on('error', reject);
+      const handleMessage = (parsed: any) => {
+        if (parsed.error) {
+          finish(new Error(
+            `MCP error ${parsed.error.code}: ${parsed.error.message}`
+          ));
+          return;
         }
-      );
+        finish(null, parsed.result);
+      };
 
-      req.on('error', reject);
+      const req = this.openRequest(body, (incoming: any) => {
+        res = incoming;
+
+        // Remember the session ID issued on initialize
+        if (res.headers['mcp-session-id']) {
+          this.sessionId = String(res.headers['mcp-session-id']);
+        }
+
+        res.setEncoding('utf8');
+        const isSSE = String(res.headers['content-type'] || '').includes('text/event-stream');
+
+        let data = '';
+        let lineBuffer = '';
+        let eventData: string[] = [];
+        // Last JSON-RPC message seen, used if none matches our id
+        let lastMessage: any = null;
+
+        const dispatchEvent = () => {
+          if (eventData.length === 0) return;
+          const payload = eventData.join('\n');
+          eventData = [];
+          let message: any;
+          try { message = JSON.parse(payload); } catch { return; }
+          if (!message || typeof message !== 'object') return;
+          lastMessage = message;
+          if (message.id === id && ('result' in message || 'error' in message)) {
+            handleMessage(message);
+          }
+        };
+
+        res.on('data', (chunk: string) => {
+          if (!isSSE || res.statusCode >= 400) {
+            data += chunk;
+            return;
+          }
+
+          lineBuffer += chunk;
+          const lines = lineBuffer.split(/\r?\n/);
+          lineBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line === '') {
+              dispatchEvent();
+            } else if (line.startsWith('data:')) {
+              eventData.push(line.slice(5).replace(/^ /, ''));
+            }
+          }
+        });
+
+        res.on('end', () => {
+          if (settled) return;
+
+          if (isSSE && res.statusCode < 400) {
+            if (lineBuffer.startsWith('data:')) eventData.push(lineBuffer.slice(5).replace(/^ /, ''));
+            dispatchEvent();
+            if (settled) return;
+            if (lastMessage) { handleMessage(lastMessage); return; }
+            finish(new Error(`MCP: Invalid JSON response (HTTP ${res.statusCode})`));
+            return;
+          }
+
+          try {
+            handleMessage(JSON.parse(data));
+          } catch {
+            finish(new Error(`MCP: Invalid JSON response (HTTP ${res.statusCode})`));
+          }
+        });
+
+        res.on('error', (err: Error) => finish(err));
+      });
+
+      req.on('error', (err: Error) => finish(err));
       req.setTimeout(this.timeoutMs, () => {
         req.destroy(new Error(`MCP request timeout: ${method}`));
       });
@@ -331,30 +393,52 @@ export class MCPClient {
     const body = JSON.stringify({ jsonrpc: '2.0', method, params });
 
     return new Promise((resolve, reject) => {
-      const url = new URL(`${this.serverUrl}/`);
-      const isHttps = url.protocol === 'https:';
-      const transport = isHttps ? require('https') : require('http');
-
-      const req = transport.request(
-        {
-          hostname: url.hostname,
-          port: url.port || (isHttps ? 443 : 80),
-          path: url.pathname,
-          method: 'POST',
-          headers: {
-            'Content-Type':   'application/json',
-            'Content-Length': String(Buffer.byteLength(body))
-          }
-        },
-        (res: any) => {
-          res.resume(); // Drain the response
-          res.on('end', resolve);
-        }
-      );
+      const req = this.openRequest(body, (res: any) => {
+        res.resume(); // Drain the response
+        res.on('end', resolve);
+        res.on('error', reject);
+      });
 
       req.on('error', reject);
+      req.setTimeout(this.timeoutMs, () => {
+        req.destroy(new Error(`MCP request timeout: ${method}`));
+      });
       req.write(body);
       req.end();
     });
+  }
+
+  /**
+   * POST to the exact serverUrl (path and query string preserved).
+   */
+  private openRequest(body: string, onResponse: (res: any) => void): any {
+    const url = new URL(this.serverUrl);
+    const isHttps = url.protocol === 'https:';
+    const transport = isHttps ? require('https') : require('http');
+
+    return transport.request(
+      {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: this.buildHeaders(body)
+      },
+      onResponse
+    );
+  }
+
+  /**
+   * Request headers. Streamable HTTP servers reject POSTs (406) unless the
+   * client accepts both JSON and SSE, and require the session ID afterwards.
+   */
+  private buildHeaders(body: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type':   'application/json',
+      'Accept':         'application/json, text/event-stream',
+      'Content-Length': String(Buffer.byteLength(body))
+    };
+    if (this.sessionId) headers['Mcp-Session-Id'] = this.sessionId;
+    return headers;
   }
 }

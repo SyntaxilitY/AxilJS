@@ -1,6 +1,6 @@
 /**
  * Application configuration types.
- * Used when creating a new @axiljsJS application.
+ * Used when creating a new AxilJS application.
  */
 
 // ─── Server Config ────────────────────────────────────────────────────────────
@@ -21,12 +21,37 @@ export interface ServerConfig {
     cert: string;  // Path to certificate file
   };
 
-  // Request body size limit (default: '1mb')
+  // Request body size limit, e.g. '1mb', '500kb', '1024' (default: '1mb')
   bodyLimit?: string;
 
-  // Request timeout in milliseconds (default: 30000)
+  // Time allowed to receive a whole request, in milliseconds. Maps to Node's
+  // server.requestTimeout (clients that are too slow get 408). Unset = Node's
+  // default; 0 disables it.
   timeout?: number;
+
+  // Answer HEAD requests with the GET route when no HEAD route exists
+  // (headers only, no body). Default: true
+  headFallback?: boolean;
+
+  // Reply 405 Method Not Allowed (with an Allow header) instead of 404 when
+  // the path matches a route but not the method. Default: false
+  methodNotAllowed?: boolean;
+
+  // Which proxies to trust when deriving req.ip from X-Forwarded-For.
+  //   true   - use the left-most X-Forwarded-For entry (default)
+  //   false  - ignore X-Forwarded-For, use the socket address
+  //   number - trust that many proxy hops in front of the server
+  //   fn     - (address, hop) => boolean, called from the socket address
+  //            outwards; the first untrusted address is the client
+  trustProxy?: TrustProxy;
 }
+
+// ─── Trust Proxy ──────────────────────────────────────────────────────────────
+
+export type TrustProxy =
+  | boolean
+  | number
+  | ((address: string, hop: number) => boolean);
 
 // ─── App Config ───────────────────────────────────────────────────────────────
 

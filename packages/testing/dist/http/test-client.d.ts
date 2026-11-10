@@ -1,6 +1,6 @@
 /**
  * HTTP test client.
- * Makes requests to a running @axiljsJS application in tests.
+ * Makes requests to a running AxilJS application in tests.
  * No need to start an actual server - tests against the app directly.
  *
  * Usage:
@@ -40,7 +40,7 @@ declare class TestRequest {
      * Make the request awaitable.
      * Allows: const res = await client.get('/users')
      */
-    then(resolve: (res: TestResponse) => void, reject: (err: Error) => void): void;
+    then<TResult1 = TestResponse, TResult2 = never>(resolve?: ((res: TestResponse) => TResult1 | PromiseLike<TResult1>) | null, reject?: ((err: any) => TResult2 | PromiseLike<TResult2>) | null): Promise<TResult1 | TResult2>;
     /**
      * Execute the request against the app.
      * Spins up a temporary server on a random port, makes the request, closes it.

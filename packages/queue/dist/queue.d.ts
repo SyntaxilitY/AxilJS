@@ -23,6 +23,7 @@
  */
 import { EventEmitter } from 'events';
 import { Job, JobOptions, JobHandler, JobStatus } from './job';
+import { QueueStore } from './store';
 export interface QueueOptions {
     concurrency?: number;
     pollIntervalMs?: number;
@@ -30,12 +31,14 @@ export interface QueueOptions {
         type: 'fixed' | 'exponential';
         delay: number;
     };
+    store?: QueueStore;
 }
 export declare class Queue extends EventEmitter {
     readonly name: string;
-    private jobs;
+    private store;
     private handlers;
     private activeCount;
+    private activeRuns;
     private pollTimer?;
     private running;
     private options;
@@ -50,13 +53,21 @@ export declare class Queue extends EventEmitter {
      *
      * @param jobName  Must match a registered handler
      * @param data     Job payload
-     * @param options  Job options (delay, retry, priority)
+     * @param options  Job options (delay, retry, priority, timeoutMs)
      */
     add<T = unknown>(jobName: string, data: T, options?: JobOptions): Promise<Job<T>>;
     /**
      * Add multiple jobs at once.
      */
     addMany<T>(jobName: string, dataArray: T[], options?: JobOptions): Promise<Job<T>[]>;
+    /**
+     * Cancel a job.
+     *   - pending/delayed → 'cancelled', never runs
+     *   - active          → 'cancelled', its AbortSignal fires, the result is
+     *                       discarded and it is not retried
+     * Emits 'cancelled'. Returns false if the job doesn't exist or already finished.
+     */
+    cancel(jobId: string): boolean;
     /**
      * Start processing jobs.
      */
@@ -83,9 +94,10 @@ export declare class Queue extends EventEmitter {
         completed: number;
         failed: number;
         delayed: number;
+        cancelled: number;
     };
     /**
-     * Remove completed and failed jobs (cleanup).
+     * Remove completed, failed and cancelled jobs (cleanup).
      */
     purge(): void;
     /**
@@ -94,8 +106,21 @@ export declare class Queue extends EventEmitter {
     private processNext;
     /**
      * Execute a job with error handling and retry logic.
+     * Listener exceptions never influence the job outcome.
      */
     private runJob;
+    /**
+     * Run one attempt, racing the handler against timeout/cancellation.
+     * A handler that keeps running after a timeout/cancel is ignored
+     * (its signal is aborted so cooperative handlers can stop).
+     */
+    private runAttempt;
+    /**
+     * Emit without letting listener exceptions (sync throws or rejected
+     * promises from async listeners) escape into the queue's control flow.
+     */
+    private safeEmit;
+    private reportListenerError;
     /**
      * Calculate backoff delay for retry attempts.
      */

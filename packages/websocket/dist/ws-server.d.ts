@@ -35,6 +35,9 @@ export interface WSServerOptions {
     path?: string;
     maxClients?: number;
     guard?: ConnectionGuard;
+    maxPayload?: number;
+    closeTimeoutMs?: number;
+    heartbeatIntervalMs?: number;
 }
 export declare class WSServer {
     private httpServer;
@@ -42,6 +45,7 @@ export declare class WSServer {
     private rooms;
     private connectionHandlers;
     private options;
+    private readonly upgradeListener;
     constructor(httpServer: Server, options?: WSServerOptions);
     /**
      * Register a handler for new WebSocket connections.
@@ -91,6 +95,11 @@ export declare class WSServer {
      * Get all room names.
      */
     getRooms(): string[];
+    /**
+     * Stop accepting upgrades and close every connected client.
+     * Does not close the underlying HTTP server.
+     */
+    close(code?: number, reason?: string): void;
     private handleUpgrade;
 }
 export {};

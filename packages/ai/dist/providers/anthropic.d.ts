@@ -17,6 +17,8 @@ export interface AnthropicProviderOptions {
     apiKey: string;
     baseUrl?: string;
     timeoutMs?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
 }
 export declare class AnthropicProvider implements AIProvider {
     readonly name = "anthropic";
@@ -24,6 +26,8 @@ export declare class AnthropicProvider implements AIProvider {
     private apiKey;
     private baseUrl;
     private timeoutMs;
+    private maxRetries;
+    private retryBaseDelayMs?;
     private readonly API_VERSION;
     constructor(options: AnthropicProviderOptions);
     complete(options: CompletionOptions): Promise<CompletionResponse>;
@@ -31,6 +35,7 @@ export declare class AnthropicProvider implements AIProvider {
     embed(_options: EmbeddingOptions): Promise<EmbeddingResponse>;
     private buildRequestBody;
     private mapStopReason;
+    private headers;
     private post;
     private postStream;
 }

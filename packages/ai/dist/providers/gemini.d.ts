@@ -13,6 +13,8 @@ export interface GeminiProviderOptions {
     apiKey: string;
     baseUrl?: string;
     timeoutMs?: number;
+    maxRetries?: number;
+    retryBaseDelayMs?: number;
 }
 export declare class GeminiProvider implements AIProvider {
     readonly name = "gemini";
@@ -20,11 +22,24 @@ export declare class GeminiProvider implements AIProvider {
     private apiKey;
     private baseUrl;
     private timeoutMs;
+    private maxRetries;
+    private retryBaseDelayMs?;
+    private callCounter;
     constructor(options: GeminiProviderOptions);
     complete(options: CompletionOptions): Promise<CompletionResponse>;
     stream(options: CompletionOptions): CompletionStream;
+    /**
+     * Embed via batchEmbedContents (up to 100 texts per request).
+     */
     embed(options: EmbeddingOptions): Promise<EmbeddingResponse>;
     private buildRequestBody;
+    /**
+     * Convert messages to Gemini `contents`.
+     * Assistant tool calls -> model `functionCall` parts; tool results ->
+     * user `functionResponse` parts (consecutive results share one turn).
+     */
+    private buildContents;
+    private parseFunctionCalls;
     private mapFinishReason;
     private post;
     private postStream;

@@ -4,6 +4,7 @@
  * Used to compare before and after cleanup.
  */
 
+import { getHeapStatistics } from 'v8';
 import { MemorySnapshot } from './types';
 
 /**
@@ -20,6 +21,19 @@ export function takeSnapshot(): MemorySnapshot {
     ? parseFloat(((mem.heapUsed / mem.heapTotal) * 100).toFixed(1))
     : 0;
 
+  // heapTotal grows on demand, so heapUsed/heapTotal is not memory pressure;
+  // compare against the V8 heap ceiling as well
+  let heapLimit = 0;
+  try {
+    heapLimit = getHeapStatistics().heap_size_limit;
+  } catch {
+    heapLimit = 0;
+  }
+  const heapLimitMb = parseFloat((heapLimit / 1024 / 1024).toFixed(2));
+  const heapLimitPercent = heapLimit > 0
+    ? parseFloat(((mem.heapUsed / heapLimit) * 100).toFixed(1))
+    : usagePercent;
+
   return {
     heapUsed:     mem.heapUsed,
     heapTotal:    mem.heapTotal,
@@ -30,6 +44,9 @@ export function takeSnapshot(): MemorySnapshot {
     heapTotalMb,
     rssMb,
     usagePercent,
+    heapLimit,
+    heapLimitMb,
+    heapLimitPercent,
     timestamp: new Date().toISOString()
   };
 }

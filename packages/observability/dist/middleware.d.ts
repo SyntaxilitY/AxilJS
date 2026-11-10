@@ -9,12 +9,14 @@
  *   app.use(observabilityMiddleware({ metrics, tracer }))
  *   app.get('/metrics', metricsHandler(metrics))
  */
-import { MiddlewareFn, RouteHandler } from '@axiljs/common';
+import { MiddlewareFn, RouteHandler, axilRequest } from '@axiljs/common';
 import { MetricsRegistry } from './metrics';
 import { Tracer } from './tracing';
 export interface ObservabilityOptions {
     metrics?: MetricsRegistry;
     tracer?: Tracer;
+    pathLabel?: (req: axilRequest) => string;
+    propagate?: boolean;
 }
 /**
  * Create observability middleware.

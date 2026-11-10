@@ -21,6 +21,11 @@ import {
   JoinType,
   WhereOperator
 } from '../types';
+import {
+  assertSafeIdentifier,
+  assertSortDirection,
+  assertWhereOperator
+} from '../query/identifier';
 
 export class QueryBuilder {
   private driver: BaseDriver;
@@ -70,6 +75,10 @@ export class QueryBuilder {
   // Driver type affects placeholder syntax ($ vs ?)
   private driverType: string;
 
+  // Soft deletes: column + which rows to see (set by BaseRepository for @DeletedAt entities)
+  private softDeleteColumn?: string;
+  private trashedMode: 'exclude' | 'include' | 'only' = 'exclude';
+
   constructor(driver: BaseDriver, driverType: string = 'sqlite') {
     this.driver = driver;
     this.driverType = driverType;
@@ -105,52 +114,122 @@ export class QueryBuilder {
 
   // ─── WHERE ───────────────────────────────────────────────────────────────────
 
+  /**
+   * `.where('age', '>', 18)`, `.where('id', 1)` (shorthand for `=`), or a
+   * parenthesised group: `.where(qb => qb.where('a', 1).orWhere('b', 2))`.
+   */
+  where(callback: (qb: QueryBuilder) => unknown): QueryBuilder;
+  where(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): QueryBuilder;
   where(
-    column: string,
-    operatorOrValue: WhereOperator | unknown,
+    column: string | ((qb: QueryBuilder) => unknown),
+    operatorOrValue?: WhereOperator | unknown,
     value?: unknown
   ): QueryBuilder {
-    // Support shorthand: .where('id', 1) → .where('id', '=', 1)
-    if (value === undefined && operatorOrValue !== 'IS NULL' && operatorOrValue !== 'IS NOT NULL') {
-      this.whereConditions.push({
-        column,
-        operator: '=',
-        value: operatorOrValue
-      });
-    } else {
-      this.whereConditions.push({
-        column,
-        operator: operatorOrValue as WhereOperator,
-        value
-      });
-    }
-    return this;
+    return this.addWhere('AND', column, operatorOrValue, value);
+  }
+
+  orWhere(callback: (qb: QueryBuilder) => unknown): QueryBuilder;
+  orWhere(column: string, operatorOrValue: WhereOperator | unknown, value?: unknown): QueryBuilder;
+  orWhere(
+    column: string | ((qb: QueryBuilder) => unknown),
+    operatorOrValue?: WhereOperator | unknown,
+    value?: unknown
+  ): QueryBuilder {
+    return this.addWhere('OR', column, operatorOrValue, value);
   }
 
   whereIn(column: string, values: unknown[]): QueryBuilder {
-    this.whereConditions.push({ column, operator: 'IN', values });
-    return this;
+    return this.pushCondition({ column, operator: 'IN', values });
+  }
+
+  whereNotIn(column: string, values: unknown[]): QueryBuilder {
+    return this.pushCondition({ column, operator: 'NOT IN', values });
   }
 
   whereNull(column: string): QueryBuilder {
-    this.whereConditions.push({ column, operator: 'IS NULL' });
-    return this;
+    return this.pushCondition({ column, operator: 'IS NULL' });
   }
 
   whereNotNull(column: string): QueryBuilder {
-    this.whereConditions.push({ column, operator: 'IS NOT NULL' });
-    return this;
+    return this.pushCondition({ column, operator: 'IS NOT NULL' });
   }
 
   whereBetween(column: string, min: unknown, max: unknown): QueryBuilder {
-    this.whereConditions.push({ column, operator: 'BETWEEN', values: [min, max] });
+    return this.pushCondition({ column, operator: 'BETWEEN', values: [min, max] });
+  }
+
+  whereNotBetween(column: string, min: unknown, max: unknown): QueryBuilder {
+    return this.pushCondition({ column, operator: 'NOT BETWEEN', values: [min, max] });
+  }
+
+  whereLike(column: string, pattern: string): QueryBuilder {
+    return this.pushCondition({ column, operator: 'LIKE', value: pattern });
+  }
+
+  private addWhere(
+    conjunction: 'AND' | 'OR',
+    column: string | ((qb: QueryBuilder) => unknown),
+    operatorOrValue: WhereOperator | unknown,
+    value: unknown
+  ): QueryBuilder {
+    if (typeof column === 'function') {
+      const nested = new QueryBuilder(this.driver, this.driverType);
+      column(nested);
+      this.whereConditions.push({
+        column: '',
+        operator: '=',
+        group: nested.whereConditions,
+        conjunction
+      });
+      return this;
+    }
+
+    // Support shorthand: .where('id', 1) → .where('id', '=', 1)
+    if (value === undefined && operatorOrValue !== 'IS NULL' && operatorOrValue !== 'IS NOT NULL') {
+      return this.pushCondition({ column, operator: '=', value: operatorOrValue, conjunction });
+    }
+    return this.pushCondition({
+      column,
+      operator: assertWhereOperator(operatorOrValue) as WhereOperator,
+      value,
+      conjunction
+    });
+  }
+
+  private pushCondition(condition: WhereCondition): QueryBuilder {
+    assertSafeIdentifier(condition.column, 'column');
+    this.whereConditions.push(condition);
+    return this;
+  }
+
+  // ─── SOFT DELETES ────────────────────────────────────────────────────────────
+
+  /** Scope queries to a soft-delete column (BaseRepository does this for @DeletedAt entities). */
+  useSoftDeletes(column: string = 'deleted_at'): QueryBuilder {
+    this.softDeleteColumn = assertSafeIdentifier(column, 'soft-delete column');
+    return this;
+  }
+
+  /** Include soft-deleted rows. */
+  withTrashed(): QueryBuilder {
+    this.trashedMode = 'include';
+    return this;
+  }
+
+  /** Only soft-deleted rows. */
+  onlyTrashed(): QueryBuilder {
+    this.trashedMode = 'only';
     return this;
   }
 
   // ─── ORDER, GROUP, LIMIT ──────────────────────────────────────────────────────
 
   orderBy(column: string, direction: 'ASC' | 'DESC' = 'ASC'): QueryBuilder {
-    this.orderByClauses.push({ column, direction });
+    // Sort keys often come from the query string — validate both parts
+    this.orderByClauses.push({
+      column: assertSafeIdentifier(column, 'ORDER BY column'),
+      direction: assertSortDirection(direction)
+    });
     return this;
   }
 
@@ -268,9 +347,19 @@ export class QueryBuilder {
    * Execute and return count.
    */
   async count(column: string = '*'): Promise<number> {
+    // Don't leave the builder mutated, and drop ORDER BY (Postgres rejects
+    // ordering by a non-aggregated column in an aggregate query)
+    const selects = this.selectColumns;
+    const orders = this.orderByClauses;
     this.selectColumns = [`COUNT(${column}) as count`];
-    const result = await this.execute<{ count: string }>();
-    return parseInt(result.rows[0]?.count || '0', 10);
+    this.orderByClauses = [];
+    try {
+      const result = await this.execute<{ count: string }>();
+      return parseInt(String(result.rows[0]?.count ?? '0'), 10);
+    } finally {
+      this.selectColumns = selects;
+      this.orderByClauses = orders;
+    }
   }
 
   // ─── SQL Builders ─────────────────────────────────────────────────────────────
@@ -308,6 +397,9 @@ export class QueryBuilder {
     // LIMIT / OFFSET
     if (this.limitValue !== undefined) {
       sql += ` LIMIT ${this.limitValue}`;
+    } else if (this.offsetValue !== undefined && this.driverType !== 'postgres') {
+      // MySQL / SQLite reject OFFSET without LIMIT
+      sql += this.driverType === 'mysql' ? ' LIMIT 18446744073709551615' : ' LIMIT -1';
     }
     if (this.offsetValue !== undefined) {
       sql += ` OFFSET ${this.offsetValue}`;
@@ -363,42 +455,84 @@ export class QueryBuilder {
   }
 
   private buildWhere(): string {
-    if (this.whereConditions.length === 0) return '';
+    let conditions = this.buildConditions(this.whereConditions);
 
-    return this.whereConditions
-      .map(condition => {
-        switch (condition.operator) {
-          case 'IS NULL':
-            return `${condition.column} IS NULL`;
+    // Soft-delete scope — user conditions are parenthesised so an OR inside
+    // them cannot escape the scope
+    const scope = this.softDeleteScope();
+    if (scope) conditions = conditions ? `(${conditions}) AND ${scope}` : scope;
 
-          case 'IS NOT NULL':
-            return `${condition.column} IS NOT NULL`;
+    return conditions;
+  }
 
-          case 'IN':
-          case 'NOT IN': {
-            const placeholders = (condition.values || []).map(v => {
-              this.params.push(v);
-              return this.placeholder();
-            });
-            return `${condition.column} ${condition.operator} (${placeholders.join(', ')})`;
-          }
+  private softDeleteScope(): string {
+    if (!this.softDeleteColumn || this.trashedMode === 'include') return '';
+    const col = this.joins.length && this.fromTable && !this.softDeleteColumn.includes('.')
+      ? `${this.fromTable}.${this.softDeleteColumn}`
+      : this.softDeleteColumn;
+    return this.trashedMode === 'only' ? `${col} IS NOT NULL` : `${col} IS NULL`;
+  }
 
-          case 'BETWEEN': {
-            const [min, max] = condition.values || [];
-            this.params.push(min);
-            const p1 = this.placeholder();
-            this.params.push(max);
-            const p2 = this.placeholder();
-            return `${condition.column} BETWEEN ${p1} AND ${p2}`;
-          }
+  private buildConditions(list: WhereCondition[]): string {
+    const parts: string[] = [];
+    for (const condition of list) {
+      const sql = this.buildCondition(condition);
+      if (!sql) continue; // e.g. an empty group
+      parts.push(parts.length === 0 ? sql : `${condition.conjunction ?? 'AND'} ${sql}`);
+    }
+    return parts.join(' ');
+  }
 
-          default: {
-            this.params.push(condition.value);
-            return `${condition.column} ${condition.operator} ${this.placeholder()}`;
-          }
+  private buildCondition(condition: WhereCondition): string {
+    if (condition.group) {
+      const inner = this.buildConditions(condition.group);
+      return inner ? `(${inner})` : '';
+    }
+
+    switch (condition.operator) {
+      case 'IS NULL':
+        return `${condition.column} IS NULL`;
+
+      case 'IS NOT NULL':
+        return `${condition.column} IS NOT NULL`;
+
+      case 'IN':
+      case 'NOT IN': {
+        // .where(col, 'IN', [...]) stores the list in `value`
+        const values = condition.values ?? (Array.isArray(condition.value) ? condition.value : undefined);
+        // `IN ()` is a syntax error — empty IN matches nothing, empty NOT IN matches everything
+        if (!values || values.length === 0) {
+          return condition.operator === 'IN' ? '1 = 0' : '1 = 1';
         }
-      })
-      .join(' AND ');
+        const placeholders = values.map(v => {
+          this.params.push(v);
+          return this.placeholder();
+        });
+        return `${condition.column} ${condition.operator} (${placeholders.join(', ')})`;
+      }
+
+      case 'BETWEEN':
+      case 'NOT BETWEEN': {
+        const [min, max] = condition.values ?? (Array.isArray(condition.value) ? condition.value : []);
+        this.params.push(min);
+        const p1 = this.placeholder();
+        this.params.push(max);
+        const p2 = this.placeholder();
+        return `${condition.column} ${condition.operator} ${p1} AND ${p2}`;
+      }
+
+      default: {
+        // `col = NULL` never matches in SQL — translate to IS [NOT] NULL
+        if (condition.value === null && condition.operator === '=') {
+          return `${condition.column} IS NULL`;
+        }
+        if (condition.value === null && (condition.operator === '!=' || condition.operator === '<>')) {
+          return `${condition.column} IS NOT NULL`;
+        }
+        this.params.push(condition.value);
+        return `${condition.column} ${condition.operator} ${this.placeholder()}`;
+      }
+    }
   }
 
   /**

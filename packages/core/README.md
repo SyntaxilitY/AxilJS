@@ -80,4 +80,62 @@ Paginated response:
 }
 ```
 
+`res.paginated(items, total, page, 0)` reports `totalPages: 0` and `hasNextPage: false`.
+
+## Routing extras
+
+```typescript
+app.head('/files/:id', headHandler)     // explicit HEAD route
+app.options('/files', optionsHandler)
+app.all('/proxy/*', proxyHandler)       // every method; a method-specific route wins
+```
+
+- **HEAD fallback** (default on): a HEAD request with no HEAD route runs the GET
+  route; Node sends its headers without a body. Disable with
+  `server: { headFallback: false }`.
+- **405 Method Not Allowed** (opt-in): with `server: { methodNotAllowed: true }`
+  a path that exists for other methods answers `405` with an `Allow` header
+  (an `OPTIONS` request gets `204` + `Allow`). Off by default, i.e. `404`.
+- **`next()` twice**: each middleware's `next` advances the chain once; extra
+  calls are ignored (with a `console.warn` outside production), so the rest of
+  the chain and the handler never run twice.
+
+## Server options
+
+```typescript
+new Application({
+  server: {
+    port: 0,                 // 0 picks a free port; listen() resolves the bound port
+    bodyLimit: '5mb',        // body parser limit (default 1 MB) - 413 when exceeded
+    timeout: 30000,          // ms to receive a whole request (Node requestTimeout, 408)
+    trustProxy: 1            // see below
+  }
+})
+```
+
+`trustProxy` decides `req.ip`:
+
+| Value | `req.ip` |
+|---|---|
+| `true` (default) | left-most `X-Forwarded-For` entry, else the socket address |
+| `false` | socket address; `X-Forwarded-For` ignored |
+| `n` (number) | address `n` hops in front of the server (`1` = the entry added by your one proxy) |
+| `(addr, hop) => boolean` | walks from the socket outwards; the first untrusted address wins |
+
+## Static files
+
+`serveStatic()` sends a weak `ETag` (size + mtime) and `Last-Modified`, answers
+`If-None-Match` / `If-Modified-Since` with `304`, and supports single
+`Range: bytes=...` requests (`206` + `Content-Range`, `416` when unsatisfiable;
+multi-range requests get the full file). `If-Range` is honoured with a date.
+
+`createSSE(res)` keeps an `Access-Control-Allow-Origin` already set by `cors()`
+and only defaults it to `*` when none is set.
+
+## Testing
+
+```bash
+npm test
+```
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

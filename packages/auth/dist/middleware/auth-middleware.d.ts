@@ -18,6 +18,10 @@ import { JWT } from '../jwt/jwt';
 export interface AuthOptions {
     required?: boolean;
     source?: 'header' | 'cookie' | 'query' | ('header' | 'cookie' | 'query')[];
+    cookieName?: string;
+    queryParam?: string;
+    audience?: string | string[];
+    issuer?: string;
 }
 export interface AuthUser {
     id: string | number;

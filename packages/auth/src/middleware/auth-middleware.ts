@@ -29,6 +29,16 @@ export interface AuthOptions {
   // 'cookie' = cookie named 'token'
   // 'query'  = ?token=...
   source?: 'header' | 'cookie' | 'query' | ('header' | 'cookie' | 'query')[];
+
+  // Cookie name for source 'cookie' (default: 'token')
+  cookieName?: string;
+
+  // Query parameter for source 'query' (default: 'token')
+  queryParam?: string;
+
+  // Expected audience / issuer, passed to jwt.verify()
+  audience?: string | string[];
+  issuer?: string;
 }
 
 // ─── Extended Request ─────────────────────────────────────────────────────────
@@ -42,13 +52,19 @@ export interface AuthUser {
 /**
  * Extract token from request based on configured sources.
  */
-function extractToken(req: any, sources: string[]): string | null {
+function extractToken(
+  req: any,
+  sources: string[],
+  cookieName: string = 'token',
+  queryParam: string = 'token'
+): string | null {
   for (const source of sources) {
     switch (source) {
       case 'header': {
         const authHeader = req.headers['authorization'] as string;
-        if (authHeader?.startsWith('Bearer ')) {
-          return authHeader.slice(7);
+        // Auth scheme is case-insensitive (RFC 7235 §2.1)
+        if (typeof authHeader === 'string' && /^bearer /i.test(authHeader)) {
+          return authHeader.slice(7).trim();
         }
         break;
       }
@@ -60,12 +76,20 @@ function extractToken(req: any, sources: string[]): string | null {
           const [k, v] = c.trim().split('=');
           if (k) cookies[k.trim()] = v?.trim() || '';
         });
-        if (cookies['token']) return cookies['token'];
+        if (Object.prototype.hasOwnProperty.call(cookies, cookieName) && cookies[cookieName]) {
+          return cookies[cookieName];
+        }
         break;
       }
 
       case 'query': {
-        if (req.query?.token) return req.query.token as string;
+        // ?token=a&token=b yields an array - only accept a single string
+        const value = req.query && Object.prototype.hasOwnProperty.call(req.query, queryParam)
+          ? req.query[queryParam]
+          : undefined;
+        if (typeof value === 'string' && value) {
+          return value;
+        }
         break;
       }
     }
@@ -85,13 +109,17 @@ export function authenticate(
 ): MiddlewareFn {
   const {
     required = true,
-    source = 'header'
+    source = 'header',
+    cookieName,
+    queryParam,
+    audience,
+    issuer
   } = options;
 
   const sources = Array.isArray(source) ? source : [source];
 
   return (req, res, next) => {
-    const token = extractToken(req, sources);
+    const token = extractToken(req, sources, cookieName, queryParam);
 
     if (!token) {
       if (required) {
@@ -102,7 +130,7 @@ export function authenticate(
     }
 
     try {
-      const payload = jwt.verify(token);
+      const payload = jwt.verify(token, { audience, issuer });
 
       // Attach user to request locals for use in handlers
       req.locals.user = {

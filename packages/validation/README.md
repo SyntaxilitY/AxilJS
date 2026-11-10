@@ -30,4 +30,27 @@ app.post('/users',
 )
 ```
 
+## Transforms, literals, unions and records
+
+```typescript
+v.string().trim()                          // validates and returns the trimmed string
+v.string().transform(s => s.toLowerCase()) // map the output (after validation)
+v.string().pattern(/^\d+$/).transform(Number)
+
+v.literal('admin')                          // exactly this value (string/number/boolean/null)
+v.union([v.string(), v.number()])           // first matching option wins (its output is used)
+v.record(v.number().min(0))                 // object with any keys, every value validated
+```
+
+- Transforms run in order on the output only; validation rules still see the
+  input. They are skipped for `null`/`undefined`. A throwing transform makes
+  `parse()` fail with code `TRANSFORM_ERROR`.
+- `v.number()` rejects `NaN` and `±Infinity` (including the strings `'NaN'`/`'Infinity'`).
+
+## Testing
+
+```bash
+npm test
+```
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

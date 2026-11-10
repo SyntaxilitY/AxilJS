@@ -21,6 +21,9 @@ export interface MemorySnapshot {
     heapTotalMb: number;
     rssMb: number;
     usagePercent: number;
+    heapLimit?: number;
+    heapLimitMb?: number;
+    heapLimitPercent?: number;
     timestamp: string;
 }
 export interface MemoryReport {

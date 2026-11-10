@@ -32,9 +32,15 @@ export interface CircuitBreakerOptions {
     minimumRequests?: number;
     failureRateThreshold?: number;
     fallback?: () => unknown;
+    rollingWindowMs?: number;
+    maxConcurrent?: number;
+    maxQueue?: number;
 }
 export declare class CircuitOpenError extends Error {
     constructor(name: string);
+}
+export declare class BulkheadRejectedError extends Error {
+    constructor(name: string, maxConcurrent: number);
 }
 export declare class CircuitBreaker extends EventEmitter {
     readonly name: string;
@@ -44,6 +50,11 @@ export declare class CircuitBreaker extends EventEmitter {
     private requestCount;
     private lastFailureTime;
     private nextAttemptTime;
+    private halfOpenProbeInFlight;
+    private epoch;
+    private outcomes;
+    private activeCount;
+    private waiters;
     private options;
     constructor(name: string, options?: CircuitBreakerOptions);
     /**
@@ -53,6 +64,7 @@ export declare class CircuitBreaker extends EventEmitter {
      * @param fn  Async function to protect
      */
     execute<T>(fn: () => Promise<T>): Promise<T>;
+    private executeGuarded;
     /**
      * Get current circuit state.
      */
@@ -66,6 +78,8 @@ export declare class CircuitBreaker extends EventEmitter {
         successCount: number;
         requestCount: number;
         failureRate: number;
+        activeCount: number;
+        queuedCount: number;
     };
     /**
      * Manually reset the circuit to CLOSED state.
@@ -73,6 +87,14 @@ export declare class CircuitBreaker extends EventEmitter {
     reset(): void;
     private onSuccess;
     private onFailure;
+    private record;
+    /**
+     * Drop outcomes older than the rolling window and decrement counters.
+     */
+    private pruneWindow;
+    private clearCounters;
+    private acquireSlot;
+    private releaseSlot;
     private shouldOpen;
     private transitionTo;
     /**

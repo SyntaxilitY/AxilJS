@@ -8,6 +8,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.takeSnapshot = takeSnapshot;
 exports.diffSnapshots = diffSnapshots;
 exports.formatBytes = formatBytes;
+const v8_1 = require("v8");
 /**
  * Take a current memory snapshot.
  */
@@ -19,6 +20,19 @@ function takeSnapshot() {
     const usagePercent = heapTotalMb > 0
         ? parseFloat(((mem.heapUsed / mem.heapTotal) * 100).toFixed(1))
         : 0;
+    // heapTotal grows on demand, so heapUsed/heapTotal is not memory pressure;
+    // compare against the V8 heap ceiling as well
+    let heapLimit = 0;
+    try {
+        heapLimit = (0, v8_1.getHeapStatistics)().heap_size_limit;
+    }
+    catch {
+        heapLimit = 0;
+    }
+    const heapLimitMb = parseFloat((heapLimit / 1024 / 1024).toFixed(2));
+    const heapLimitPercent = heapLimit > 0
+        ? parseFloat(((mem.heapUsed / heapLimit) * 100).toFixed(1))
+        : usagePercent;
     return {
         heapUsed: mem.heapUsed,
         heapTotal: mem.heapTotal,
@@ -29,6 +43,9 @@ function takeSnapshot() {
         heapTotalMb,
         rssMb,
         usagePercent,
+        heapLimit,
+        heapLimitMb,
+        heapLimitPercent,
         timestamp: new Date().toISOString()
     };
 }

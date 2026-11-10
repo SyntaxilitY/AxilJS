@@ -9,6 +9,8 @@
  *   Wildcard:         /files/*
  */
 import { RouteParams } from '@axiljs/common';
+/** Method key used for routes registered with all() */
+export declare const ALL_METHODS = "*";
 export interface TrieMatch<T> {
     handler: T;
     params: RouteParams;
@@ -35,7 +37,12 @@ export declare class Trie<T> {
      */
     find(method: string, path: string): TrieMatch<T> | null;
     /**
+     * The handler key to use at a node: the exact method, else an all() route.
+     */
+    private methodKey;
+    /**
      * Recursive depth-first search through the trie.
+     * Captured :param values are pushed onto `values` (popped on backtrack).
      */
     private search;
 }

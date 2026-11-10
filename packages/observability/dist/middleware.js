@@ -18,15 +18,18 @@ exports.metricsHandler = metricsHandler;
  * Tracks request count, duration, and distributed traces.
  */
 function observabilityMiddleware(options = {}) {
-    const { metrics, tracer } = options;
+    const { metrics, tracer, pathLabel, propagate = true } = options;
     // Create standard HTTP metrics if registry provided
     const requestCounter = metrics?.counter('http_requests_total', 'Total HTTP requests', ['method', 'path', 'status']);
     const requestDuration = metrics?.histogram('http_request_duration_ms', 'HTTP request duration in milliseconds', [5, 10, 25, 50, 100, 250, 500, 1000, 2500], ['method', 'path']);
     const activeRequests = metrics?.gauge('http_active_requests', 'Number of active HTTP requests');
     return (req, res, next) => {
         const startTime = Date.now();
-        // Start a trace span if tracer is configured
-        const span = tracer?.startSpan('http.request');
+        // Start a trace span if tracer is configured, continuing the caller's
+        // trace when a valid traceparent (or B3) header is present
+        const span = tracer?.startSpan('http.request', propagate
+            ? { parent: tracer.extractContext(req.headers || {}) }
+            : {});
         if (span) {
             span.setAttributes({
                 'http.method': req.method,
@@ -41,20 +44,40 @@ function observabilityMiddleware(options = {}) {
         activeRequests?.inc();
         // Override res.raw.end to capture response details
         const originalEnd = res.raw.end.bind(res.raw);
+        let recorded = false;
         res.raw.end = function (...args) {
+            // Record once even if end() is called multiple times
+            if (recorded)
+                return originalEnd(...args);
+            recorded = true;
             const duration = Date.now() - startTime;
             const status = String(res.raw.statusCode);
-            const path = req.path;
+            let path = req.path;
+            if (pathLabel) {
+                try {
+                    path = pathLabel(req) || req.path;
+                }
+                catch {
+                    // Fall back to the raw path if the label function fails
+                }
+            }
             // Record metrics
             requestCounter?.inc({ method: req.method, path, status });
             requestDuration?.observe(duration, { method: req.method, path });
             activeRequests?.dec();
             // End trace span
             if (span) {
-                span
+                const spanData = span
                     .setAttribute('http.status_code', res.raw.statusCode)
                     .setStatus(res.raw.statusCode < 500 ? 'ok' : 'error')
                     .end();
+                // Export the finished span (previously ended but never exported)
+                try {
+                    tracer.exportSpan(spanData);
+                }
+                catch {
+                    // Never let a failing exporter break the response
+                }
             }
             return originalEnd(...args);
         };

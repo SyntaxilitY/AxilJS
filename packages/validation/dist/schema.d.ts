@@ -31,6 +31,7 @@ declare abstract class BaseValidator<T> {
     protected _nullable: boolean;
     protected _defaultValue: T | undefined;
     protected rules: Array<(value: T, path: string) => ValidationError | null>;
+    protected _transforms: Array<(value: any) => unknown>;
     /**
      * Mark this field as optional (undefined is allowed).
      */
@@ -48,6 +49,15 @@ declare abstract class BaseValidator<T> {
      */
     custom(fn: (value: T) => boolean | string, message?: string): this;
     /**
+     * Transform the validated output value (applied after validation, in the
+     * order added; not called for null/undefined). The result is what parse()
+     * and validate() hand back - validation rules still see the input value.
+     *
+     *   v.string().transform(s => s.toUpperCase())
+     *   v.string().transform(Number)   // BaseValidator<number>
+     */
+    transform<U>(fn: (value: T) => U): BaseValidator<U>;
+    /**
      * Validate a value. Returns errors if invalid.
      * @internal Used by ObjectValidator
      */
@@ -56,6 +66,17 @@ declare abstract class BaseValidator<T> {
      * Parse and validate. Returns typed result.
      */
     parse(value: unknown): ValidationResult<T>;
+    /**
+     * Build the output value for already-validated input
+     * (applies defaults and transforms, including on nested fields).
+     * @internal Used by ObjectValidator / ArrayValidator
+     */
+    _output(value: unknown): unknown;
+    /**
+     * Type-specific output (before transforms). Subclasses extend this.
+     * @internal
+     */
+    protected _build(value: unknown): unknown;
     protected abstract validateType(value: unknown, path: string): ValidationError[];
 }
 declare class StringValidator extends BaseValidator<string> {
@@ -70,7 +91,11 @@ declare class StringValidator extends BaseValidator<string> {
     pattern(regex: RegExp): this;
     email(): this;
     url(): this;
+    /**
+     * Validate the trimmed string, and return it trimmed.
+     */
     trim(): this;
+    protected _build(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
 declare class NumberValidator extends BaseValidator<number> {
@@ -95,6 +120,7 @@ declare class ArrayValidator<T> extends BaseValidator<T[]> {
     min(length: number): this;
     max(length: number): this;
     protected validateType(value: unknown, path: string): ValidationError[];
+    protected _build(value: unknown): unknown;
 }
 type SchemaShape = Record<string, BaseValidator<any>>;
 type InferShape<S extends SchemaShape> = {
@@ -110,11 +136,33 @@ declare class ObjectValidator<S extends SchemaShape> extends BaseValidator<Infer
     strip(): this;
     protected validateType(value: unknown, path: string): ValidationError[];
     parse(value: unknown): ValidationResult<InferShape<S>>;
+    protected _build(value: unknown): unknown;
 }
 declare class EnumValidator<T extends string> extends BaseValidator<T> {
     private values;
     constructor(values: T[]);
     protected validateType(value: unknown, path: string): ValidationError[];
+}
+type Primitive = string | number | boolean | null;
+declare class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
+    private expected;
+    constructor(expected: T);
+    protected validateType(value: unknown, path: string): ValidationError[];
+}
+type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
+declare class UnionValidator<T> extends BaseValidator<T> {
+    private options;
+    constructor(options: BaseValidator<any>[]);
+    /** The first option that accepts value, or undefined. */
+    private matching;
+    protected validateType(value: unknown, path: string): ValidationError[];
+    protected _build(value: unknown): unknown;
+}
+declare class RecordValidator<T> extends BaseValidator<Record<string, T>> {
+    private valueValidator;
+    constructor(valueValidator: BaseValidator<T>);
+    protected validateType(value: unknown, path: string): ValidationError[];
+    protected _build(value: unknown): unknown;
 }
 /**
  * Validation schema builder.
@@ -132,6 +180,9 @@ export declare const v: {
     array: <T>(item: BaseValidator<T>) => ArrayValidator<T>;
     object: <S extends SchemaShape>(shape: S) => ObjectValidator<S>;
     enum: <T extends string>(values: T[]) => EnumValidator<T>;
+    literal: <T extends Primitive>(value: T) => LiteralValidator<T>;
+    union: <V extends BaseValidator<any>[]>(options: [...V]) => UnionValidator<InferValidator<V[number]>>;
+    record: <T>(valueSchema: BaseValidator<T>) => RecordValidator<T>;
 };
 export type { BaseValidator };
 //# sourceMappingURL=schema.d.ts.map

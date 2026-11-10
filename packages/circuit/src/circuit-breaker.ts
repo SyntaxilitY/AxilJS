@@ -50,6 +50,17 @@ export interface CircuitBreakerOptions {
 
   // Fallback function called when circuit is OPEN
   fallback?: () => unknown;
+
+  // Count failures/requests only within this rolling time window (ms).
+  // Default: 0 = cumulative counters (reset only on state changes / reset()).
+  rollingWindowMs?: number;
+
+  // Bulkhead: max concurrent executions (default: unlimited)
+  maxConcurrent?: number;
+
+  // Bulkhead: how many calls may wait for a free slot when maxConcurrent is
+  // reached (default: 0 = reject immediately with BulkheadRejectedError)
+  maxQueue?: number;
 }
 
 // ─── Circuit Breaker Error ─────────────────────────────────────────────────────
@@ -58,6 +69,13 @@ export class CircuitOpenError extends Error {
   constructor(name: string) {
     super(`Circuit '${name}' is OPEN - service unavailable`);
     this.name = 'CircuitOpenError';
+  }
+}
+
+export class BulkheadRejectedError extends Error {
+  constructor(name: string, maxConcurrent: number) {
+    super(`Circuit '${name}' bulkhead is full (maxConcurrent: ${maxConcurrent})`);
+    this.name = 'BulkheadRejectedError';
   }
 }
 
@@ -70,6 +88,18 @@ export class CircuitBreaker extends EventEmitter {
   private requestCount: number = 0;
   private lastFailureTime: number = 0;
   private nextAttemptTime: number = 0;
+  private halfOpenProbeInFlight: boolean = false;
+
+  // Incremented on every state change; results from requests started in an
+  // earlier epoch are ignored (e.g. late failures must not extend OPEN)
+  private epoch: number = 0;
+
+  // Rolling-window outcomes (only used when rollingWindowMs > 0), oldest first
+  private outcomes: Array<{ time: number; failed: boolean }> = [];
+
+  // Bulkhead state
+  private activeCount: number = 0;
+  private waiters: Array<() => void> = [];
 
   private options: Required<CircuitBreakerOptions>;
 
@@ -85,7 +115,10 @@ export class CircuitBreaker extends EventEmitter {
       requestTimeoutMs: options.requestTimeoutMs ?? 10000,
       minimumRequests: options.minimumRequests ?? 10,
       failureRateThreshold: options.failureRateThreshold ?? 0.5,
-      fallback: options.fallback ?? (() => { throw new CircuitOpenError(name); })
+      fallback: options.fallback ?? (() => { throw new CircuitOpenError(name); }),
+      rollingWindowMs: options.rollingWindowMs ?? 0,
+      maxConcurrent: options.maxConcurrent ?? Infinity,
+      maxQueue: options.maxQueue ?? 0
     };
   }
 
@@ -98,6 +131,24 @@ export class CircuitBreaker extends EventEmitter {
    * @param fn  Async function to protect
    */
   async execute<T>(fn: () => Promise<T>): Promise<T> {
+    // Fail fast while OPEN, before taking a bulkhead slot
+    if (this.state === 'OPEN' && Date.now() < this.nextAttemptTime) {
+      return this.options.fallback() as T;
+    }
+
+    if (this.options.maxConcurrent === Infinity) {
+      return this.executeGuarded(fn);
+    }
+
+    await this.acquireSlot();
+    try {
+      return await this.executeGuarded(fn);
+    } finally {
+      this.releaseSlot();
+    }
+  }
+
+  private async executeGuarded<T>(fn: () => Promise<T>): Promise<T> {
     // Check current state
     if (this.state === 'OPEN') {
       // Check if reset timeout has expired
@@ -109,14 +160,29 @@ export class CircuitBreaker extends EventEmitter {
       }
     }
 
+    // HALF_OPEN allows only a single probe request through at a time
+    let isProbe = false;
+    if (this.state === 'HALF_OPEN') {
+      if (this.halfOpenProbeInFlight) {
+        return this.options.fallback() as T;
+      }
+      this.halfOpenProbeInFlight = true;
+      isProbe = true;
+    }
+
+    // Results only count if no state change happened while in flight
+    const startEpoch = this.epoch;
+
     // Execute the function with timeout
     try {
       const result = await this.withTimeout(fn, this.options.requestTimeoutMs);
-      this.onSuccess();
+      if (startEpoch === this.epoch) this.onSuccess();
       return result;
     } catch (error) {
-      this.onFailure(error as Error);
+      if (startEpoch === this.epoch) this.onFailure(error as Error);
       throw error;
+    } finally {
+      if (isProbe) this.halfOpenProbeInFlight = false;
     }
   }
 
@@ -138,7 +204,10 @@ export class CircuitBreaker extends EventEmitter {
     successCount: number;
     requestCount: number;
     failureRate: number;
+    activeCount: number;
+    queuedCount: number;
   } {
+    this.pruneWindow();
     return {
       state: this.state,
       failureCount: this.failureCount,
@@ -146,7 +215,9 @@ export class CircuitBreaker extends EventEmitter {
       requestCount: this.requestCount,
       failureRate: this.requestCount > 0
         ? this.failureCount / this.requestCount
-        : 0
+        : 0,
+      activeCount: this.activeCount,
+      queuedCount: this.waiters.length
     };
   }
 
@@ -154,29 +225,29 @@ export class CircuitBreaker extends EventEmitter {
    * Manually reset the circuit to CLOSED state.
    */
   reset(): void {
-    this.failureCount = 0;
-    this.successCount = 0;
-    this.requestCount = 0;
+    this.clearCounters();
     this.transitionTo('CLOSED');
   }
 
   // ─── Internal ────────────────────────────────────────────────────────────────
 
   private onSuccess(): void {
-    this.successCount++;
-    this.requestCount++;
+    this.record(false);
 
     if (this.state === 'HALF_OPEN') {
-      // Success in half-open state → close the circuit
-      this.failureCount = 0;
+      // Success in half-open state → close the circuit with fresh counters
+      // (stale request/success counts would otherwise dilute the failure rate)
+      this.clearCounters();
       this.transitionTo('CLOSED');
     }
   }
 
   private onFailure(error: Error): void {
-    this.failureCount++;
-    this.requestCount++;
+    this.record(true);
     this.lastFailureTime = Date.now();
+
+    // Already OPEN: never extend the OPEN timer
+    if (this.state === 'OPEN') return;
 
     if (this.state === 'HALF_OPEN') {
       // Failure in half-open state → reopen circuit
@@ -187,6 +258,63 @@ export class CircuitBreaker extends EventEmitter {
     // Check if we should open the circuit
     if (this.shouldOpen()) {
       this.transitionTo('OPEN');
+    }
+  }
+
+  private record(failed: boolean): void {
+    if (failed) this.failureCount++;
+    else this.successCount++;
+    this.requestCount++;
+
+    if (this.options.rollingWindowMs > 0) {
+      this.outcomes.push({ time: Date.now(), failed });
+      this.pruneWindow();
+    }
+  }
+
+  /**
+   * Drop outcomes older than the rolling window and decrement counters.
+   */
+  private pruneWindow(): void {
+    if (this.options.rollingWindowMs <= 0) return;
+    const cutoff = Date.now() - this.options.rollingWindowMs;
+    let drop = 0;
+    while (drop < this.outcomes.length && this.outcomes[drop].time <= cutoff) {
+      const o = this.outcomes[drop];
+      if (o.failed) this.failureCount--;
+      else this.successCount--;
+      this.requestCount--;
+      drop++;
+    }
+    if (drop > 0) this.outcomes.splice(0, drop);
+  }
+
+  private clearCounters(): void {
+    this.failureCount = 0;
+    this.successCount = 0;
+    this.requestCount = 0;
+    this.outcomes = [];
+  }
+
+  private acquireSlot(): Promise<void> {
+    if (this.activeCount < this.options.maxConcurrent) {
+      this.activeCount++;
+      return Promise.resolve();
+    }
+    if (this.waiters.length < this.options.maxQueue) {
+      // The slot is handed over directly by releaseSlot()
+      return new Promise<void>(resolve => this.waiters.push(resolve));
+    }
+    this.emit('bulkheadRejected');
+    return Promise.reject(new BulkheadRejectedError(this.name, this.options.maxConcurrent));
+  }
+
+  private releaseSlot(): void {
+    const next = this.waiters.shift();
+    if (next) {
+      next(); // slot transfers to the waiter; activeCount unchanged
+    } else {
+      this.activeCount--;
     }
   }
 
@@ -204,6 +332,7 @@ export class CircuitBreaker extends EventEmitter {
   private transitionTo(newState: CircuitState): void {
     const previousState = this.state;
     this.state = newState;
+    if (previousState !== newState) this.epoch++;
 
     if (newState === 'OPEN') {
       this.nextAttemptTime = Date.now() + this.options.resetTimeoutMs;
@@ -227,7 +356,7 @@ export class CircuitBreaker extends EventEmitter {
         reject(new Error(`Request timeout after ${timeoutMs}ms`));
       }, timeoutMs);
 
-      fn()
+      new Promise<T>(res => res(fn()))
         .then(result => {
           clearTimeout(timer);
           resolve(result);

@@ -78,9 +78,10 @@ function csrf(options = {}) {
         if (!token) {
             // Generate new token and set cookie
             token = generateToken();
+            // Must NOT be HttpOnly so JS can read it. Browsers set the HttpOnly
+            // flag whenever the attribute is present (even "HttpOnly=false").
             const cookieValue = `${cookieName}=${token}; Path=${path}; SameSite=${sameSite}` +
-                (secure ? '; Secure' : '') +
-                '; HttpOnly=false'; // Must NOT be HttpOnly so JS can read it
+                (secure ? '; Secure' : '');
             res.header('Set-Cookie', cookieValue);
         }
         // Make token available on request for templates/APIs
@@ -90,7 +91,7 @@ function csrf(options = {}) {
             return next();
         }
         // Get token from request header
-        const requestToken = req.headers[headerName];
+        const requestToken = req.headers[headerName.toLowerCase()];
         if (!requestToken) {
             return next(new common_1.ForbiddenError('CSRF token missing. Include x-csrf-token header.'));
         }

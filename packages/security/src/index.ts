@@ -5,8 +5,12 @@
 export { helmet } from './helmet';
 export type { HelmetOptions } from './helmet';
 
-export { rateLimit, TooManyRequestsError } from './rate-limit';
-export type { RateLimitOptions } from './rate-limit';
+export { rateLimit, TooManyRequestsError, MemoryStore } from './rate-limit';
+export type {
+  RateLimitOptions,
+  RateLimitStore,
+  RateLimitRecord
+} from './rate-limit';
 
 export { csrf } from './csrf';
 export type { CsrfOptions } from './csrf';

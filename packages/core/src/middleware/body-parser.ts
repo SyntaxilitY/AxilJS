@@ -9,7 +9,7 @@
  */
 
 import { MiddlewareFn, BadRequestError } from '@axiljs/common';
-import { Request } from '../http/request';
+import { Request, safeDecode } from '../http/request';
 
 /**
  * Create body parser middleware.
@@ -32,7 +32,8 @@ export function bodyParser(limit: number = 1024 * 1024): MiddlewareFn {
         return next();
       }
 
-      const contentType = (req.headers['content-type'] as string) || '';
+      // Media types are case-insensitive (RFC 9110 §8.3.1)
+      const contentType = ((req.headers['content-type'] as string) || '').toLowerCase();
 
       if (contentType.includes('application/json')) {
         // Parse JSON body
@@ -66,8 +67,19 @@ function parseFormData(data: string): Record<string, string> {
   const result: Record<string, string> = {};
 
   data.split('&').forEach(pair => {
-    const [key, value] = pair.split('=').map(decodeURIComponent);
-    if (key) result[key] = value || '';
+    // Split on first '=' only; '+' is a space; malformed escapes don't throw
+    const eqIndex = pair.indexOf('=');
+    const key = safeDecode(eqIndex === -1 ? pair : pair.slice(0, eqIndex));
+    const value = eqIndex === -1 ? '' : safeDecode(pair.slice(eqIndex + 1));
+    if (key) {
+      // defineProperty so a "__proto__" key can't replace the prototype
+      Object.defineProperty(result, key, {
+        value: value || '',
+        enumerable: true,
+        writable: true,
+        configurable: true
+      });
+    }
   });
 
   return result;

@@ -6,6 +6,12 @@
  */
 import { BaseDriver, TransactionContext } from './base-driver';
 import { ConnectionConfig, QueryResult } from '../types';
+/**
+ * mysql2 pool options for a ConnectionConfig. `config.url`
+ * (mysql://user:pass@host:3306/db) takes priority over the individual fields,
+ * which still override pool size / ssl.
+ */
+export declare function buildMySQLPoolOptions(config: ConnectionConfig): Record<string, unknown>;
 export declare class MySQLDriver extends BaseDriver {
     private pool;
     constructor(config: ConnectionConfig);

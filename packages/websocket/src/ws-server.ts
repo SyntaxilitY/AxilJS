@@ -31,7 +31,7 @@
 import { Server, IncomingMessage } from 'http';
 import { Socket } from 'net';
 import { isWebSocketUpgrade, performHandshake, rejectUpgrade } from './handshake';
-import { WSClient } from './ws-client';
+import { WSClient, DEFAULT_MAX_PAYLOAD } from './ws-client';
 
 // ─── Connection Handler ───────────────────────────────────────────────────────
 
@@ -53,6 +53,17 @@ export interface WSServerOptions {
 
   // Guard function - return false to reject connection
   guard?: ConnectionGuard;
+
+  // Max bytes per frame / reassembled message (default: 16 MiB).
+  // Larger messages close the connection with 1009.
+  maxPayload?: number;
+
+  // Destroy the socket if the peer doesn't answer our close frame in time (default: 5000ms)
+  closeTimeoutMs?: number;
+
+  // Heartbeat ping interval; clients that miss a pong are terminated.
+  // 0 disables (default: 30000ms)
+  heartbeatIntervalMs?: number;
 }
 
 // ─── WebSocket Server ────────────────────────────────────────────────────────
@@ -68,7 +79,14 @@ export class WSServer {
   private connectionHandlers: ConnectionHandler[] = [];
 
   // Server options
-  private options: Required<WSServerOptions>;
+  private options: Required<Pick<WSServerOptions, 'path' | 'maxClients' | 'guard'>> & {
+    maxPayload: number;
+    closeTimeoutMs: number;
+    heartbeatIntervalMs: number;
+  };
+
+  // Bound upgrade listener (kept so close() can detach it)
+  private readonly upgradeListener: (req: IncomingMessage, socket: Socket, head: Buffer) => void;
 
   constructor(
     private httpServer: Server,
@@ -77,11 +95,17 @@ export class WSServer {
     this.options = {
       path: options.path || '/ws',
       maxClients: options.maxClients || Infinity,
-      guard: options.guard || (() => true)
+      guard: options.guard || (() => true),
+      maxPayload: options.maxPayload ?? DEFAULT_MAX_PAYLOAD,
+      closeTimeoutMs: options.closeTimeoutMs ?? 5000,
+      heartbeatIntervalMs: options.heartbeatIntervalMs ?? 30000
     };
 
     // Listen for HTTP upgrade requests
-    this.httpServer.on('upgrade', this.handleUpgrade.bind(this));
+    this.upgradeListener = (req, socket, head) => {
+      void this.handleUpgrade(req, socket, head);
+    };
+    this.httpServer.on('upgrade', this.upgradeListener);
   }
 
   // ─── Event Registration ───────────────────────────────────────────────────────
@@ -210,6 +234,19 @@ export class WSServer {
     return Array.from(this.rooms.keys());
   }
 
+  // ─── Shutdown ────────────────────────────────────────────────────────────────
+
+  /**
+   * Stop accepting upgrades and close every connected client.
+   * Does not close the underlying HTTP server.
+   */
+  close(code: number = 1001, reason: string = 'Server shutting down'): void {
+    this.httpServer.off('upgrade', this.upgradeListener);
+    for (const client of this.clients.values()) {
+      client.close(code, reason);
+    }
+  }
+
   // ─── Upgrade Handler ──────────────────────────────────────────────────────────
 
   private async handleUpgrade(
@@ -217,18 +254,18 @@ export class WSServer {
     socket: Socket,
     _head: Buffer
   ): Promise<void> {
-    // Only handle WebSocket upgrades
-    if (!isWebSocketUpgrade(req)) {
-      socket.destroy();
-      return;
-    }
-
     // Only handle our configured path
     const url = req.url || '/';
     const path = url.split('?')[0];
 
     if (path !== this.options.path) {
-      // Not our path - let other handlers deal with it
+      // Not our path - let other upgrade handlers deal with it
+      return;
+    }
+
+    // Only handle WebSocket upgrades on our path
+    if (!isWebSocketUpgrade(req)) {
+      rejectUpgrade(socket, 400, 'Bad Request');
       return;
     }
 
@@ -254,8 +291,17 @@ export class WSServer {
     const success = performHandshake(req, socket);
     if (!success) return;
 
+    // Re-queue any bytes that arrived with the upgrade request (first frames)
+    if (_head && _head.length > 0) {
+      socket.unshift(_head);
+    }
+
     // Create client wrapper
-    const client = new WSClient(socket as any, req);
+    const client = new WSClient(socket as any, req, {
+      maxPayload: this.options.maxPayload,
+      closeTimeoutMs: this.options.closeTimeoutMs,
+      heartbeatIntervalMs: this.options.heartbeatIntervalMs
+    });
 
     // Register client
     this.clients.set(client.id, client);

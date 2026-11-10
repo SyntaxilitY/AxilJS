@@ -20,7 +20,7 @@ exports.trackCache = trackCache;
 exports.trackEmitter = trackEmitter;
 exports.detectAndFix = detectAndFix;
 // ─── Registry ─────────────────────────────────────────────────────────────────
-// Track all timers registered through @axiljsJS
+// Track all timers registered through AxilJS
 const trackedTimers = new Set();
 exports.trackedTimers = trackedTimers;
 const trackedIntervals = new Set();
@@ -38,7 +38,7 @@ exports.trackedEmitters = trackedEmitters;
  *
  * Usage:
  *   const timer = trackTimer(setTimeout(() => doWork(), 5000))
- *   // @axiljsJS now knows about this timer and can clean it up
+ *   // AxilJS now knows about this timer and can clean it up
  */
 function trackTimer(timer) {
     trackedTimers.add(timer);
@@ -83,7 +83,7 @@ function trackCache(name, cache, maxSize = 10000) {
 // ─── Emitter Tracking ─────────────────────────────────────────────────────────
 /**
  * Register an EventEmitter for listener leak detection.
- * Node.js warns at 10 listeners — @axiljsJS monitors and alerts.
+ * Node.js warns at 10 listeners — AxilJS monitors and alerts.
  *
  * Usage:
  *   trackEmitter(myEmitter, 'MyService')
@@ -124,7 +124,10 @@ async function checkEventListeners(autoFix) {
             continue;
         }
         const name = emitter.__name || 'unnamed';
-        const maxListeners = emitter.getMaxListeners() || 10;
+        const maxListeners = emitter.getMaxListeners();
+        // 0 / Infinity means the app explicitly allowed unlimited listeners
+        if (maxListeners === 0 || maxListeners === Infinity)
+            continue;
         // Check each event type
         const eventNames = emitter.eventNames();
         for (const event of eventNames) {
@@ -149,7 +152,15 @@ function checkOrphanedTimers(autoFix) {
     const leaks = [];
     // Check if timer count is excessive
     // Node.js does not expose a list of all active timers
-    // We check our tracked set for accumulation
+    // We check our tracked set for accumulation.
+    // First drop timers that already fired or were cleared without untrack —
+    // otherwise the registry itself grows forever and reports false leaks.
+    for (const t of trackedTimers)
+        if (t?._destroyed)
+            trackedTimers.delete(t);
+    for (const t of trackedIntervals)
+        if (t?._destroyed)
+            trackedIntervals.delete(t);
     const timerCount = trackedTimers.size;
     const intervalCount = trackedIntervals.size;
     if (timerCount > 100) {

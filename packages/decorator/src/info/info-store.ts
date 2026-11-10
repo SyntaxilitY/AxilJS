@@ -7,9 +7,42 @@ import type { TDecoratorInfo } from '../core/types'
 
 const infoRegistry = new Map<string, TDecoratorInfo>()
 
+let catalogLoader: (() => Array<Record<string, unknown>>) | undefined
+let catalogLoaded = false
+
+/**
+ * Internal: index.ts hands over the decorator group modules so the
+ * catalog can be primed lazily without a circular import.
+ */
+export function __setCatalogLoader(loader: () => Array<Record<string, unknown>>): void {
+  catalogLoader = loader
+  catalogLoaded = false
+}
+
+/**
+ * Each decorator registers its TDecoratorInfo when its factory is called.
+ * Call every exported t* factory once (without applying the result) so
+ * introspection lists all shipped decorators, not just the applied ones.
+ * Applying is what writes metadata, so this records no metadata.
+ */
+function ensureCatalogLoaded(): void {
+  if (catalogLoaded || !catalogLoader) return
+  catalogLoaded = true
+  for (const group of catalogLoader()) {
+    for (const [name, factory] of Object.entries(group)) {
+      if (!/^t[A-Z]/.test(name) || typeof factory !== 'function') continue
+      try {
+        ;(factory as () => unknown)()
+      } catch {
+        // A factory that validates its arguments eagerly is skipped
+      }
+    }
+  }
+}
+
 /**
  * Register a decorator's TDecoratorInfo contract.
- * Called exactly once per decorator at import time.
+ * Called whenever a decorator factory runs (idempotent per name).
  */
 export function registerDecoratorInfo(info: TDecoratorInfo): void {
   if (!info.name) {
@@ -42,11 +75,13 @@ export function registerDecoratorInfo(info: TDecoratorInfo): void {
 
 /** Get the TDecoratorInfo for a single decorator. */
 export function getDecoratorInfo(name: string): TDecoratorInfo | undefined {
+  ensureCatalogLoaded()
   return infoRegistry.get(name)
 }
 
 /** List every registered decorator, optionally filtered by category. */
 export function listDecorators(filter?: { category?: string }): TDecoratorInfo[] {
+  ensureCatalogLoaded()
   const all = Array.from(infoRegistry.values())
   if (filter?.category) return all.filter(d => d.category === filter.category)
   return all
@@ -54,6 +89,7 @@ export function listDecorators(filter?: { category?: string }): TDecoratorInfo[]
 
 /** Free-text search across every field. */
 export function searchDecorators(query: string): TDecoratorInfo[] {
+  ensureCatalogLoaded()
   const q = query.toLowerCase()
   return Array.from(infoRegistry.values()).filter(d => {
     return (
@@ -68,6 +104,7 @@ export function searchDecorators(query: string): TDecoratorInfo[] {
 
 /** Enumerate every category that has at least one decorator. */
 export function listCategories(): string[] {
+  ensureCatalogLoaded()
   const set = new Set<string>()
   for (const info of infoRegistry.values()) set.add(info.category)
   return Array.from(set).sort()

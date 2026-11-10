@@ -39,6 +39,8 @@ export class CloudCache<T = unknown> {
       if (oldest) this.store.delete(oldest);
     }
 
+    // Re-insert so an updated key moves to the most-recently-used position
+    this.store.delete(key);
     this.store.set(key, {
       value,
       expiresAt: Date.now() + (options?.ttlMs ?? this.defaultTtlMs),
@@ -57,6 +59,10 @@ export class CloudCache<T = unknown> {
       this.store.delete(key);
       return undefined;
     }
+
+    // Mark as most recently used (Map preserves insertion order → LRU)
+    this.store.delete(key);
+    this.store.set(key, entry);
 
     return entry.value;
   }

@@ -109,10 +109,11 @@ export function csrf(options: CsrfOptions = {}): MiddlewareFn {
       // Generate new token and set cookie
       token = generateToken();
 
+      // Must NOT be HttpOnly so JS can read it. Browsers set the HttpOnly
+      // flag whenever the attribute is present (even "HttpOnly=false").
       const cookieValue =
         `${cookieName}=${token}; Path=${path}; SameSite=${sameSite}` +
-        (secure ? '; Secure' : '') +
-        '; HttpOnly=false'; // Must NOT be HttpOnly so JS can read it
+        (secure ? '; Secure' : '');
 
       res.header('Set-Cookie', cookieValue);
     }
@@ -126,7 +127,7 @@ export function csrf(options: CsrfOptions = {}): MiddlewareFn {
     }
 
     // Get token from request header
-    const requestToken = req.headers[headerName] as string;
+    const requestToken = req.headers[headerName.toLowerCase()] as string;
 
     if (!requestToken) {
       return next(

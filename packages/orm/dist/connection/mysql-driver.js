@@ -7,7 +7,30 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MySQLDriver = void 0;
+exports.buildMySQLPoolOptions = buildMySQLPoolOptions;
 const base_driver_1 = require("./base-driver");
+/**
+ * mysql2 pool options for a ConnectionConfig. `config.url`
+ * (mysql://user:pass@host:3306/db) takes priority over the individual fields,
+ * which still override pool size / ssl.
+ */
+function buildMySQLPoolOptions(config) {
+    const common = {
+        connectionLimit: config.pool?.max || 10,
+        ...(config.ssl !== undefined ? { ssl: config.ssl } : {})
+    };
+    if (config.url) {
+        return { uri: config.url, ...common };
+    }
+    return {
+        host: config.host || 'localhost',
+        port: config.port || 3306,
+        database: config.database,
+        user: config.username,
+        password: config.password,
+        ...common
+    };
+}
 class MySQLDriver extends base_driver_1.BaseDriver {
     // mysql2 pool instance
     pool = null;
@@ -17,21 +40,24 @@ class MySQLDriver extends base_driver_1.BaseDriver {
     async connect() {
         try {
             const mysql = require('mysql2/promise');
-            this.pool = mysql.createPool({
-                host: this.config.host || 'localhost',
-                port: this.config.port || 3306,
-                database: this.config.database,
-                user: this.config.username,
-                password: this.config.password,
-                connectionLimit: this.config.pool?.max || 10,
-                ssl: this.config.ssl
-            });
+            this.pool = mysql.createPool(buildMySQLPoolOptions(this.config));
             // Test connection
-            const conn = await this.pool.getConnection();
+            let conn;
+            try {
+                conn = await this.pool.getConnection();
+            }
+            catch (error) {
+                // Don't leak the pool when the first connection fails
+                await this.pool.end().catch(() => { });
+                this.pool = null;
+                throw error;
+            }
             conn.release();
             this.connected = true;
-            console.log(`\x1b[32m[@axiljsJS ORM]\x1b[0m MySQL connected: ` +
-                `${this.config.host}:${this.config.port}/${this.config.database}`);
+            const target = this.config.url
+                ? this.config.url.replace(/:[^:@/]+@/, ':***@') // Hide password in log
+                : `${this.config.host}:${this.config.port}/${this.config.database}`;
+            console.log(`\x1b[32m[AxilJS ORM]\x1b[0m MySQL connected: ${target}`);
         }
         catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {
@@ -54,7 +80,8 @@ class MySQLDriver extends base_driver_1.BaseDriver {
         }
         this.log(sql, params);
         try {
-            const [rows, fields] = await this.pool.execute(sql, params);
+            // mysql2 rejects undefined bind values — send NULL instead
+            const [rows, fields] = await this.pool.execute(sql, params.map(v => v === undefined ? null : v));
             // mysql2 returns different shapes for SELECT vs writes
             if (Array.isArray(rows)) {
                 return { rows: rows, affectedRows: 0 };
@@ -78,7 +105,7 @@ class MySQLDriver extends base_driver_1.BaseDriver {
             const trxContext = {
                 query: async (sql, params = []) => {
                     this.log(sql, params);
-                    const [rows] = await conn.execute(sql, params);
+                    const [rows] = await conn.execute(sql, params.map(v => v === undefined ? null : v));
                     if (Array.isArray(rows)) {
                         return { rows: rows, affectedRows: 0 };
                     }
@@ -94,7 +121,12 @@ class MySQLDriver extends base_driver_1.BaseDriver {
             return result;
         }
         catch (error) {
-            await conn.rollback();
+            try {
+                await conn.rollback();
+            }
+            catch {
+                // Preserve the original error
+            }
             throw error;
         }
         finally {

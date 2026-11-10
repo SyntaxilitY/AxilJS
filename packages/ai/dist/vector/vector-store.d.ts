@@ -17,6 +17,9 @@
  *   ])
  *
  *   const results = await store.search(queryEmbedding, { topK: 3 })
+ *
+ *   await store.save('./data/vectors.json')   // persist
+ *   await new VectorStore().load('./data/vectors.json')
  */
 export interface VectorDocument {
     id: string;
@@ -38,6 +41,12 @@ export interface VectorStoreOptions {
     metric?: SimilarityMetric;
     maxDocuments?: number;
 }
+export interface VectorStoreJSON {
+    version: 1;
+    metric: SimilarityMetric;
+    maxDocuments: number | null;
+    documents: VectorDocument[];
+}
 export declare class VectorStore {
     private documents;
     private metric;
@@ -45,8 +54,13 @@ export declare class VectorStore {
     constructor(options?: VectorStoreOptions);
     /**
      * Add documents to the vector store.
+     * A document whose ID already exists replaces it (keeping its position).
      */
     add(documents: VectorDocument[]): Promise<void>;
+    /**
+     * Insert or replace documents by ID (same semantics as add()).
+     */
+    upsert(documents: VectorDocument[]): Promise<void>;
     /**
      * Add a single document.
      */
@@ -78,6 +92,33 @@ export declare class VectorStore {
      * Get all documents (for debugging/inspection).
      */
     getAll(): VectorDocument[];
+    /**
+     * Serialize the store (metric, limit and documents) to a plain object.
+     */
+    toJSON(): VectorStoreJSON;
+    /**
+     * Create a store from toJSON() output (object or JSON string).
+     * `options` override the serialized metric / maxDocuments.
+     */
+    static fromJSON(data: VectorStoreJSON | string, options?: VectorStoreOptions): VectorStore;
+    /**
+     * Write the store to a JSON file (parent directories are created).
+     * Writes a temp file and renames it, so a crash never leaves a
+     * half-written file behind.
+     */
+    save(filePath: string): Promise<void>;
+    /**
+     * Replace this store's documents with those saved at `filePath`.
+     * The store keeps its own metric / maxDocuments settings
+     * (use VectorStore.fromJSON to restore those too).
+     */
+    load(filePath: string): Promise<this>;
+    private static parseJSON;
+    private replaceDocuments;
+    /**
+     * Enforce max document limit (remove oldest).
+     */
+    private enforceLimit;
     private computeSimilarity;
 }
 //# sourceMappingURL=vector-store.d.ts.map

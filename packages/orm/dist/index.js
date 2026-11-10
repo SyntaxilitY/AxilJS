@@ -18,7 +18,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
+exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.eagerLoad = exports.UnsafeIdentifierError = exports.assertSortDirection = exports.isSafeIdentifier = exports.assertSafeIdentifier = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
 // ── Connection ────────────────────────────────────────────────────────────
 var connection_manager_1 = require("./connection/connection-manager");
 Object.defineProperty(exports, "ConnectionManager", { enumerable: true, get: function () { return connection_manager_1.ConnectionManager; } });
@@ -56,6 +56,15 @@ Object.defineProperty(exports, "ModelQueryBuilder", { enumerable: true, get: fun
 // ── Query Builder (original — used by BaseRepository) ────────────────────
 var query_builder_2 = require("./query-builder/query-builder");
 Object.defineProperty(exports, "QueryBuilder", { enumerable: true, get: function () { return query_builder_2.QueryBuilder; } });
+// ── Identifier safety (orderBy / where column validation) ────────────────
+var identifier_1 = require("./query/identifier");
+Object.defineProperty(exports, "assertSafeIdentifier", { enumerable: true, get: function () { return identifier_1.assertSafeIdentifier; } });
+Object.defineProperty(exports, "isSafeIdentifier", { enumerable: true, get: function () { return identifier_1.isSafeIdentifier; } });
+Object.defineProperty(exports, "assertSortDirection", { enumerable: true, get: function () { return identifier_1.assertSortDirection; } });
+Object.defineProperty(exports, "UnsafeIdentifierError", { enumerable: true, get: function () { return identifier_1.UnsafeIdentifierError; } });
+// ── Relations (eager loading) ─────────────────────────────────────────────
+var eager_loader_1 = require("./relations/eager-loader");
+Object.defineProperty(exports, "eagerLoad", { enumerable: true, get: function () { return eager_loader_1.eagerLoad; } });
 // ── Repository ────────────────────────────────────────────────────────────
 var base_repository_1 = require("./repository/base-repository");
 Object.defineProperty(exports, "BaseRepository", { enumerable: true, get: function () { return base_repository_1.BaseRepository; } });

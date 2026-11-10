@@ -47,8 +47,8 @@ export interface ColumnDefinition {
     references?: {
         table: string;
         column: string;
-        onDelete?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
-        onUpdate?: 'CASCADE' | 'SET NULL' | '@axiljsRICT' | 'NO ACTION';
+        onDelete?: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION';
+        onUpdate?: 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION';
     };
 }
 export interface EntityMetadata {
@@ -56,12 +56,14 @@ export interface EntityMetadata {
     columns: Map<string, ColumnDefinition>;
     primaryKey: string;
 }
-export type WhereOperator = '=' | '!=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'ILIKE' | 'IN' | 'NOT IN' | 'IS NULL' | 'IS NOT NULL' | 'BETWEEN';
+export type WhereOperator = '=' | '!=' | '<' | '<=' | '>' | '>=' | 'LIKE' | 'ILIKE' | 'IN' | 'NOT IN' | 'IS NULL' | 'IS NOT NULL' | 'BETWEEN' | 'NOT BETWEEN' | 'NOT LIKE' | '<>';
 export interface WhereCondition {
     column: string;
     operator: WhereOperator;
     value?: unknown;
     values?: unknown[];
+    conjunction?: 'AND' | 'OR';
+    group?: WhereCondition[];
 }
 export interface OrderByClause {
     column: string;

@@ -7,6 +7,8 @@ import { existsSync, readFileSync } from 'fs'
 import { join }                     from 'path'
 import { execSync }                 from 'child_process'
 
+import * as ui                      from '../ui'
+
 interface Check {
   name: string
   pass: boolean
@@ -14,7 +16,9 @@ interface Check {
 }
 
 export async function runDoctor(): Promise<void> {
-  console.log('\n\x1b[36m[AxilJS]\x1b[0m Running diagnostics...\n')
+  ui.title('doctor', 'Diagnose the project')
+  const started = Date.now()
+  const spin = ui.spinner('Running diagnostics')
 
   const checks: Check[] = []
   const cwd = process.cwd()
@@ -65,7 +69,9 @@ export async function runDoctor(): Promise<void> {
     })
 
     // Lock file
-    const hasLock = existsSync(join(cwd, 'axil.lock'))
+    // `axil install` delegates to npm (package-lock.json); @axiljs/pm writes @axiljs.lock
+    const hasLock = ['axil.lock', '@axiljs.lock', 'package-lock.json']
+      .some(f => existsSync(join(cwd, f)))
     checks.push({
       name:    'axil.lock (deterministic installs)',
       pass:    hasLock,
@@ -89,18 +95,17 @@ export async function runDoctor(): Promise<void> {
   })
 
   // Print results
+  spin.stop()
+
   const passed = checks.filter(c => c.pass).length
   const failed = checks.filter(c => !c.pass).length
 
-  for (const check of checks) {
-    const icon = check.pass ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'
-    console.log(`  ${icon} ${check.name.padEnd(35)} ${check.message}`)
-  }
+  ui.table(checks.map(check => [
+    `${check.pass ? ui.c.green(ui.sym.tick) : ui.c.red(ui.sym.cross)} ${check.name}`,
+    check.pass ? ui.muted(check.message) : ui.c.yellow(check.message)
+  ]), { gap: 2 })
 
-  console.log('')
-  console.log(
-    `  ${passed}/${checks.length} checks passed` +
-    (failed > 0 ? ` \x1b[31m(${failed} issues found)\x1b[0m` : ' \x1b[32m✓\x1b[0m')
-  )
-  console.log('')
+  const summary = `${passed}/${checks.length} checks passed`
+  if (failed > 0) ui.failed(summary, `${failed} issue(s) found`)
+  else ui.done(summary, started)
 }

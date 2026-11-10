@@ -1,6 +1,6 @@
 "use strict";
 /**
- * @axiljsJS Router.
+ * AxilJS Router.
  * Registers routes and matches incoming requests to handlers.
  * Uses the Trie for fast matching.
  *
@@ -68,6 +68,20 @@ class Router {
      */
     options(path, ...args) {
         return this.register('OPTIONS', path, args);
+    }
+    /**
+     * Register a HEAD route.
+     * (Without one, HEAD requests are answered by the GET route by default.)
+     */
+    head(path, ...args) {
+        return this.register('HEAD', path, args);
+    }
+    /**
+     * Register a route for every HTTP method.
+     * A route registered for a specific method on the same path wins.
+     */
+    all(path, ...args) {
+        return this.register(trie_1.ALL_METHODS, path, args);
     }
     /**
      * Internal route registration.

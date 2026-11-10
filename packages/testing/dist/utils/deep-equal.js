@@ -9,6 +9,10 @@ function deepEqual(a, b) {
     // Strict equality covers primitives and same reference
     if (a === b)
         return true;
+    // NaN is not === itself but should deep-equal NaN
+    if (typeof a === 'number' && typeof b === 'number') {
+        return Number.isNaN(a) && Number.isNaN(b);
+    }
     // Null checks
     if (a === null || b === null)
         return false;
@@ -26,6 +30,32 @@ function deepEqual(a, b) {
     // One is array, other is not
     if (Array.isArray(a) !== Array.isArray(b))
         return false;
+    // Built-ins whose state is not in own enumerable keys (Object.keys() is []
+    // for all of them, so without this any two Dates/Maps/Sets compare equal)
+    if (a instanceof Date || b instanceof Date) {
+        return a instanceof Date && b instanceof Date && Object.is(a.getTime(), b.getTime());
+    }
+    if (a instanceof RegExp || b instanceof RegExp) {
+        return a instanceof RegExp && b instanceof RegExp && String(a) === String(b);
+    }
+    if (a instanceof Map || b instanceof Map) {
+        if (!(a instanceof Map && b instanceof Map) || a.size !== b.size)
+            return false;
+        for (const [key, value] of a) {
+            if (!b.has(key) || !deepEqual(value, b.get(key)))
+                return false;
+        }
+        return true;
+    }
+    if (a instanceof Set || b instanceof Set) {
+        if (!(a instanceof Set && b instanceof Set) || a.size !== b.size)
+            return false;
+        for (const item of a) {
+            if (!b.has(item) && !Array.from(b).some(other => deepEqual(item, other)))
+                return false;
+        }
+        return true;
+    }
     // Objects
     if (typeof a === 'object' && typeof b === 'object') {
         const keysA = Object.keys(a);

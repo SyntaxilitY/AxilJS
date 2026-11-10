@@ -64,6 +64,17 @@ export function cors(options: CorsOptions = {}): MiddlewareFn {
       allowOrigin = origin;
     }
 
+    // Response depends on the request Origin - tell caches so they don't
+    // serve one origin's CORS headers to another
+    if (typeof origin !== 'string') {
+      const vary = res.raw?.getHeader('Vary');
+      if (!vary) {
+        res.header('Vary', 'Origin');
+      } else if (!/(^|,)\s*(origin|\*)\s*(,|$)/i.test(String(vary))) {
+        res.header('Vary', `${vary}, Origin`);
+      }
+    }
+
     // Set CORS headers
     if (allowOrigin) {
       res.header('Access-Control-Allow-Origin', allowOrigin);
