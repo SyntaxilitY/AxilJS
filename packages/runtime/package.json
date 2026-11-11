@@ -1,7 +1,7 @@
 {
   "name": "@axiljs/runtime",
-  "version": "0.3.2",
-  "description": "AxilJS runtime: request context and interceptors that execute @axiljs/decorator metadata (tRetry, tTimeout, tAudit, tRedact)",
+  "version": "0.3.3",
+  "description": "AxilJS runtime: request context and interceptors that execute decorator metadata",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -10,14 +10,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.2",
-    "@axiljs/decorator": "^0.3.2",
-    "@axiljs/circuit": "^0.3.2",
-    "@axiljs/events": "^0.3.2"
+    "@axiljs/common": "^0.3.3",
+    "@axiljs/decorator": "^0.3.3",
+    "@axiljs/circuit": "^0.3.3",
+    "@axiljs/events": "^0.3.3"
   },
   "devDependencies": {
-    "@axiljs/core": "^0.3.2",
-    "@axiljs/testing": "^0.3.2",
+    "@axiljs/core": "^0.3.3",
+    "@axiljs/testing": "^0.3.3",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   },

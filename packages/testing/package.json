@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/testing",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "AxilJS test runner, assertions, and HTTP test client",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,8 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.2",
-    "@axiljs/core": "^0.3.2"
+    "@axiljs/common": "^0.3.3",
+    "@axiljs/core": "^0.3.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

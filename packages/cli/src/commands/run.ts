@@ -114,7 +114,7 @@ async function startStudio(cwd: string, appPort: number): Promise<any> {
     const StudioServer = await loadStudioClass(cwd)
 
     if (!StudioServer) {
-      log('Studio skipped', '@axiljs/studio not detected')
+      log('Studio skipped', '@axiljs/studio not installed: npm install -D @axiljs/studio')
       return null
     }
 

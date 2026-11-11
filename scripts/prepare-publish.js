@@ -41,8 +41,39 @@ const descriptions = {
   'cloud':         'AxilJS enterprise — multi-tenancy, audit logs, feature flags, deployment',
   'memory':        'AxilJS memory leak detection, GC optimization, and monitoring',
   'pm':            'AxilJS package manager with lock file and checksum verification',
-  'cli':           'AxilJS CLI — axil create, run, build, test, deploy, doctor',
-  'studio':        'Browser-based dev studio that opens automatically when axil run is used'
+  'cli':           'AxilJS CLI — axil create, run, build, test, deploy, capacity, doctor',
+  'studio':        'Browser-based dev studio that opens automatically when axil run is used',
+  'decorator':     'AxilJS semantic t-prefixed decorators that record intent as metadata',
+  'runtime':       'AxilJS runtime: request context and interceptors that execute decorator metadata',
+  'scale':         'AxilJS scaling: cluster mode, capacity planner, load generator and readiness checks'
+}
+
+/**
+ * Write a file in place. On Windows, fs.writeFileSync() fails with EPERM on
+ * files that have the Hidden attribute (it opens them with CREATE_ALWAYS);
+ * opening the existing file read/write and truncating works.
+ */
+function writeInPlace(file, content) {
+  if (!fs.existsSync(file)) return fs.writeFileSync(file, content, 'utf-8')
+  const fd = fs.openSync(file, 'r+')
+  try {
+    fs.ftruncateSync(fd, 0)
+    fs.writeSync(fd, content, 0, 'utf-8')
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+// `node scripts/prepare-publish.js bump 0.3.3`: set every package (and the
+// root) to that version and point internal @axiljs/* ranges at it.
+const [mode, nextVersion] = process.argv.slice(2)
+if (mode === 'bump' && !/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(nextVersion || '')) {
+  console.error('\n  Usage: node scripts/prepare-publish.js bump <version>   e.g. bump 0.3.3\n')
+  process.exit(1)
+}
+if (mode && mode !== 'bump') {
+  console.error(`\n  Unknown mode "${mode}". Use no argument, or: bump <version>\n`)
+  process.exit(1)
 }
 
 const packages = fs.readdirSync(PACKAGES_DIR)
@@ -55,6 +86,15 @@ for (const pkg of packages) {
   if (!fs.existsSync(pkgPath)) continue
 
   const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+
+  if (mode === 'bump') {
+    pkgJson.version = nextVersion
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+      for (const dep of Object.keys(pkgJson[field] || {})) {
+        if (dep.startsWith('@axiljs/')) pkgJson[field][dep] = `^${nextVersion}`
+      }
+    }
+  }
 
   // Add shared fields
   Object.assign(pkgJson, shared)
@@ -70,10 +110,18 @@ for (const pkg of packages) {
   }
 
   // Write back
-  fs.writeFileSync(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n', 'utf-8')
+  writeInPlace(pkgPath, JSON.stringify(pkgJson, null, 2) + '\n')
 
-  console.log(`  ✓ Updated ${pkgJson.name}`)
+  console.log(`  ✓ Updated ${pkgJson.name}${mode === 'bump' ? ` → ${nextVersion}` : ''}`)
   updated++
+}
+
+if (mode === 'bump') {
+  const rootPath = path.join(__dirname, '..', 'package.json')
+  const root = JSON.parse(fs.readFileSync(rootPath, 'utf-8'))
+  root.version = nextVersion
+  writeInPlace(rootPath, JSON.stringify(root, null, 2) + '\n')
+  console.log(`  ✓ Updated root package.json → ${nextVersion}`)
 }
 
 console.log(`\n  ${updated} packages prepared for publish.\n`)

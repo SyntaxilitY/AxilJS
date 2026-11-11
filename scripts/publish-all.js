@@ -10,11 +10,22 @@ const { spawnSync } = require('child_process')
 const path = require('path')
 const fs   = require('fs')
 
+// Dependency order: every package after the @axiljs packages it depends on.
+// runtime needs common, decorator, circuit, events; cli needs scale.
 const ORDER = [
   'common', 'config', 'security', 'pm', 'orm', 'auth',
   'validation', 'core', 'testing', 'events', 'websocket',
-  'queue', 'circuit', 'observability', 'ai', 'cloud', 'memory', 'cli', 'studio'
+  'queue', 'circuit', 'decorator', 'runtime', 'observability', 'ai', 'cloud',
+  'memory', 'scale', 'cli', 'studio'
 ]
+
+// Fail fast if a package directory exists but is missing from ORDER
+const missing = fs.readdirSync(path.join(__dirname, '..', 'packages'))
+  .filter(p => fs.existsSync(path.join(__dirname, '..', 'packages', p, 'package.json')) && !ORDER.includes(p))
+if (missing.length) {
+  console.error(`\n  Error: packages missing from ORDER in scripts/publish-all.js: ${missing.join(', ')}\n`)
+  process.exit(1)
+}
 
 const PACKAGES_DIR = path.join(__dirname, '..', 'packages')
 const TEMP_BASE    = 'C:\\axiljs-tmp'
@@ -112,8 +123,9 @@ function publishPkg(pkg, token) {
     combined.includes('cannot publish over') ||
     combined.includes('previously published')
   ) {
-    console.log('\x1b[33mskipped (already published)\x1b[0m')
-    return true
+    // npm never overwrites a version: the registry keeps the OLD code.
+    console.log('\x1b[33mSKIPPED: this version is already on npm (old code kept; bump the version)\x1b[0m')
+    return 'skipped'
   }
 
   // Success
@@ -154,11 +166,13 @@ console.log(`  Token: ${NPM_TOKEN.slice(0, 10)}...\n`)
 
 let success  = 0
 let failed   = 0
-const failedPkgs = []
+const failedPkgs  = []
+const skippedPkgs = []
 
 for (const pkg of ORDER) {
   const ok = publishPkg(pkg, NPM_TOKEN)
-  if (ok) success++
+  if (ok === 'skipped') skippedPkgs.push(pkg)
+  else if (ok) success++
   else {
     failed++
     failedPkgs.push(pkg)
@@ -171,8 +185,15 @@ removeDir(TEMP_BASE)
 console.log('')
 console.log('─'.repeat(50))
 console.log(`  Published: \x1b[32m${success}\x1b[0m`)
+console.log(`  Skipped:   \x1b[33m${skippedPkgs.length}\x1b[0m`)
 console.log(`  Failed:    \x1b[31m${failed}\x1b[0m`)
 console.log('─'.repeat(50))
+
+if (skippedPkgs.length > 0) {
+  console.log('\n  \x1b[33mNot updated on npm (version already published, registry still has the old code):\x1b[0m')
+  skippedPkgs.forEach(p => console.log(`    \x1b[33m!\x1b[0m @axiljs/${p}`))
+  console.log('\n  Bump and retry: node scripts/prepare-publish.js bump <next-version>')
+}
 
 if (failedPkgs.length > 0) {
   console.log('\n  Failed:')
@@ -180,7 +201,7 @@ if (failedPkgs.length > 0) {
   console.log('\n  Retry: node scripts/publish-all.js')
 }
 
-if (failed === 0) {
+if (failed === 0 && skippedPkgs.length === 0) {
   console.log('')
   console.log('  \x1b[32m✓ All packages published!\x1b[0m')
   console.log('')
@@ -191,3 +212,4 @@ if (failed === 0) {
 }
 
 console.log('')
+if (failed > 0) process.exitCode = 1

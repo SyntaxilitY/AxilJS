@@ -562,6 +562,7 @@ function generateTemplatePackageJson(name: string, template: ProjectTemplate, ct
     dependencies: sortKeys(template.dependencies(ctx)),
     devDependencies: sortKeys({
       '@axiljs/cli':     `^${axilVersion}`,
+      '@axiljs/studio':  axilRange,
       '@axiljs/testing': axilRange,
       '@types/node':     '^26.2.0',
       typescript:        '^7.0.2',
@@ -638,6 +639,8 @@ function generatePackageJson(name: string, options: ProjectOptions): string {
     dependencies: deps,
     devDependencies: {
       '@axiljs/cli':     `^${axilVersion}`,
+      // `axil run` starts Studio on the app port + 1 when it is installed
+      '@axiljs/studio':  axilRange,
       // `npm test` → `axil test` loads the project's @axiljs/testing
       '@axiljs/testing': axilRange,
       '@types/node':     '^26.2.0',

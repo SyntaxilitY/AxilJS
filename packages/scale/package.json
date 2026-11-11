@@ -1,7 +1,7 @@
 {
   "name": "@axiljs/scale",
-  "version": "0.3.2",
-  "description": "AxilJS scaling: cluster mode, capacity planner, load generator and multi-process readiness checks",
+  "version": "0.3.3",
+  "description": "AxilJS scaling: cluster mode, capacity planner, load generator and readiness checks",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -11,7 +11,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@axiljs/core": "^0.3.2",
+    "@axiljs/core": "^0.3.3",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   },
