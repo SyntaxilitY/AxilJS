@@ -67,8 +67,9 @@ function assertSameDimension(a, b) {
 }
 /**
  * Compute cosine similarity between two vectors.
- * Returns a value between -1 and 1 (1 = identical direction).
- * We normalize to 0-1 for convenience.
+ * Returns the raw value between -1 and 1 (1 = identical direction,
+ * 0 = orthogonal/unrelated, -1 = opposite). Not rescaled, so thresholds
+ * mean the same thing as in other vector databases.
  */
 function cosineSimilarity(a, b) {
     assertSameDimension(a, b);
@@ -84,8 +85,7 @@ function cosineSimilarity(a, b) {
     magnitudeB = Math.sqrt(magnitudeB);
     if (magnitudeA === 0 || magnitudeB === 0)
         return 0;
-    // Normalize to 0-1 range
-    return (dotProduct / (magnitudeA * magnitudeB) + 1) / 2;
+    return dotProduct / (magnitudeA * magnitudeB);
 }
 /**
  * Compute dot product similarity.
@@ -150,7 +150,7 @@ class VectorStore {
      * @param options         Search options (topK, minScore, filter)
      */
     async search(queryEmbedding, options = {}) {
-        const { topK = 5, minScore = 0, filter } = options;
+        const { topK = 5, minScore = -Infinity, filter } = options;
         if (this.documents.size === 0) {
             return [];
         }

@@ -64,7 +64,10 @@ export class MySQLDriver extends BaseDriver {
       const target = this.config.url
         ? this.config.url.replace(/:[^:@/]+@/, ':***@') // Hide password in log
         : `${this.config.host}:${this.config.port}/${this.config.database}`;
-      console.log(`\x1b[32m[AxilJS ORM]\x1b[0m MySQL connected: ${target}`);
+      // logging: false silences connection messages too
+      if (this.config.logging !== false) {
+        console.log(`\x1b[32m[AxilJS ORM]\x1b[0m MySQL connected: ${target}`);
+      }
     } catch (error: any) {
       if (error.code === 'MODULE_NOT_FOUND') {
         throw new Error(

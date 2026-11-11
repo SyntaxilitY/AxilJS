@@ -8,7 +8,7 @@
  *   - Sets Retry-After header
  */
 
-import { MiddlewareFn, axilError } from '@axiljs/common';
+import { MiddlewareFn, axilError, axilRequest } from '@axiljs/common';
 
 // ─── Options ─────────────────────────────────────────────────────────────────
 
@@ -22,13 +22,15 @@ export interface RateLimitOptions {
   // Message sent when limit is exceeded
   message?: string;
 
-  // Function to extract client identifier
+  // Function to extract client identifier. Receives the full request
+  // (ip, headers, params, path, method, locals, ...), e.g. to limit per
+  // route param: keyGenerator: req => `webhook:${req.params.source}`
   // Default: uses IP address
-  keyGenerator?: (req: { ip: string; headers: Record<string, any> }) => string;
+  keyGenerator?: (req: axilRequest) => string;
 
-  // Skip rate limiting for certain requests
+  // Skip rate limiting for certain requests (receives the full request)
   // Return true to skip
-  skip?: (req: { ip: string; path: string; method: string }) => boolean;
+  skip?: (req: axilRequest) => boolean;
 
   // Include rate limit headers in response (default: true)
   // X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset

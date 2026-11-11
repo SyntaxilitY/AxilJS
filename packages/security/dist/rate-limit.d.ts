@@ -7,20 +7,13 @@
  *   - Returns 429 Too Many Requests
  *   - Sets Retry-After header
  */
-import { MiddlewareFn, axilError } from '@axiljs/common';
+import { MiddlewareFn, axilError, axilRequest } from '@axiljs/common';
 export interface RateLimitOptions {
     windowMs?: number;
     max?: number;
     message?: string;
-    keyGenerator?: (req: {
-        ip: string;
-        headers: Record<string, any>;
-    }) => string;
-    skip?: (req: {
-        ip: string;
-        path: string;
-        method: string;
-    }) => boolean;
+    keyGenerator?: (req: axilRequest) => string;
+    skip?: (req: axilRequest) => boolean;
     headers?: boolean;
     store?: RateLimitStore;
 }

@@ -72,6 +72,17 @@ describe('VectorStore', () => {
     expect(e[0]).toMatchObject({ document: { id: 'y' }, score: 1 });
   });
 
+  it('reports raw cosine similarity (-1..1) and has no default threshold', async () => {
+    const store = new VectorStore();
+    await store.add([doc('same', [1, 0]), doc('ortho', [0, 1]), doc('opp', [-1, 0])]);
+    const res = await store.search([2, 0]);
+    expect(res.map(r => r.document.id)).toEqual(['same', 'ortho', 'opp']);
+    expect(res[0].score).toBeCloseTo(1);
+    expect(res[1].score).toBeCloseTo(0);   // unrelated = 0, not 0.5
+    expect(res[2].score).toBeCloseTo(-1);
+    expect((await store.search([2, 0], { minScore: 0.3 })).map(r => r.document.id)).toEqual(['same']);
+  });
+
   it('throws on dimension mismatch for every metric', async () => {
     for (const metric of ['cosine', 'dot', 'euclidean'] as const) {
       const store = new VectorStore({ metric });

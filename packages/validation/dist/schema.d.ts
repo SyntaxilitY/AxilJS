@@ -26,7 +26,7 @@ export interface ValidationError {
     message: string;
     code: string;
 }
-declare abstract class BaseValidator<T> {
+export declare abstract class BaseValidator<T> {
     protected _optional: boolean;
     protected _nullable: boolean;
     protected _defaultValue: T | undefined;
@@ -77,9 +77,16 @@ declare abstract class BaseValidator<T> {
      * @internal
      */
     protected _build(value: unknown): unknown;
+    /**
+     * Convert an accepted alternate input form to the output type
+     * (e.g. numeric query-string values). Unrecognised values pass through
+     * unchanged and are rejected by validateType().
+     * @internal
+     */
+    protected _coerce(value: unknown): unknown;
     protected abstract validateType(value: unknown, path: string): ValidationError[];
 }
-declare class StringValidator extends BaseValidator<string> {
+export declare class StringValidator extends BaseValidator<string> {
     private _min?;
     private _max?;
     private _pattern?;
@@ -98,7 +105,7 @@ declare class StringValidator extends BaseValidator<string> {
     protected _build(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
-declare class NumberValidator extends BaseValidator<number> {
+export declare class NumberValidator extends BaseValidator<number> {
     private _min?;
     private _max?;
     private _integer;
@@ -107,12 +114,16 @@ declare class NumberValidator extends BaseValidator<number> {
     max(value: number): this;
     integer(): this;
     positive(): this;
+    /** Numeric strings (from query params / form data) become numbers. */
+    protected _coerce(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
-declare class BooleanValidator extends BaseValidator<boolean> {
+export declare class BooleanValidator extends BaseValidator<boolean> {
+    /** String booleans from query params / form data become booleans. */
+    protected _coerce(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
-declare class ArrayValidator<T> extends BaseValidator<T[]> {
+export declare class ArrayValidator<T> extends BaseValidator<T[]> {
     private itemValidator;
     private _min?;
     private _max?;
@@ -122,11 +133,11 @@ declare class ArrayValidator<T> extends BaseValidator<T[]> {
     protected validateType(value: unknown, path: string): ValidationError[];
     protected _build(value: unknown): unknown;
 }
-type SchemaShape = Record<string, BaseValidator<any>>;
-type InferShape<S extends SchemaShape> = {
+export type SchemaShape = Record<string, BaseValidator<any>>;
+export type InferShape<S extends SchemaShape> = {
     [K in keyof S]: S[K] extends BaseValidator<infer T> ? T : never;
 };
-declare class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferShape<S>> {
+export declare class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferShape<S>> {
     private shape;
     private _strip;
     constructor(shape: S);
@@ -138,19 +149,19 @@ declare class ObjectValidator<S extends SchemaShape> extends BaseValidator<Infer
     parse(value: unknown): ValidationResult<InferShape<S>>;
     protected _build(value: unknown): unknown;
 }
-declare class EnumValidator<T extends string> extends BaseValidator<T> {
+export declare class EnumValidator<T extends string> extends BaseValidator<T> {
     private values;
     constructor(values: T[]);
     protected validateType(value: unknown, path: string): ValidationError[];
 }
-type Primitive = string | number | boolean | null;
-declare class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
+export type Primitive = string | number | boolean | null;
+export declare class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
     private expected;
     constructor(expected: T);
     protected validateType(value: unknown, path: string): ValidationError[];
 }
-type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
-declare class UnionValidator<T> extends BaseValidator<T> {
+export type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
+export declare class UnionValidator<T> extends BaseValidator<T> {
     private options;
     constructor(options: BaseValidator<any>[]);
     /** The first option that accepts value, or undefined. */
@@ -158,7 +169,7 @@ declare class UnionValidator<T> extends BaseValidator<T> {
     protected validateType(value: unknown, path: string): ValidationError[];
     protected _build(value: unknown): unknown;
 }
-declare class RecordValidator<T> extends BaseValidator<Record<string, T>> {
+export declare class RecordValidator<T> extends BaseValidator<Record<string, T>> {
     private valueValidator;
     constructor(valueValidator: BaseValidator<T>);
     protected validateType(value: unknown, path: string): ValidationError[];
@@ -184,5 +195,4 @@ export declare const v: {
     union: <V extends BaseValidator<any>[]>(options: [...V]) => UnionValidator<InferValidator<V[number]>>;
     record: <T>(valueSchema: BaseValidator<T>) => RecordValidator<T>;
 };
-export type { BaseValidator };
 //# sourceMappingURL=schema.d.ts.map

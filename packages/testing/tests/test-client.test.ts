@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { IncomingMessage, ServerResponse } from 'http';
-import { createTestClient } from '../src/http/test-client';
+import { createTestClient, TestRequest } from '../src/http/test-client';
+import * as Index from '../src/index';
 
 /** Minimal app double: echoes the raw request back as JSON. */
 function echoApp(): any {
@@ -30,9 +31,26 @@ describe('TestClient', () => {
     expect(res.body.body).toBe('{"name":"Tariq"}');
   });
 
-  it('JSON-encodes string bodies when the content-type is JSON', async () => {
-    const res = await createTestClient(echoApp()).post('/x').send('hello');
-    expect(res.body.body).toBe('"hello"');
+  it('sends pre-serialized JSON strings as-is (bug fix: was double-encoded)', async () => {
+    const raw = '{"name":"Tariq",  "n":1}';
+    const res = await createTestClient(echoApp()).post('/x').send(raw);
+    expect(res.body.contentType).toBe('application/json');
+    expect(res.body.body).toBe(raw);
+    expect(res.body.length).toBe(String(Buffer.byteLength(raw)));
+  });
+
+  it('sends Buffers as-is with a JSON content-type', async () => {
+    const res = await createTestClient(echoApp())
+      .post('/x')
+      .set('Content-Type', 'application/json; charset=utf-8')
+      .send(Buffer.from('[1,2]'));
+    expect(res.body.body).toBe('[1,2]');
+  });
+
+  it('exports TestRequest (bug fix: helpers returning it failed declaration emit)', () => {
+    const req: TestRequest = createTestClient(echoApp()).post('/x');
+    expect(req).toBeInstanceOf(TestRequest);
+    expect(Index.TestRequest).toBe(TestRequest);
   });
 
   it('sends string bodies as-is with a non-JSON content-type', async () => {

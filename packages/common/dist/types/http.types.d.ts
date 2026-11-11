@@ -15,6 +15,7 @@ export interface axilRequest {
     query: QueryParams;
     headers: Record<string, string | string[] | undefined>;
     body: unknown;
+    rawBody?: string;
     ip: string;
     locals: Record<string, unknown>;
 }

@@ -8,11 +8,18 @@
  *
  *   app.use(observabilityMiddleware({ metrics, tracer }))
  *   app.get('/metrics', metricsHandler(metrics))
+ *
+ * With a tracer, the request's server span is exposed to later middleware
+ * and handlers as req.locals.span (plus req.locals.tracer and
+ * req.locals.traceContext) so they can create child spans and propagate the
+ * trace to downstream calls:
+ *
+ *   await tracer.trace('db.query', async () => db.query(sql), getRequestSpan(req))
  */
 
 import { MiddlewareFn, RouteHandler, axilRequest } from '@axiljs/common';
 import { MetricsRegistry } from './metrics';
-import { Tracer } from './tracing';
+import { Tracer, Span, SpanContext } from './tracing';
 
 export interface ObservabilityOptions {
   metrics?: MetricsRegistry;
@@ -74,6 +81,14 @@ export function observabilityMiddleware(
       // Attach trace IDs to response headers
       const traceHeaders = tracer!.injectContext(span);
       Object.entries(traceHeaders).forEach(([k, v]) => res.header(k, v));
+
+      // Expose the server span so handlers can start child spans and
+      // propagate the trace (tracer.injectContext(child)) downstream
+      if (req.locals) {
+        req.locals.span = span;
+        req.locals.tracer = tracer;
+        req.locals.traceContext = { traceId: span.traceId, spanId: span.spanId };
+      }
     }
 
     // Track active requests
@@ -124,6 +139,23 @@ export function observabilityMiddleware(
 
     next();
   };
+}
+
+/**
+ * The server span observabilityMiddleware started for this request
+ * (req.locals.span), or undefined when no tracer is configured.
+ */
+export function getRequestSpan(req: axilRequest): Span | undefined {
+  const span = req.locals?.span;
+  return span instanceof Span ? span : undefined;
+}
+
+/**
+ * Trace context ({ traceId, spanId }) of the request's server span
+ * (req.locals.traceContext), or undefined when no tracer is configured.
+ */
+export function getTraceContext(req: axilRequest): SpanContext | undefined {
+  return req.locals?.traceContext as SpanContext | undefined;
 }
 
 /**

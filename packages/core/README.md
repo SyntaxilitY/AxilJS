@@ -113,14 +113,37 @@ new Application({
 })
 ```
 
-`trustProxy` decides `req.ip`:
+`trustProxy` decides `req.ip`. It is off by default: an `X-Forwarded-For`
+header is client-controlled, so trusting it without a proxy lets anyone spoof
+their address (and dodge per-IP rate limits). Behind a proxy, prefer the hop
+count (`1` for a single load balancer) over `true`.
+
 
 | Value | `req.ip` |
 |---|---|
-| `true` (default) | left-most `X-Forwarded-For` entry, else the socket address |
-| `false` | socket address; `X-Forwarded-For` ignored |
+| `false` (default) | socket address; `X-Forwarded-For` ignored |
+| `true` | left-most `X-Forwarded-For` entry, else the socket address (only safe when every request passes through a proxy that overwrites the header) |
 | `n` (number) | address `n` hops in front of the server (`1` = the entry added by your one proxy) |
 | `(addr, hop) => boolean` | walks from the socket outwards; the first untrusted address wins |
+
+## Raw request body
+
+The built-in body parser keeps the unparsed body text for any non-empty body
+(JSON, urlencoded, text) as `req.rawBody` (on core's `Request`) and
+`req.locals.rawBody`, e.g. to verify a webhook signature:
+
+```typescript
+app.post('/webhooks/stripe', (req, res) => {
+  const raw = req.locals.rawBody as string;
+  const expected = createHmac('sha256', secret).update(raw).digest('hex');
+  // compare with the signature header, then use req.body (already parsed)
+});
+```
+
+## Startup banner
+
+`listen()` prints a banner with the installed `@axiljs/core` version. It is
+skipped when `logging: false` or `env: 'test'`.
 
 ## Static files
 

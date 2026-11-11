@@ -28,6 +28,7 @@ export declare class Request implements axilRequest {
     query: QueryParams;
     headers: Record<string, string | string[] | undefined>;
     body: unknown;
+    rawBody: string | undefined;
     ip: string;
     locals: Record<string, unknown>;
     constructor(raw: IncomingMessage, options?: RequestOptions);

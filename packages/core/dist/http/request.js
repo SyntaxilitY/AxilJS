@@ -62,6 +62,9 @@ class Request {
     query;
     headers;
     body;
+    // Unparsed request body text, set by the body parser (e.g. for webhook
+    // signature verification); undefined when there was no body
+    rawBody;
     ip;
     locals;
     constructor(raw, options = {}) {
@@ -80,8 +83,10 @@ class Request {
         this.params = {};
         // Body is populated by body parser middleware
         this.body = null;
-        // Get client IP - X-Forwarded-For is honoured per the trustProxy option
-        this.ip = resolveClientIp(raw, options.trustProxy ?? true);
+        this.rawBody = undefined;
+        // Get client IP - X-Forwarded-For is only honoured when trustProxy opts
+        // in; trusting it by default would let any client spoof its address
+        this.ip = resolveClientIp(raw, options.trustProxy ?? false);
         // Empty locals store for middleware to populate
         this.locals = {};
     }

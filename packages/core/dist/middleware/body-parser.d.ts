@@ -6,6 +6,8 @@
  *   application/json          → parses JSON
  *   application/x-www-form-urlencoded → parses form data
  *   text/plain                → raw string
+ *
+ * The unparsed text is always kept as req.rawBody (and req.locals.rawBody).
  */
 import { MiddlewareFn } from '@axiljs/common';
 /**

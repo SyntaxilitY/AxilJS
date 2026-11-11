@@ -3,7 +3,7 @@
  * @axiljs/testing - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTestClient = exports.TestClient = exports.isMockFunction = exports.spyOn = exports.fn = exports.AssertionError = exports.expect = exports.DEFAULT_TIMEOUT = exports.resetTests = exports.runTestsWithResults = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fdescribe = exports.xdescribe = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
+exports.createTestClient = exports.TestRequest = exports.TestClient = exports.isMockFunction = exports.spyOn = exports.fn = exports.AssertionError = exports.expect = exports.DEFAULT_TIMEOUT = exports.resetTests = exports.runTestsWithResults = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fdescribe = exports.xdescribe = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
 // Test runner
 var test_runner_1 = require("./runner/test-runner");
 Object.defineProperty(exports, "describe", { enumerable: true, get: function () { return test_runner_1.describe; } });
@@ -33,5 +33,6 @@ Object.defineProperty(exports, "isMockFunction", { enumerable: true, get: functi
 // HTTP test client
 var test_client_1 = require("./http/test-client");
 Object.defineProperty(exports, "TestClient", { enumerable: true, get: function () { return test_client_1.TestClient; } });
+Object.defineProperty(exports, "TestRequest", { enumerable: true, get: function () { return test_client_1.TestRequest; } });
 Object.defineProperty(exports, "createTestClient", { enumerable: true, get: function () { return test_client_1.createTestClient; } });
 //# sourceMappingURL=index.js.map

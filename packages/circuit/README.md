@@ -42,4 +42,16 @@ try {
 - `getStats()` also reports `activeCount` and `queuedCount`.
 - `retry(fn, { attempts: 0 })` runs `fn` once (attempts below 1 are treated as 1).
 
+## State changes and logging
+
+Every transition emits `stateChange` (`(next, previous)`), which is the
+supported way to observe the breaker. By default it is also printed to the
+console; `logger: false` silences that, or pass your own logger (plain text;
+transitions to `OPEN` go to `warn`, the rest to `info`):
+
+```typescript
+const cb = new CircuitBreaker('payments', { logger: false })
+cb.on('stateChange', (next, previous) => log.info({ breaker: cb.name, previous, next }))
+```
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

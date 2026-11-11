@@ -18,7 +18,7 @@
  *   }
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.v = void 0;
+exports.v = exports.RecordValidator = exports.UnionValidator = exports.LiteralValidator = exports.EnumValidator = exports.ObjectValidator = exports.ArrayValidator = exports.BooleanValidator = exports.NumberValidator = exports.StringValidator = exports.BaseValidator = void 0;
 // ─── Base Validator ───────────────────────────────────────────────────────────
 class BaseValidator {
     _optional = false;
@@ -99,6 +99,9 @@ class BaseValidator {
                 return [];
             return [{ path, message: `${path} cannot be null`, code: 'NULL_VALUE' }];
         }
+        // Coerce accepted string forms (e.g. '5' -> 5) so type checks and
+        // custom rules see the same value parse() returns
+        value = this._coerce(value);
         // Type-specific validation
         const typeErrors = this.validateType(value, path);
         if (typeErrors.length > 0)
@@ -139,9 +142,20 @@ class BaseValidator {
      * @internal
      */
     _build(value) {
-        return value === undefined ? this._defaultValue : value;
+        const out = value === undefined ? this._defaultValue : value;
+        return out === undefined || out === null ? out : this._coerce(out);
+    }
+    /**
+     * Convert an accepted alternate input form to the output type
+     * (e.g. numeric query-string values). Unrecognised values pass through
+     * unchanged and are rejected by validateType().
+     * @internal
+     */
+    _coerce(value) {
+        return value;
     }
 }
+exports.BaseValidator = BaseValidator;
 /** Build parse() output; a throwing transform becomes a validation error. */
 function buildOutput(validator, value) {
     try {
@@ -244,6 +258,7 @@ class StringValidator extends BaseValidator {
         return errors;
     }
 }
+exports.StringValidator = StringValidator;
 // ─── Number Validator ─────────────────────────────────────────────────────────
 class NumberValidator extends BaseValidator {
     _min;
@@ -254,10 +269,17 @@ class NumberValidator extends BaseValidator {
     max(value) { this._max = value; return this; }
     integer() { this._integer = true; return this; }
     positive() { this._positive = true; return this; }
+    /** Numeric strings (from query params / form data) become numbers. */
+    _coerce(value) {
+        if (typeof value !== 'string' || value.trim() === '')
+            return value;
+        const num = Number(value);
+        return Number.isFinite(num) ? num : value;
+    }
     validateType(value, path) {
-        // Accept string numbers too (from query params)
-        const num = typeof value === 'string' ? Number(value) : value;
-        // NaN and +/-Infinity are not usable numbers (also rejects 'Infinity')
+        const num = value;
+        // Strings that did not coerce are rejected here, as are NaN and
+        // +/-Infinity (not usable numbers; also rejects 'Infinity') and +/-Infinity are not usable numbers (also rejects 'Infinity')
         if (typeof num !== 'number' || !Number.isFinite(num)) {
             return [{ path, message: `${path} must be a number`, code: 'TYPE_ERROR' }];
         }
@@ -277,20 +299,25 @@ class NumberValidator extends BaseValidator {
         return errors;
     }
 }
+exports.NumberValidator = NumberValidator;
 // ─── Boolean Validator ────────────────────────────────────────────────────────
 class BooleanValidator extends BaseValidator {
-    validateType(value, path) {
-        // Accept string booleans from query params / form data
+    /** String booleans from query params / form data become booleans. */
+    _coerce(value) {
         if (value === 'true' || value === '1')
-            return [];
+            return true;
         if (value === 'false' || value === '0')
-            return [];
+            return false;
+        return value;
+    }
+    validateType(value, path) {
         if (typeof value !== 'boolean') {
             return [{ path, message: `${path} must be a boolean`, code: 'TYPE_ERROR' }];
         }
         return [];
     }
 }
+exports.BooleanValidator = BooleanValidator;
 // ─── Array Validator ──────────────────────────────────────────────────────────
 class ArrayValidator extends BaseValidator {
     itemValidator;
@@ -335,6 +362,7 @@ class ArrayValidator extends BaseValidator {
         return value.map(item => this.itemValidator._output(item));
     }
 }
+exports.ArrayValidator = ArrayValidator;
 class ObjectValidator extends BaseValidator {
     shape;
     _strip = false; // Strip unknown fields
@@ -387,6 +415,7 @@ class ObjectValidator extends BaseValidator {
         return out;
     }
 }
+exports.ObjectValidator = ObjectValidator;
 // ─── Enum Validator ───────────────────────────────────────────────────────────
 class EnumValidator extends BaseValidator {
     values;
@@ -405,6 +434,7 @@ class EnumValidator extends BaseValidator {
         return [];
     }
 }
+exports.EnumValidator = EnumValidator;
 class LiteralValidator extends BaseValidator {
     expected;
     constructor(expected) {
@@ -425,6 +455,7 @@ class LiteralValidator extends BaseValidator {
         return [];
     }
 }
+exports.LiteralValidator = LiteralValidator;
 class UnionValidator extends BaseValidator {
     options;
     constructor(options) {
@@ -457,6 +488,7 @@ class UnionValidator extends BaseValidator {
         return option ? option._output(value) : value;
     }
 }
+exports.UnionValidator = UnionValidator;
 // ─── Record Validator ─────────────────────────────────────────────────────────
 class RecordValidator extends BaseValidator {
     valueValidator;
@@ -493,6 +525,7 @@ class RecordValidator extends BaseValidator {
         return out;
     }
 }
+exports.RecordValidator = RecordValidator;
 // ─── Public API ───────────────────────────────────────────────────────────────
 /**
  * Validation schema builder.

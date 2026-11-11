@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/SyntaxilitY/AxilJS-Backend-Ecosystem/main/assets/logo-mark-128.png" alt="AxilJS logo" width="64" height="64">
+</p>
+
 # @axiljs/studio
 
 Browser-based developer dashboard for AxilJS applications.

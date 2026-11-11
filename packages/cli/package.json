@@ -14,7 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.1"
+    "@axiljs/common": "^0.3.2",
+    "@axiljs/scale": "^0.3.2"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
@@ -38,14 +39,7 @@
     "backend",
     "javascript",
     "typescript",
-    "nodejs",
-    "cli",
-    "create",
-    "run",
-    "build",
-    "test",
-    "deploy",
-    "doctor"
+    "nodejs"
   ],
   "files": [
     "dist",

@@ -24,6 +24,7 @@
 import { EventEmitter } from 'events';
 import { Job, JobOptions, JobHandler, JobStatus } from './job';
 import { QueueStore } from './store';
+import { QueueLoggerOption } from './logger';
 export interface QueueOptions {
     concurrency?: number;
     pollIntervalMs?: number;
@@ -32,6 +33,7 @@ export interface QueueOptions {
         delay: number;
     };
     store?: QueueStore;
+    logger?: QueueLoggerOption;
 }
 export declare class Queue extends EventEmitter {
     readonly name: string;
@@ -42,6 +44,7 @@ export declare class Queue extends EventEmitter {
     private pollTimer?;
     private running;
     private options;
+    private log;
     constructor(name: string, options?: QueueOptions);
     /**
      * Register a handler for a specific job name.
@@ -123,6 +126,11 @@ export declare class Queue extends EventEmitter {
     private reportListenerError;
     /**
      * Calculate backoff delay for retry attempts.
+     *
+     * exponential: base * 2^(attempt-1), with ±25% proportional jitter, i.e.
+     *              a uniformly random value in [0.75 × d, 1.25 × d]. Jitter scales
+     *              with the delay, so a 10 ms base waits 7.5–12.5 ms (not ~1 s).
+     * fixed:       always exactly `delay` (no jitter).
      */
     private calculateBackoff;
 }

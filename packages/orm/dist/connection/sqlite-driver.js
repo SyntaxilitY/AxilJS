@@ -33,7 +33,10 @@ class SQLiteDriver extends base_driver_1.BaseDriver {
             // Enable foreign key enforcement
             this.db.pragma('foreign_keys = ON');
             this.connected = true;
-            console.log(`\x1b[32m[AxilJS ORM]\x1b[0m SQLite connected: ${filename}`);
+            // logging: false silences connection messages too
+            if (this.config.logging !== false) {
+                console.log(`\x1b[32m[AxilJS ORM]\x1b[0m SQLite connected: ${filename}`);
+            }
         }
         catch (error) {
             if (error.code === 'MODULE_NOT_FOUND') {

@@ -235,3 +235,46 @@ describe('v.record', () => {
     expect(Object.keys(out)).toEqual(['__proto__', 'a']);
   });
 });
+
+describe('string coercion (bug fix: numeric/boolean strings were returned unchanged)', () => {
+  it('v.number() returns the coerced number for numeric strings', () => {
+    const r = v.number().parse('42');
+    expect(r.data).toBe(42);
+    expect(typeof r.data).toBe('number');
+    expect(v.number().parse(' 1.5 ').data).toBe(1.5);
+    expect(codes(v.number().parse(''))).toEqual(['TYPE_ERROR']);
+    expect(codes(v.number().parse('  '))).toEqual(['TYPE_ERROR']);
+  });
+
+  it('runs integer/min/max/positive/custom on the coerced value', () => {
+    expect(codes(v.number().integer().parse('1.5'))).toEqual(['INTEGER']);
+    expect(codes(v.number().positive().parse('0'))).toEqual(['POSITIVE']);
+    expect(codes(v.number().min(10).parse('9'))).toEqual(['MIN_VALUE']);
+    expect(codes(v.number().max(10).parse('11'))).toEqual(['MAX_VALUE']);
+    expect(v.number().integer().min(1).max(10).parse('7').data).toBe(7);
+    const seen: unknown[] = [];
+    v.number().custom(n => { seen.push(n); return true; }).parse('3');
+    expect(seen).toEqual([3]);
+  });
+
+  it('keeps default/optional/nullable/transform chains working', () => {
+    expect(v.number().default(5).parse(undefined).data).toBe(5);
+    expect(v.number().optional().parse(undefined).data).toBeUndefined();
+    expect(v.number().nullable().parse(null).data).toBeNull();
+    expect(v.number().transform(n => n * 2).parse('21').data).toBe(42);
+    expect(v.object({ page: v.number().integer().default(1) }).parse({ page: '3' }).data)
+      .toEqual({ page: 3 });
+    expect(v.array(v.number()).parse(['1', 2]).data).toEqual([1, 2]);
+    expect(v.union([v.number(), v.boolean()]).parse('8').data).toBe(8);
+  });
+
+  it('v.boolean() returns real booleans for "true"/"false"/"1"/"0"', () => {
+    expect(v.boolean().parse('true').data).toBe(true);
+    expect(v.boolean().parse('1').data).toBe(true);
+    expect(v.boolean().parse('false').data).toBe(false);
+    expect(v.boolean().parse('0').data).toBe(false);
+    expect(v.boolean().transform(b => !b).parse('false').data).toBe(true);
+    expect(v.object({ on: v.boolean().default(false) }).parse({ on: 'true' }).data)
+      .toEqual({ on: true });
+  });
+});

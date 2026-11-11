@@ -84,16 +84,31 @@ function isTc39MethodContext(ctx: any): ctx is {
 
 // ─── registerEventHandlers ────────────────────────────────────────────────────
 
+export interface EventsLogger {
+  info(msg: string): void;
+  warn(msg: string): void;
+}
+
+export interface RegisterEventHandlersOptions {
+  // Where "Registered: ..." / "not a function" messages go.
+  // Default: console (unchanged). false: silent.
+  // { info, warn }: plain-text messages to your logger.
+  logger?: EventsLogger | false;
+}
+
 /**
  * Register all @OnEvent decorated methods from an instance on the event bus.
  *
  * Usage:
  *   registerEventHandlers(new NotificationService(), eventBus)
+ *   registerEventHandlers(new NotificationService(), eventBus, { logger: false })
  */
 export function registerEventHandlers(
   instance: object,
-  bus: EventBus
+  bus: EventBus,
+  options: RegisterEventHandlersOptions = {}
 ): void {
+  const { logger } = options;
   const proto = Object.getPrototypeOf(instance) as any;
   // Legacy decorators store metadata on the prototype; TC39 decorators on the instance
   const ownTc39: EventHandlerMeta[] = Object.prototype.hasOwnProperty.call(instance, EVENT_HANDLERS_KEY)
@@ -107,18 +122,16 @@ export function registerEventHandlers(
     const method = (instance as any)[methodName];
 
     if (typeof method !== 'function') {
-      console.warn(
-        `[AxilJS Events] '${methodName}' is not a function on ` +
-        `${instance.constructor.name}`
-      );
+      const msg = `[AxilJS Events] '${methodName}' is not a function on ${instance.constructor.name}`;
+      if (logger === undefined) console.warn(msg);
+      else if (logger) logger.warn(msg);
       continue;
     }
 
     bus.on(eventType, (event: axilEvent) => method.call(instance, event));
 
-    console.log(
-      `\x1b[90m[AxilJS Events]\x1b[0m Registered: ` +
-      `${instance.constructor.name}.${methodName} → '${eventType}'`
-    );
+    const msg = `Registered: ${instance.constructor.name}.${methodName} → '${eventType}'`;
+    if (logger === undefined) console.log(`\x1b[90m[AxilJS Events]\x1b[0m ${msg}`);
+    else if (logger) logger.info(`[AxilJS Events] ${msg}`);
   }
 }

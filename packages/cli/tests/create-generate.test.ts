@@ -244,3 +244,69 @@ describe('axil generate', () => {
     expect(readdirSync(join(dir, 'm'))).toHaveLength(2)
   })
 })
+
+describe('axil create (interactive)', () => {
+  const saved: Array<[object, string, PropertyDescriptor | undefined]> = []
+  let screen: string[]
+
+  beforeEach(() => {
+    for (const [obj, key] of [[process.stdin, 'isTTY'], [process.stdout, 'isTTY'], [process.stdin, 'isRaw']] as const) {
+      saved.push([obj, key, Object.getOwnPropertyDescriptor(obj, key)])
+      Object.defineProperty(obj, key, { value: key !== 'isRaw', configurable: true })
+    }
+    ;(process.stdin as any).setRawMode = vi.fn()
+    vi.spyOn(process.stdin, 'resume').mockImplementation(() => process.stdin)
+    vi.spyOn(process.stdin, 'pause').mockImplementation(() => process.stdin)
+    screen = []
+    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: any) => { screen.push(String(chunk)); return true }) as any)
+  })
+
+  afterEach(() => {
+    for (const [obj, key, desc] of saved.splice(0)) {
+      if (desc) Object.defineProperty(obj, key, desc)
+      else delete (obj as any)[key]
+    }
+    delete (process.stdin as any).setRawMode
+  })
+
+  /** Wait for the next prompt to attach, then press keys. */
+  async function keys(...seq: Array<[string | undefined, { name?: string; ctrl?: boolean }]>): Promise<void> {
+    for (let i = 0; i < 50 && process.stdin.listenerCount('keypress') === 0; i++) await new Promise(r => setTimeout(r, 5))
+    for (const [str, key] of seq) process.stdin.emit('keypress', str, key)
+    await new Promise(r => setImmediate(r))
+  }
+
+  it('asks for a name, browses templates, picks with space and confirms', async () => {
+    const done = createProject(undefined, { cwd: dir, skipInstall: true })
+
+    // 1/4: name (an invalid one first)
+    await keys(['-', {}], ['\r', { name: 'return' }], [undefined, { name: 'backspace' }])
+    await keys(...[...'shop'].map(ch => [ch, {}] as [string, {}]), ['\r', { name: 'return' }])
+    // 2/4: template picker opens on the first template; space picks it
+    await keys([' ', { name: 'space' }])
+    // 4/4: confirm
+    await keys(['y', {}])
+    await done
+
+    const out = plain(screen.join(''))
+    expect(out).toContain('Project name  1/4')
+    expect(out).toContain('Cannot start with "." or "-".')
+    expect(out).toContain('Pick a template  2/4')
+    expect(out).toContain('Create project?  4/4')
+    expect(existsSync(join(dir, 'shop', 'src', 'main.ts'))).toBe(true)
+    expect(JSON.parse(read('shop', 'package.json')).description).toContain('template: minimal')
+    expect(process.stdin.listenerCount('keypress')).toBe(0)
+  })
+
+  it('picks the Custom stack from its tab and asks for database and features', async () => {
+    const done = createProject('api', { cwd: dir, skipInstall: true })
+    await keys([undefined, { name: 'left' }], ['\r', { name: 'return' }])   // ← wraps to the Custom tab
+    await keys([undefined, { name: 'down' }], [' ', { name: 'space' }])       // database: SQLite
+    await keys(['\r', { name: 'return' }])                                    // features: defaults
+    await keys(['y', {}])
+    await done
+
+    expect(plain(screen.join(''))).toContain('Database  3/4')
+    expect(existsSync(join(dir, 'api', 'src', 'db', 'connection.ts'))).toBe(true)
+  })
+})

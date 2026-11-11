@@ -1,0 +1,42 @@
+{
+  "name": "@axiljs/scale",
+  "version": "0.3.2",
+  "description": "AxilJS scaling: cluster mode, capacity planner, load generator and multi-process readiness checks",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@axiljs/core": "^0.3.2",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "keywords": [
+    "axiljs",
+    "backend",
+    "javascript",
+    "typescript",
+    "nodejs"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

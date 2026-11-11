@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import * as prompts from '../prompts'
 import { closest } from '../args'
-import { TEMPLATES, TEMPLATE_IDS, findTemplate } from '../templates'
+import { TEMPLATES, TEMPLATE_IDS, TEMPLATE_CATEGORIES, findTemplate } from '../templates'
 import type { ProjectTemplate, TemplateContext } from '../templates'
 
 import fs from 'node:fs'
@@ -132,7 +132,7 @@ function getAxilJSVersion(): string {
 const axilVersion = getAxilJSVersion()
 
 // Range for sibling @axiljs/* packages. The CLI can be published at a newer
-// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.1), so pin to the
+// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.2), so pin to the
 // minor line instead of the CLI's exact patch to keep `npm install` resolvable.
 const axilRange = `^${axilVersion.split('.').slice(0, 2).join('.')}.0`
 
@@ -141,34 +141,56 @@ const axilRange = `^${axilVersion.split('.').slice(0, 2).join('.')}.0`
 // Main
 // ---------------------------------------------------------------------------
 
-export async function createProject(name: string, opts: CreateOptions = {}): Promise<void> {
-  validateProjectName(name)
+/** Directory problems for a project name, or undefined when it is usable. */
+function directoryProblem(name: string, parent: string, force: boolean | undefined): string | undefined {
+  const projectDir = join(parent, name)
+  if (!existsSync(projectDir)) return undefined
+  if (!fs.statSync(projectDir).isDirectory()) return `"${name}" already exists and is not a directory.`
+  const empty = fs.readdirSync(projectDir).length === 0
+  if (!empty && !force) return `Directory "${name}" already exists and is not empty. Use --force to create into it anyway.`
+  return undefined
+}
 
+/** The create flow's four steps, shown as "n/4" on each prompt. */
+const STEP = { name: '1/4', template: '2/4', configure: '3/4', confirm: '4/4' } as const
+
+export async function createProject(nameArg: string | undefined, opts: CreateOptions = {}): Promise<void> {
   if (opts.db !== undefined && !DATABASES.includes(opts.db)) {
     throw new Error(`Invalid database "${opts.db}". Expected one of: ${DATABASES.join(', ')}.`)
-  }
-
-  const projectDir = join(opts.cwd || process.cwd(), name)
-
-  if (existsSync(projectDir)) {
-    const empty = fs.statSync(projectDir).isDirectory() && fs.readdirSync(projectDir).length === 0
-    if (!fs.statSync(projectDir).isDirectory()) {
-      throw new Error(`"${name}" already exists and is not a directory.`)
-    }
-    if (!empty && !opts.force) {
-      throw new Error(`Directory "${name}" already exists and is not empty. Use --force to create into it anyway.`)
-    }
   }
 
   // Prompt only on a TTY and without --yes; otherwise use flags + defaults
   const interactive = opts.interactive ?? (!opts.yes && process.stdin.isTTY === true)
   const startedAt   = Date.now()
+  const parent      = opts.cwd || process.cwd()
+
+  // Fail fast on a bad name given as an argument, before drawing anything
+  if (nameArg !== undefined) {
+    validateProjectName(nameArg)
+    const problem = directoryProblem(nameArg, parent, opts.force)
+    if (problem) throw new Error(problem)
+  } else if (!interactive) {
+    throw new Error('Project name is required.')
+  }
 
   // ── Header ───────────────────────────────────────────────────────────
   ui.title('create', `AxilJS v${axilVersion}`)
-  ui.step(`Creating ${ui.c.bold(name)}`, opts.cwd ? projectDir : `.${sep}${name}`)
 
-  // ── Template ─────────────────────────────────────────────────────────
+  // ── 1. Name ──────────────────────────────────────────────────────────
+  const name = nameArg ?? (await prompts.text({
+    message:     'Project name',
+    placeholder: 'my-api',
+    step:        STEP.name,
+    validate: value => {
+      try { validateProjectName(value) } catch (err: any) { return err.message }
+      return directoryProblem(value.trim(), parent, opts.force)
+    }
+  })).trim()
+  const projectDir = join(parent, name)
+
+  if (nameArg !== undefined) ui.step(`Creating ${ui.c.bold(name)}`, opts.cwd ? projectDir : `.${sep}${name}`)
+
+  // ── 2. Template ──────────────────────────────────────────────────────
   let template = opts.template !== undefined ? resolveTemplate(opts.template) : undefined
   const featureFlagsGiven = [opts.db, opts.auth, opts.ai, opts.ws, opts.queue].some(v => v !== undefined)
 
@@ -179,15 +201,8 @@ export async function createProject(name: string, opts: CreateOptions = {}): Pro
   }
 
   if (!template && interactive && !featureFlagsGiven) {
-    const choice = await prompts.select<string>({
-      message: 'Starter',
-      initial: 'custom',
-      options: [
-        { value: 'custom', label: 'Custom', hint: 'Pick a database and features' },
-        ...TEMPLATES.map(t => ({ value: t.id, label: t.title, hint: t.summary }))
-      ]
-    })
-    if (choice !== 'custom') template = findTemplate(choice)
+    const choice = await pickTemplate()
+    if (choice !== CUSTOM) template = findTemplate(choice)
   }
 
   if (template) {
@@ -195,10 +210,11 @@ export async function createProject(name: string, opts: CreateOptions = {}): Pro
     return
   }
 
-  // ── Features ─────────────────────────────────────────────────────────
+  // ── 3. Configure (custom stack) ──────────────────────────────────────
   const database = opts.db ?? (interactive
     ? await prompts.select<Database>({
         message: 'Database',
+        step:    STEP.configure,
         initial: CREATE_DEFAULTS.database,
         options: [
           { value: 'none',     label: 'None',     hint: 'No database' },
@@ -223,6 +239,7 @@ export async function createProject(name: string, opts: CreateOptions = {}): Pro
   const picked = interactive && askable.length > 0
     ? await prompts.multiselect<Feature>({
         message: 'Features',
+        step:    STEP.configure,
         options: askable,
         initial: askable.filter(f => featureDefaults[f.value]).map(f => f.value)
       })
@@ -243,22 +260,22 @@ export async function createProject(name: string, opts: CreateOptions = {}): Pro
     includeQueue
   }
 
-  // ── Summary ──────────────────────────────────────────────────────────
-  ui.section('Summary')
+  // ── 4. Confirm ───────────────────────────────────────────────────────
+  const on  = ui.c.green(`${ui.sym.tick} on`)
+  const off = ui.muted('off')
 
-  const on  = ui.c.green('on')
-  const off = ui.muted('-')
-
-  ui.keyValue([
+  ui.line()
+  ui.card(name, summaryRows([
+    ['Stack',     'Custom'],
     ['Database',  database === 'none' ? ui.muted('none') : ui.cmd(database)],
     ['Auth',      includeAuth      ? on : off],
     ['AI',        includeAI        ? on : off],
     ['WebSocket', includeWebsocket ? on : off],
-    ['Queue',     includeQueue     ? on : off]
-  ])
+    ['Queue',     includeQueue     ? on : off],
+    ['Location',  ui.muted(opts.cwd ? projectDir : `.${sep}${name}`)]
+  ]), { meta: 'port 3000' })
 
-
-  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true }) : true
+  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true, step: STEP.confirm }) : true
 
   if (!ok) {
     ui.warn('Cancelled.')
@@ -388,6 +405,70 @@ export async function createProject(name: string, opts: CreateOptions = {}): Pro
 // Templates (--template <id>)
 // ---------------------------------------------------------------------------
 
+const CUSTOM = '__custom__'
+
+/** "@axiljs/core, @axiljs/orm" → "core · orm". */
+function shortPackages(packages: string[]): string {
+  return packages.map(p => p.replace(/^@axiljs\//, '')).join(` ${ui.sym.dot} `)
+}
+
+/** Aligned "label  value" rows for a card. */
+function summaryRows(rows: Array<[string, string]>): string[] {
+  const w = Math.max(...rows.map(([k]) => k.length))
+  return rows.map(([k, v]) => `${ui.muted(k.padEnd(w))}  ${v}`)
+}
+
+/** Step 2: browse templates by category (↑↓ ←→, space/enter, / search). */
+async function pickTemplate(): Promise<string> {
+  const options: Array<prompts.BrowseOption<string>> = [
+    ...TEMPLATES.map(t => ({
+      value:    t.id,
+      label:    t.title,
+      hint:     t.summary,
+      group:    t.category as string,
+      keywords: [t.id, ...t.packages, ...t.highlights]
+    })),
+    {
+      value: CUSTOM,
+      label: 'Custom',
+      hint:  'Pick a database and features yourself',
+      group: 'Custom',
+      keywords: ['database', 'sqlite', 'postgres', 'mysql', 'auth', 'websocket', 'queue', 'ai']
+    }
+  ]
+
+  return prompts.browse<string>({
+    message: 'Pick a template',
+    step:    STEP.template,
+    counter: `${TEMPLATES.length} templates`,
+    groups:  [...TEMPLATE_CATEGORIES, 'Custom'],
+    options,
+    initial: TEMPLATES[0]?.id ?? CUSTOM,
+    details: option => {
+      if (option.value === CUSTOM) {
+        return {
+          title: 'Custom',
+          lines: [
+            `${ui.sym.bullet} Choose a database: SQLite, Postgres, MySQL or none`,
+            `${ui.sym.bullet} Toggle auth, WebSocket, queue and AI`,
+            `${ui.sym.bullet} Users module with controller + service`,
+            ui.muted('Same as: axil create <name> --db=<driver> --auth …')
+          ]
+        }
+      }
+      const t = findTemplate(option.value)!
+      return {
+        title: t.title,
+        meta:  `port ${t.port}`,
+        lines: [
+          ...t.highlights.map(h => `${ui.c.green(ui.sym.tick)} ${h}`),
+          ui.muted(shortPackages(t.packages))
+        ]
+      }
+    }
+  })
+}
+
 function resolveTemplate(id: string): ProjectTemplate {
   const found = findTemplate(id)
   if (found) return found
@@ -409,14 +490,15 @@ async function createFromTemplate(
 ): Promise<void> {
   const ctx: TemplateContext = { name, axilRange, cliVersion: axilVersion }
 
-  ui.section('Summary')
-  ui.keyValue([
+  ui.line()
+  ui.card(name, summaryRows([
     ['Template', `${ui.c.bold(template.title)}  ${ui.muted(template.id)}`],
-    ['Packages', template.packages.join(', ')],
-    ['Port',     String(template.port)]
-  ])
+    ['Category', template.category],
+    ['Packages', shortPackages(template.packages)],
+    ['Location', ui.muted(opts.cwd ? projectDir : `.${sep}${name}`)]
+  ]), { meta: `port ${template.port}` })
 
-  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true }) : true
+  const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true, step: STEP.confirm }) : true
   if (!ok) {
     ui.warn('Cancelled.')
     ui.outro()

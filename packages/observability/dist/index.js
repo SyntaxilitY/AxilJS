@@ -3,7 +3,7 @@
  * @axiljs/observability - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.metricsHandler = exports.observabilityMiddleware = exports.Span = exports.Tracer = exports.HealthChecker = exports.Histogram = exports.Gauge = exports.Counter = exports.MetricsRegistry = exports.FileTransport = exports.ConsoleTransport = exports.Logger = void 0;
+exports.getTraceContext = exports.getRequestSpan = exports.metricsHandler = exports.observabilityMiddleware = exports.Span = exports.Tracer = exports.HealthChecker = exports.Histogram = exports.Gauge = exports.Counter = exports.MetricsRegistry = exports.FileTransport = exports.ConsoleTransport = exports.Logger = void 0;
 // Logging
 var logger_1 = require("./logger");
 Object.defineProperty(exports, "Logger", { enumerable: true, get: function () { return logger_1.Logger; } });
@@ -26,4 +26,6 @@ Object.defineProperty(exports, "Span", { enumerable: true, get: function () { re
 var middleware_1 = require("./middleware");
 Object.defineProperty(exports, "observabilityMiddleware", { enumerable: true, get: function () { return middleware_1.observabilityMiddleware; } });
 Object.defineProperty(exports, "metricsHandler", { enumerable: true, get: function () { return middleware_1.metricsHandler; } });
+Object.defineProperty(exports, "getRequestSpan", { enumerable: true, get: function () { return middleware_1.getRequestSpan; } });
+Object.defineProperty(exports, "getTraceContext", { enumerable: true, get: function () { return middleware_1.getTraceContext; } });
 //# sourceMappingURL=index.js.map

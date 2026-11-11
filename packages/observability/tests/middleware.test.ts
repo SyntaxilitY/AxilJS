@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { observabilityMiddleware, metricsHandler } from '../src/middleware';
+import { observabilityMiddleware, metricsHandler, getRequestSpan, getTraceContext } from '../src/middleware';
 import { MetricsRegistry } from '../src/metrics';
-import { Tracer, SpanData } from '../src/tracing';
+import { Tracer, Span, SpanData } from '../src/tracing';
 
 const TRACE = '4bf92f3577b34da6a3ce929d0e0e4736';
 const PARENT = '00f067aa0ba902b7';
@@ -153,5 +153,46 @@ describe('metricsHandler', () => {
     await metricsHandler(metrics)(fakeReq(), res, () => {});
     expect(res.headers['Content-Type']).toBe('text/plain; version=0.0.4; charset=utf-8');
     expect(res.body).toBe('# HELP c_total C\n# TYPE c_total counter\nc_total 1\n');
+  });
+});
+
+describe('observabilityMiddleware span exposure', () => {
+  it('exposes the server span on req.locals so handlers can start child spans', async () => {
+    const tracer = new Tracer({ serviceName: 'api' });
+    const mw = observabilityMiddleware({ tracer });
+    const req = fakeReq({ headers: { traceparent: `00-${TRACE}-${PARENT}-01` } });
+    const res = fakeRes();
+    run(mw, req, res);
+
+    // What a handler would do
+    const server = req.locals.span as Span;
+    expect(server).toBeInstanceOf(Span);
+    expect(getRequestSpan(req)).toBe(server);
+    expect(server.traceId).toBe(TRACE);
+    expect(req.locals.tracer).toBe(tracer);
+    expect(getTraceContext(req)).toEqual({ traceId: TRACE, spanId: server.spanId });
+
+    const child = tracer.startSpan('db.query', { parent: server });
+    expect(child.traceId).toBe(server.traceId);
+    const headers = tracer.injectContext(child);
+    expect(headers.traceparent).toBe(`00-${TRACE}-${child.spanId}-01`);
+    tracer.exportSpan(child.end());
+
+    await tracer.trace('cache.get', async () => 1, getRequestSpan(req));
+    res.raw.end();
+
+    const spans = tracer.getSpans();
+    expect(spans).toHaveLength(3);
+    expect(spans.every(s => s.traceId === TRACE)).toBe(true);
+    const serverData = spans.find(s => s.name === 'http.request')!;
+    expect(spans.filter(s => s.name !== 'http.request').every(s => s.parentSpanId === serverData.spanId)).toBe(true);
+  });
+
+  it('leaves req.locals untouched without a tracer', () => {
+    const req = fakeReq();
+    run(observabilityMiddleware({ metrics: new MetricsRegistry() }), req, fakeRes());
+    expect(req.locals.span).toBeUndefined();
+    expect(getRequestSpan(req)).toBeUndefined();
+    expect(getTraceContext(req)).toBeUndefined();
   });
 });

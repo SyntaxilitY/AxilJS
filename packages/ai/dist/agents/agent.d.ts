@@ -23,6 +23,7 @@
  */
 import { AIProvider, Message, ToolCall } from '../types';
 import { Tool } from './tool';
+import { AILogger } from '../logger';
 export interface AgentOptions {
     provider: AIProvider;
     tools: Tool[];
@@ -31,6 +32,7 @@ export interface AgentOptions {
     model?: string;
     temperature?: number;
     onStep?: (step: AgentStep) => void;
+    logger?: AILogger | false;
 }
 export interface AgentStep {
     iteration: number;
@@ -57,6 +59,7 @@ export interface AgentResult {
 export declare class Agent {
     private provider;
     private tools;
+    private logger;
     private options;
     constructor(options: AgentOptions);
     /**

@@ -61,6 +61,7 @@ class CircuitBreaker extends events_1.EventEmitter {
     activeCount = 0;
     waiters = [];
     options;
+    logger;
     constructor(name, options = {}) {
         super();
         this.name = name;
@@ -75,6 +76,7 @@ class CircuitBreaker extends events_1.EventEmitter {
             maxConcurrent: options.maxConcurrent ?? Infinity,
             maxQueue: options.maxQueue ?? 0
         };
+        this.logger = options.logger;
     }
     // ─── Execute ─────────────────────────────────────────────────────────────────
     /**
@@ -272,8 +274,17 @@ class CircuitBreaker extends events_1.EventEmitter {
             this.nextAttemptTime = Date.now() + this.options.resetTimeoutMs;
         }
         if (previousState !== newState) {
-            console.log(`\x1b[33m[CircuitBreaker]\x1b[0m '${this.name}': ` +
-                `${previousState} → ${newState}`);
+            const msg = `'${this.name}': ${previousState} → ${newState}`;
+            if (this.logger === undefined) {
+                console.log(`\x1b[33m[CircuitBreaker]\x1b[0m ${msg}`);
+            }
+            else if (this.logger) {
+                // Opening is the noteworthy transition; recovery is informational
+                if (newState === 'OPEN')
+                    this.logger.warn(`[CircuitBreaker] ${msg}`);
+                else
+                    this.logger.info(`[CircuitBreaker] ${msg}`);
+            }
             this.emit('stateChange', newState, previousState);
         }
     }

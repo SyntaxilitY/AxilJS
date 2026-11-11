@@ -48,6 +48,20 @@ app.use(rateLimit({ store: redisStore }))
 Store errors are passed to `next(err)`. `store.reset(key)` clears a client
 (the default key is `req.ip`).
 
+## Custom keys
+
+`keyGenerator` and `skip` receive the full request (`ip`, `headers`, `params`,
+`path`, `method`, `locals`, ...), so a route-level limiter can key on params:
+
+```typescript
+// One budget per webhook source, regardless of caller IP
+app.post('/hooks/:source', rateLimit({
+  max: 30,
+  keyGenerator: req => `webhook:${req.params.source}`,
+  skip: req => req.headers['x-internal'] === '1'
+}), handleWebhook)
+```
+
 ## Testing
 
 ```bash

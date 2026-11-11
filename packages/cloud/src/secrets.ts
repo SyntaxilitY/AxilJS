@@ -29,14 +29,26 @@ export class SecretsManager {
         throw new Error('encryptionKey must be a 64-character hex string (32 bytes).');
       }
     } else {
-      // Auto-generate a random key for development
+      // Auto-generate a random key for development. Warn on first use, not
+      // here: the module-level `secrets` singleton is built on import, and
+      // apps that never touch secrets shouldn't see the warning.
       this.key = randomBytes(32);
-      console.warn(
-        '\x1b[33m[@axiljs/cloud]\x1b[0m SecretsManager: no encryption key provided. ' +
-        'A random key was generated. Secrets will not survive restarts. ' +
-        'Set encryptionKey for production.'
-      );
+      this.ephemeralKey = true;
     }
+  }
+
+  private ephemeralKey = false;
+  private warned = false;
+
+  /** Warn once that secrets are encrypted with a throwaway key. */
+  private warnEphemeralKey(): void {
+    if (!this.ephemeralKey || this.warned) return;
+    this.warned = true;
+    console.warn(
+      '\x1b[33m[@axiljs/cloud]\x1b[0m SecretsManager: no encryption key provided. ' +
+      'A random key was generated. Secrets will not survive restarts. ' +
+      'Set encryptionKey for production.'
+    );
   }
 
   /**
@@ -51,6 +63,7 @@ export class SecretsManager {
    * Encrypt and store a secret.
    */
   async set(name: string, plaintext: string): Promise<void> {
+    this.warnEphemeralKey();
     const iv = randomBytes(16);
     const cipher = createCipheriv('aes-256-gcm', this.key, iv);
 

@@ -21,6 +21,8 @@
  *     type run in registration order
  *   - it.skip / it.only / describe.skip / describe.only (+ xit/fit,
  *     xdescribe/fdescribe)
+ *   - hooks outside any describe() apply to every test in that file
+ *     (outermost: they run before / after the describe-level hooks)
  *   - per-test timeout: it(name, fn, timeoutMs) (default 5000 ms)
  *   - it.each(table)(name, fn) / describe.each(table)(name, fn)
  */
@@ -49,6 +51,17 @@ interface TestSuite {
   afterEach: HookFn[];
   skip: boolean;
   only: boolean;
+  // Invisible grouping suite (the root / a file scope): no name, no indent
+  hidden: boolean;
+  // Top-level items only: user source files on the registration call stack
+  files?: string[];
+}
+
+// A hook registered outside any describe(), with the file that registered it
+interface TopLevelHook {
+  type: 'beforeAll' | 'afterAll' | 'beforeEach' | 'afterEach';
+  fn: HookFn;
+  file: string | undefined;
 }
 
 export interface TestResult {
@@ -93,12 +106,16 @@ function createSuite(name: string, parent: TestSuite | null): TestSuite {
     beforeEach: [],
     afterEach: [],
     skip: false,
-    only: false
+    only: false,
+    hidden: false
   };
 }
 
 // Invisible root; top-level describe() blocks are its children
 let root: TestSuite = createSuite('', null);
+
+// Hooks registered outside any describe() (scoped to their file at run time)
+let topLevelHooks: TopLevelHook[] = [];
 
 // Currently active suite (set by describe())
 let currentSuite: TestSuite | null = null;
@@ -109,7 +126,83 @@ let currentSuite: TestSuite | null = null;
  */
 export function resetTests(): void {
   root = createSuite('', null);
+  topLevelHooks = [];
   currentSuite = null;
+}
+
+// ─── Call-site files (scopes top-level hooks to their test file) ──────────────
+
+const FRAME_FILE = /\(?((?:file:\/\/)?[^\s()]+?):\d+:\d+\)?\s*$/;
+
+/**
+ * Source files on the current call stack, innermost first, excluding this
+ * module, Node internals and node_modules (loaders such as ts-node/vitest).
+ */
+function callerFiles(): string[] {
+  const previousLimit = Error.stackTraceLimit;
+  Error.stackTraceLimit = 50;
+  const stack = new Error().stack ?? '';
+  Error.stackTraceLimit = previousLimit;
+
+  let ownFile: string | undefined;
+  const files: string[] = [];
+  for (const line of stack.split('\n').slice(1)) {
+    const match = FRAME_FILE.exec(line.trim());
+    if (!match) continue;
+    const file = match[1].replace(/^file:\/\//, '').replace(/[?#].*$/, '');
+    // The first frame is callerFiles() itself, i.e. this module
+    if (ownFile === undefined) { ownFile = file; continue; }
+    if (file === ownFile || file.startsWith('node:') || file.startsWith('internal/')) continue;
+    if (/[\\/]node_modules[\\/]/.test(file)) continue;
+    if (!files.includes(file)) files.push(file);
+  }
+  return files;
+}
+
+/**
+ * Root children grouped per file: every file with top-level hooks gets an
+ * invisible suite carrying those hooks around that file's top-level items.
+ * Hooks whose file can't be determined apply to every item.
+ */
+function buildTree(): TestSuite {
+  if (topLevelHooks.length === 0) return root;
+
+  const tree = createSuite('', null);
+  tree.hidden = true;
+  const scopes = new Map<string, TestSuite>();
+
+  for (const hook of topLevelHooks) {
+    if (hook.file === undefined) {
+      tree[hook.type].push(hook.fn);
+      continue;
+    }
+    let scope = scopes.get(hook.file);
+    if (!scope) {
+      scope = createSuite('', tree);
+      scope.hidden = true;
+      scopes.set(hook.file, scope);
+    }
+    scope[hook.type].push(hook.fn);
+  }
+
+  const placed = new Set<TestSuite>();
+  for (const item of root.items) {
+    const files = item.kind === 'suite' ? item.suite.files ?? [] : [];
+    const file = files.find(f => scopes.has(f));
+    const scope = file === undefined ? undefined : scopes.get(file)!;
+    if (!scope) {
+      if (item.kind === 'suite') item.suite.parent = tree;
+      tree.items.push(item);
+      continue;
+    }
+    if (!placed.has(scope)) {
+      placed.add(scope);
+      tree.items.push({ kind: 'suite', suite: scope });
+    }
+    if (item.kind === 'suite') item.suite.parent = scope;
+    scope.items.push(item);
+  }
+  return tree;
 }
 
 // ─── Name formatting (it.each) ────────────────────────────────────────────────
@@ -175,6 +268,7 @@ function registerSuite(
   const suite = createSuite(name, parent);
   suite.skip = !!flags.skip;
   suite.only = !!flags.only;
+  if (!currentSuite) suite.files = callerFiles();
   parent.items.push({ kind: 'suite', suite });
 
   const previousSuite = currentSuite;
@@ -327,24 +421,34 @@ export function fdescribe(name: string, fn: () => void): void {
   registerSuite(name, fn, { only: true });
 }
 
+function registerHook(type: TopLevelHook['type'], fn: HookFn): void {
+  if (currentSuite) {
+    currentSuite[type].push(fn);
+    return;
+  }
+  // Top level: applies to every test registered from the same file
+  topLevelHooks.push({ type, fn, file: callerFiles()[0] });
+}
+
 /**
  * Setup hooks. Several hooks of the same type may be registered per suite;
- * they run in registration order. Hooks outside any describe() are ignored.
+ * they run in registration order. Hooks outside any describe() apply to every
+ * test in the file that registered them, outside the describe-level hooks.
  */
 export function beforeAll(fn: HookFn): void {
-  if (currentSuite) currentSuite.beforeAll.push(fn);
+  registerHook('beforeAll', fn);
 }
 
 export function afterAll(fn: HookFn): void {
-  if (currentSuite) currentSuite.afterAll.push(fn);
+  registerHook('afterAll', fn);
 }
 
 export function beforeEach(fn: HookFn): void {
-  if (currentSuite) currentSuite.beforeEach.push(fn);
+  registerHook('beforeEach', fn);
 }
 
 export function afterEach(fn: HookFn): void {
-  if (currentSuite) currentSuite.afterEach.push(fn);
+  registerHook('afterEach', fn);
 }
 
 // ─── Test Runner ──────────────────────────────────────────────────────────────
@@ -374,7 +478,8 @@ function toError(err: unknown): Error {
 
 function suitePath(suite: TestSuite): string[] {
   const names: string[] = [];
-  for (let s: TestSuite | null = suite; s && s !== root; s = s.parent) {
+  for (let s: TestSuite | null = suite; s; s = s.parent) {
+    if (s.parent === null || s.hidden) continue;
     names.unshift(s.name);
   }
   return names;
@@ -407,7 +512,7 @@ export async function runTestsWithResults(options: RunOptions = {}): Promise<Run
   let totalSkipped = 0;
 
   const startTime = Date.now();
-  const tree = root;
+  const tree = buildTree();
 
   // Check if any tests or suites use 'only' mode
   const onlyMode = hasOnly(tree);
@@ -477,7 +582,7 @@ export async function runTestsWithResults(options: RunOptions = {}): Promise<Run
     const skipped = inSkipped || suite.skip;
     const only = inOnly || suite.only;
     const indent = '  '.repeat(depth);
-    const isRoot = suite === tree;
+    const isRoot = suite === tree || suite.hidden;
 
     if (!isRoot) log(`${indent}\x1b[1m${suite.name}\x1b[0m`);
 

@@ -270,3 +270,42 @@ describe('@OnEvent decorator', () => {
     expect(bus.getHandlerCount('a')).toBe(0);
   });
 });
+
+describe('registerEventHandlers logger option', () => {
+  function decorated() {
+    class Svc {
+      onCreated(_e: axilEvent) {}
+    }
+    OnEvent('user.created')(Svc.prototype, 'onCreated');
+    OnEvent('a')(Svc.prototype, 'missing');
+    return new Svc();
+  }
+
+  it('logger: false prints nothing but still registers handlers', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bus = new EventBus();
+    registerEventHandlers(decorated(), bus, { logger: false });
+    expect(bus.getHandlerCount('user.created')).toBe(1);
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('a custom logger receives plain-text messages', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    registerEventHandlers(decorated(), new EventBus(), { logger });
+    expect(logger.info).toHaveBeenCalledWith("[AxilJS Events] Registered: Svc.onCreated → 'user.created'");
+    expect(logger.warn).toHaveBeenCalledWith("[AxilJS Events] 'missing' is not a function on Svc");
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('defaults to the console (unchanged behaviour)', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    registerEventHandlers(decorated(), new EventBus());
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('Registered: Svc.onCreated'));
+  });
+});

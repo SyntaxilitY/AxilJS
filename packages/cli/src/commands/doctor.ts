@@ -100,10 +100,11 @@ export async function runDoctor(): Promise<void> {
   const passed = checks.filter(c => c.pass).length
   const failed = checks.filter(c => !c.pass).length
 
-  ui.table(checks.map(check => [
-    `${check.pass ? ui.c.green(ui.sym.tick) : ui.c.red(ui.sym.cross)} ${check.name}`,
-    check.pass ? ui.muted(check.message) : ui.c.yellow(check.message)
-  ]), { gap: 2 })
+  const nameWidth = Math.max(...checks.map(c => c.name.length))
+  ui.card('Diagnostics', checks.map(check =>
+    `${check.pass ? ui.c.green(ui.sym.tick) : ui.c.red(ui.sym.cross)} ${check.name.padEnd(nameWidth)}  ` +
+    (check.pass ? ui.muted(check.message) : ui.c.yellow(check.message))
+  ), { meta: `${passed}/${checks.length} passed`, tone: failed > 0 ? ui.c.yellow : ui.muted })
 
   const summary = `${passed}/${checks.length} checks passed`
   if (failed > 0) ui.failed(summary, `${failed} issue(s) found`)

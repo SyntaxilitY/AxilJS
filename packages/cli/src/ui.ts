@@ -104,18 +104,24 @@ function hex(value: string): RGB {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-/** AxilJS brand gradient: cyan → indigo. */
-const BRAND: RGB[] = [hex('#22d3ee'), hex('#818cf8')]
+/** AxilJS brand gradient, from the logo: orange → red. */
+const BRAND: RGB[] = [hex('#FD8702'), hex('#ED1010')]
 
 /** Truecolor foreground; falls back to the given 16-colour paint. */
-export function rgb(colour: string, fallback: Paint = c.cyan): Paint {
+export function rgb(colour: string, fallback: Paint = c.yellow): Paint {
   const [r, g, b] = hex(colour)
   return text => supportsTrueColor ? `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m` : fallback(text)
 }
 
-/** Per-character colour gradient (bold). Plain brand cyan without truecolor. */
+/**
+ * Accent colour for active/interactive UI (rail markers, cursors, tabs):
+ * the logo's orange, yellow on 16-colour terminals.
+ */
+export const accent: Paint = text => supportsTrueColor ? rgb('#FD8702')(text) : c.yellow(text)
+
+/** Per-character colour gradient (bold). Plain brand colour without truecolor. */
 export function gradient(text: string, stops: RGB[] = BRAND): string {
-  if (!supportsTrueColor) return c.bold(c.cyan(text))
+  if (!supportsTrueColor) return c.bold(accent(text))
   const chars = Array.from(text)
   const last = Math.max(1, chars.length - 1)
   const out = chars.map((ch, i) => {
@@ -134,7 +140,7 @@ export function gradient(text: string, stops: RGB[] = BRAND): string {
 export type Tone = 'brand' | 'success' | 'warn' | 'error' | 'info' | 'muted'
 
 const BADGE_TONES: Record<Tone, { bg: string; fg: string; basic: [number, number] }> = {
-  brand:   { bg: '#22d3ee', fg: '#04141a', basic: [46, 30] },
+  brand:   { bg: '#FD8702', fg: '#1c0a00', basic: [43, 30] },
   success: { bg: '#4ade80', fg: '#052e16', basic: [42, 30] },
   warn:    { bg: '#facc15', fg: '#1f1600', basic: [43, 30] },
   error:   { bg: '#f87171', fg: '#2a0606', basic: [41, 97] },
@@ -160,10 +166,10 @@ export function link(url: string, text: string = url): string {
   return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`
 }
 
-/** Brand colour (AxilJS cyan) — titles, commands, highlights. */
-export const brand: Paint = text => c.bold(c.cyan(text))
+/** Brand colour (AxilJS orange) — titles, highlights. */
+export const brand: Paint = text => c.bold(accent(text))
 /** A command or code fragment the user can type. */
-export const cmd: Paint = text => rgb('#67e8f9')(text)
+export const cmd: Paint = text => rgb('#FDBA74')(text)
 /** A file system path. */
 export const path: Paint = text => c.underline(String(text))
 /** De-emphasised supporting text. */
@@ -306,7 +312,7 @@ export function title(name: string, summary?: string): void {
 export function section(name: string): void {
   if (railOpen) {
     out(`  ${bar()}`)
-    out(`  ${c.cyan(rail.active)}  ${c.bold(name)}`)
+    out(`  ${accent(rail.active)}  ${c.bold(name)}`)
     return
   }
   out()
@@ -400,6 +406,54 @@ export function table(rows: string[][], options: { indent?: number; gap?: number
 /** "label   value" pairs with aligned labels. */
 export function keyValue(pairs: Array<[string, string]>): void {
   table(pairs.map(([k, v]) => [muted(k), v]), { indent: 4, gap: 2 })
+}
+
+// ============================================================================
+// CARDS
+// ============================================================================
+
+/** Clip to `size` visible columns (plain text when clipped). */
+function fit(text: string, size: number): string {
+  if (width(text) <= size) return text
+  return Array.from(stripAnsi(text)).slice(0, Math.max(0, size - 1)).join('') + '…'
+}
+
+/**
+ * Rounded card as plain lines (no rail prefix), for prompts and print():
+ *   ╭─ REST API ─────────── port 3001 ─╮
+ *   │ • ORM + migrations (SQLite)      │
+ *   ╰──────────────────────────────────╯
+ * `width` is the outer width; content is clipped to fit.
+ */
+export function cardLines(
+  heading: string,
+  lines: string[],
+  options: { meta?: string; width?: number; tone?: Paint } = {}
+): string[] {
+  const tone = options.tone ?? muted
+  const contentWidth = Math.max(
+    width(heading) + (options.meta ? width(options.meta) + 3 : 0) + 2,
+    ...lines.map(l => width(l))
+  )
+  const inner = options.width ? Math.max(10, options.width - 4) : contentWidth
+  const head = fit(heading, inner - 2)
+  const meta = options.meta ? fit(options.meta, Math.max(0, inner - width(head) - 4)) : ''
+  const fill = Math.max(1, inner - width(head) - (meta ? width(meta) + 3 : 0) - 1)
+  const top = `${tone(`${sym.tl}${sym.line} `)}${c.bold(head)}${tone(` ${sym.line.repeat(fill)}`)}` +
+    (meta ? `${tone(' ')}${muted(meta)}${tone(` ${sym.line}${sym.tr}`)}` : tone(sym.tr))
+  return [
+    top,
+    ...lines.map(l => `${tone(sym.v)} ${pad(fit(l, inner), inner)} ${tone(sym.v)}`),
+    tone(`${sym.bl}${sym.line.repeat(inner + 2)}${sym.br}`)
+  ]
+}
+
+/** Print a card on the rail (or indented without one). The rail stays open. */
+export function card(heading: string, lines: string[], options: { meta?: string; width?: number; tone?: Paint } = {}): void {
+  const maxWidth = Math.max(30, Math.min(options.width ?? 72, (process.stdout.columns || 80) - 8))
+  const natural = cardLines(heading, lines, { ...options, width: undefined })
+  const w = options.width !== undefined || width(natural[0]) > maxWidth ? maxWidth : undefined
+  for (const l of cardLines(heading, lines, { ...options, width: w })) out(railLine(l))
 }
 
 // ============================================================================

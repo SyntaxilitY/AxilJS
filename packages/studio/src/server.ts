@@ -9,11 +9,16 @@ import { resolve } from 'path'
 import { URL } from 'url'
 
 import { RouteCollector }              from './collectors/route-collector.js'
-import { DbCollector }                 from './collectors/db-collector.js'
+import { DbCollector, StudioInputError } from './collectors/db-collector.js'
 import { generatePostmanCollection }   from './generators/postman.js'
 import { generateInsomniaCollection }  from './generators/insomnia.js'
 import { generateHTML }                from './ui/template.js'
-import type { StudioConfig, StudioData } from './types.js'
+import type { StudioConfig, StudioData, RowFilter, RowQuery } from './types.js'
+
+const PROXY_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+/** Headers the proxy never forwards. */
+const HOP_BY_HOP = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'upgrade', 'proxy-authorization', 'te', 'trailer', 'expect'])
 
 async function generateQR(text: string): Promise<string> {
   try {
@@ -458,8 +463,23 @@ export class StudioServer {
       // ── Table rows ──
       if (path.startsWith('/api/studio/table/')) {
         const tableName = decodeURIComponent(path.replace('/api/studio/table/', ''))
-        const limit     = Number(url.searchParams.get('limit') ?? 50)
-        const offset    = Number(url.searchParams.get('offset') ?? 0)
+        const p         = url.searchParams
+        let filters: RowFilter[] | undefined
+        try {
+          filters = p.has('filter') ? JSON.parse(p.get('filter')!) : undefined
+          if (filters !== undefined && !Array.isArray(filters)) throw new Error('not an array')
+        } catch {
+          this.json(res, { error: 'filter must be a JSON array of { column, op, value }', rows: [], total: 0 }, 400)
+          return
+        }
+        const query: RowQuery = {
+          limit:   Number(p.get('limit') ?? 50),
+          offset:  Number(p.get('offset') ?? 0),
+          sort:    p.get('sort') ?? undefined,
+          dir:     (p.get('dir') ?? undefined) as RowQuery['dir'],
+          search:  p.get('q') ?? undefined,
+          filters
+        }
 
         if (!this.dbCollector && Date.now() - this.lastConnectAttempt > 2000) {
           // Try connecting again — maybe the file exists now (throttled,
@@ -472,8 +492,26 @@ export class StudioServer {
           return
         }
 
-        const result = await this.dbCollector.getTableRows(tableName, limit, offset)
-        this.json(res, result)
+        try {
+          this.json(res, await this.dbCollector.getTableRows(tableName, query))
+        } catch (err: any) {
+          if (err instanceof StudioInputError) this.json(res, { error: err.message, rows: [], total: 0 }, 400)
+          else throw err
+        }
+        return
+      }
+
+      // ── Schema: tables + foreign keys + indexes ──
+      if (path === '/api/studio/schema') {
+        if (!this.dbCollector && Date.now() - this.lastConnectAttempt > 2000) await this.connectToDatabase()
+        const tables = this.dbCollector ? await this.dbCollector.collectSchema() : []
+        this.json(res, { driver: this.dbCollector ? this.config.dbDriver ?? null : null, tables })
+        return
+      }
+
+      // ── Request proxy: try-it calls to the app (no CORS, full response headers) ──
+      if (path === '/api/studio/proxy' && method === 'POST') {
+        await this.handleProxy(req, res)
         return
       }
 
@@ -574,9 +612,96 @@ export class StudioServer {
     }
   }
 
-  private json(res: ServerResponse, data: unknown): void {
+  /**
+   * POST /api/studio/proxy { method, path, query?, headers?, body? }
+   * Sends the request to the app (and only the app: the target origin is
+   * fixed to appUrl) and returns status, headers, body, time and size.
+   */
+  private async handleProxy(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // A JSON content type forces a CORS preflight, which only local origins pass
+    if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) {
+      this.json(res, { error: 'Content-Type must be application/json' }, 415)
+      return
+    }
+    const raw = await this.readBody(req, this.config.maxBodyBytes ?? 1024 * 1024)
+    if (raw === null) {
+      this.json(res, { error: 'Request body too large' }, 413)
+      return
+    }
+
+    let input: any
+    try { input = JSON.parse(raw) } catch {
+      this.json(res, { error: 'Body must be JSON' }, 400)
+      return
+    }
+
+    const verb = String(input?.method ?? '').toUpperCase()
+    if (!PROXY_METHODS.includes(verb)) {
+      this.json(res, { error: `method must be one of ${PROXY_METHODS.join(', ')}` }, 400)
+      return
+    }
+    const target = typeof input.path === 'string' && input.path.startsWith('/') && !input.path.startsWith('//')
+      ? new URL(input.path, this.appOrigin())
+      : null
+    if (!target || target.origin !== this.appOrigin()) {
+      this.json(res, { error: 'path must be an absolute path on the app, e.g. "/users/1"' }, 400)
+      return
+    }
+    if (input.query && typeof input.query === 'object') {
+      for (const [k, v] of Object.entries(input.query)) {
+        if (k) target.searchParams.append(k, String(v ?? ''))
+      }
+    }
+
+    const headers: Record<string, string> = {}
+    if (input.headers && typeof input.headers === 'object') {
+      for (const [k, v] of Object.entries(input.headers)) {
+        const name = k.trim().toLowerCase()
+        if (!name || HOP_BY_HOP.has(name) || !/^[!#$%&'*+.^_`|~0-9a-z-]+$/.test(name)) continue
+        headers[name] = String(v ?? '')
+      }
+    }
+    const body = verb === 'GET' || verb === 'HEAD' || input.body === undefined || input.body === null
+      ? undefined
+      : String(input.body)
+
+    const started = performance.now()
+    try {
+      const response = await fetch(target, {
+        method:   verb,
+        headers,
+        body,
+        redirect: 'manual',
+        signal:   AbortSignal.timeout(30_000)
+      })
+      const buf = Buffer.from(await response.arrayBuffer())
+      const limit = 5 * 1024 * 1024
+      this.json(res, {
+        status:     response.status,
+        statusText: response.statusText,
+        headers:    Object.fromEntries(response.headers.entries()),
+        body:       buf.subarray(0, limit).toString('utf8'),
+        truncated:  buf.length > limit,
+        timeMs:     Math.round(performance.now() - started),
+        size:       buf.length,
+        url:        target.pathname + target.search
+      })
+    } catch (err: any) {
+      const reason = err?.name === 'TimeoutError'
+        ? 'The app did not answer within 30 s'
+        : `Could not reach the app at ${this.appOrigin()} (${err?.cause?.code ?? err?.message ?? 'error'}). Is it running?`
+      this.json(res, { error: reason, timeMs: Math.round(performance.now() - started) }, 502)
+    }
+  }
+
+  /** Origin of the app Studio inspects, e.g. http://localhost:3000. */
+  private appOrigin(): string {
+    return `http://localhost:${this.config.appPort}`
+  }
+
+  private json(res: ServerResponse, data: unknown, status = 200): void {
     const body = JSON.stringify(data)
-    res.writeHead(200, {
+    res.writeHead(status, {
       'Content-Type':   'application/json',
       'Content-Length':  Buffer.byteLength(body)
     })

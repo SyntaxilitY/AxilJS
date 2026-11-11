@@ -7,6 +7,6 @@ export { expect, AssertionError } from './assertions/expect';
 export type { AsyncAssertions } from './assertions/expect';
 export { fn, spyOn, isMockFunction } from './mock/mock';
 export type { MockFunction, MockState, MockResult } from './mock/mock';
-export { TestClient, createTestClient } from './http/test-client';
+export { TestClient, TestRequest, createTestClient } from './http/test-client';
 export type { TestResponse } from './http/test-client';
 //# sourceMappingURL=index.d.ts.map

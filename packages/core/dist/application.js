@@ -11,8 +11,11 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Application = void 0;
+exports.coreVersion = coreVersion;
 exports.parseByteSize = parseByteSize;
 const http_1 = require("http");
+const fs_1 = require("fs");
+const path_1 = require("path");
 const common_1 = require("@axiljs/common");
 const request_1 = require("./http/request");
 const response_1 = require("./http/response");
@@ -30,6 +33,34 @@ const KNOWN_METHODS = [
     'DELETE',
     'OPTIONS'
 ];
+let cachedVersion;
+/**
+ * The installed @axiljs/core version, read from its package.json.
+ * Resolved relative to this file (src/ or dist/ are both one level below the
+ * package root); falls back to 'unknown' if it can't be read.
+ * @internal
+ */
+function coreVersion() {
+    if (cachedVersion !== undefined)
+        return cachedVersion;
+    cachedVersion = 'unknown';
+    const dir = typeof __dirname === 'string' ? __dirname : '';
+    if (!dir)
+        return cachedVersion;
+    for (const candidate of [(0, path_1.join)(dir, '..', 'package.json'), (0, path_1.join)(dir, '..', '..', 'package.json')]) {
+        try {
+            const pkg = JSON.parse((0, fs_1.readFileSync)(candidate, 'utf-8'));
+            if (pkg && pkg.name === '@axiljs/core' && typeof pkg.version === 'string') {
+                cachedVersion = pkg.version;
+                break;
+            }
+        }
+        catch {
+            // Not readable here - try the next candidate
+        }
+    }
+    return cachedVersion;
+}
 /**
  * Parse a size such as '1mb', '512kb', '100b' or '2048' into bytes.
  * @internal
@@ -306,8 +337,10 @@ class Application {
                 // Report the bound port (differs from listenPort when it was 0)
                 const address = this.server?.address();
                 const boundPort = address && typeof address === 'object' ? address.port : listenPort;
-                // Print startup banner
-                this.printBanner(boundPort, listenHost);
+                // Print startup banner unless logging is off or running under tests
+                if (this.config.logging !== false && this.config.env !== 'test') {
+                    this.printBanner(boundPort, listenHost);
+                }
                 resolve({ port: boundPort, host: listenHost });
             });
         });
@@ -366,7 +399,7 @@ class Application {
         console.log('\x1b[36m\x1b[1m ██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║\x1b[0m');
         console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝\x1b[0m');
         console.log('');
-        console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`);
+        console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv${coreVersion()}\x1b[0m`);
         console.log('');
         console.log(`  \x1b[32m✓\x1b[0m Server running`);
         console.log(`  \x1b[32m✓\x1b[0m http://${host}:${port}`);

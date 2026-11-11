@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/SyntaxilitY/AxilJS-Backend-Ecosystem/main/assets/logo-mark-128.png" alt="AxilJS logo" width="64" height="64">
+</p>
+
 # @axiljs/cli
 
 The official command-line interface for [AxilJS](https://github.com/SyntaxilitY/AxilJS).
@@ -15,7 +19,8 @@ npm install -g @axiljs/cli
 ### Project Commands
 
 ```bash
-axil create <name>          # Create a new AxilJS project
+axil create [name]          # Create a project (interactive template picker)
+axil capacity               # Check capacity against axil.scaling.json
 
 axil generate <kind> <name> # Generate module/controller/service/entity/migration (alias: g)
 
@@ -43,14 +48,63 @@ a suggestion, e.g. `Unknown flag '--forse'. Did you mean --force?`.
 ### `axil create`
 
 ```bash
-axil create my-api                                   # interactive prompts (TTY)
+axil create                                          # interactive: name → template → confirm
+axil create my-api                                   # interactive, name given
+axil create my-api --template rest-api               # straight from a template (-t)
 axil create my-api --yes                             # accept all defaults
 axil create my-api --db=sqlite --auth --ws --skip-install
 axil create my-api -y --db postgres --no-auth --queue --force
 ```
 
+On a terminal, `axil create` walks through four steps:
+
+```
+┌  axil create  AxilJS v0.3.2
+│
+◇  Project name
+│  my-api
+│
+◆  Pick a template  2/4   10 templates
+│   Start   APIs   Realtime   Background   AI   Production   Custom
+│          ──────
+│  ❯ REST API          CRUD API with SQLite, JWT auth, pagination
+│    SaaS API          Multi-tenant API: flags, quotas, audit log
+│
+│   ╭─ REST API ──────────────────────────────── port 3001 ─╮
+│   │ ✔ ORM + migrations on SQLite                          │
+│   │ ✔ Register / login with JWT and scrypt                │
+│   ╰───────────────────────────────────────────────────────╯
+└  ↑↓ move · ←→ category · space/enter select · / search
+```
+
+| Key | In the template picker |
+| --- | --- |
+| `↑` `↓` | Move; flows into the next/previous category at the ends |
+| `←` `→` / `tab` | Jump between categories |
+| `space` / `enter` | Pick the highlighted template |
+| `/` | Search all templates by name, description, packages; `esc` leaves search |
+| `esc` / `ctrl+c` | Cancel |
+
+**Custom** (last tab) asks for a database and features instead of using a template.
+
+| Template | Category | What you get |
+| --- | --- | --- |
+| `minimal` | Start | Routes, validation, CORS and tests; nothing else |
+| `rest-api` | APIs | CRUD on SQLite (ORM + migrations), JWT auth, pagination, filtering |
+| `saas-api` | APIs | Multi-tenant: tenant isolation, roles, feature flags, quotas, audit log |
+| `realtime-chat` | Realtime | WebSocket rooms, presence, history, JWT on connect, browser demo |
+| `live-dashboard` | Realtime | SSE live metrics, Prometheus `/metrics`, health checks, HTML dashboard |
+| `background-jobs` | Background | Queue workers with retries, job status API, cron scheduler, events |
+| `webhook-receiver` | Background | HMAC-verified webhooks, replay protection, idempotency, async processing |
+| `ai-assistant` | AI | Chat + streaming, RAG over your documents, tool-using agent, any provider |
+| `microservice` | Production | Circuit breaker, retries, timeouts, tracing, metrics, readiness |
+| `high-scale-api` | Production | Cluster mode, `axil.scaling.json`, request context, redaction, audit |
+
+Every template's generated project type-checks under `strict` and ships with its own passing tests (`npm test`).
+
 | Flag | Default | Meaning |
 | --- | --- | --- |
+| `--template`, `-t` | — | Start from a template (skips the picker) |
 | `--yes`, `-y` | off | Use defaults for every option not given as a flag; no prompts |
 | `--db=<none\|sqlite\|postgres\|mysql>` | `none` | Database driver |
 | `--auth` / `--no-auth` | on | JWT + RBAC |

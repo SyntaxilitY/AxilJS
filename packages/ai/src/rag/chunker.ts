@@ -52,7 +52,10 @@ export interface ChunkerOptions {
   // Splitting strategy (default: 'recursive')
   strategy?: 'fixed' | 'sentence' | 'paragraph' | 'recursive';
 
-  // Minimum chunk size - discard chunks smaller than this (default: 50)
+  // Minimum chunk size - discard chunks smaller than this (default: 50).
+  // If no chunk of a non-empty document reaches this size (e.g. the whole
+  // document is shorter), its chunks are kept anyway, so a short document
+  // still yields one chunk instead of being silently dropped.
   minChunkSize?: number;
 }
 
@@ -90,7 +93,7 @@ export class DocumentChunker {
    */
   chunkDocument(document: RawDocument): DocumentChunk[] {
     const texts = this.splitText(document.content);
-    const chunks: DocumentChunk[] = [];
+    const all: DocumentChunk[] = [];
 
     // Chunks start at non-decreasing positions; search from the previous start
     let prevStart = -1;
@@ -99,12 +102,10 @@ export class DocumentChunker {
       const span = locateChunk(document.content, text, prevStart);
       if (span) prevStart = span.start;
 
-      if (text.length < this.minChunkSize) return;
-
       const startChar = span ? span.start : 0;
       const endChar = span ? span.end : startChar + text.length;
 
-      chunks.push({
+      all.push({
         id: `${document.id}-chunk-${index}`,
         content: text,
         documentId: document.id,
@@ -115,7 +116,11 @@ export class DocumentChunker {
       });
     });
 
-    return chunks;
+    const kept = all.filter(c => c.content.length >= this.minChunkSize);
+
+    // Every piece is below minChunkSize (e.g. a document shorter than it):
+    // keep them rather than silently dropping the whole document
+    return kept.length > 0 ? kept : all.filter(c => c.content.trim());
   }
 
   // ─── Split Strategies ────────────────────────────────────────────────────────

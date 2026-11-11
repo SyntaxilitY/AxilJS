@@ -8,10 +8,17 @@
  *
  *   app.use(observabilityMiddleware({ metrics, tracer }))
  *   app.get('/metrics', metricsHandler(metrics))
+ *
+ * With a tracer, the request's server span is exposed to later middleware
+ * and handlers as req.locals.span (plus req.locals.tracer and
+ * req.locals.traceContext) so they can create child spans and propagate the
+ * trace to downstream calls:
+ *
+ *   await tracer.trace('db.query', async () => db.query(sql), getRequestSpan(req))
  */
 import { MiddlewareFn, RouteHandler, axilRequest } from '@axiljs/common';
 import { MetricsRegistry } from './metrics';
-import { Tracer } from './tracing';
+import { Tracer, Span, SpanContext } from './tracing';
 export interface ObservabilityOptions {
     metrics?: MetricsRegistry;
     tracer?: Tracer;
@@ -23,6 +30,16 @@ export interface ObservabilityOptions {
  * Tracks request count, duration, and distributed traces.
  */
 export declare function observabilityMiddleware(options?: ObservabilityOptions): MiddlewareFn;
+/**
+ * The server span observabilityMiddleware started for this request
+ * (req.locals.span), or undefined when no tracer is configured.
+ */
+export declare function getRequestSpan(req: axilRequest): Span | undefined;
+/**
+ * Trace context ({ traceId, spanId }) of the request's server span
+ * (req.locals.traceContext), or undefined when no tracer is configured.
+ */
+export declare function getTraceContext(req: axilRequest): SpanContext | undefined;
 /**
  * Create a route handler that serves Prometheus metrics.
  * Mount at GET /metrics.

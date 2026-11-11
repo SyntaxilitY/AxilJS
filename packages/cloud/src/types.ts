@@ -78,7 +78,13 @@ export interface FeatureFlag {
   description?:      string;
   /** 0–100.  Deterministic hash bucket is compared against this. */
   rolloutPercentage: number;
+  /**
+   * Tenants that always get the flag. An EMPTY array means "no whitelist"
+   * (same as omitting it), not "nobody": to turn a flag off for everyone,
+   * set `enabled: false`.
+   */
   allowedTenants?:   string[];
+  /** Users that always get the flag. Empty array = no whitelist (see allowedTenants). */
   allowedUsers?:     (string | number)[];
   /** ISO-8601.  Flag is inert before this time. */
   startAt?:          string;

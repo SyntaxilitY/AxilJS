@@ -25,6 +25,10 @@
  */
 import { EventEmitter } from 'events';
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+export interface CircuitLogger {
+    info(msg: string): void;
+    warn(msg: string): void;
+}
 export interface CircuitBreakerOptions {
     failureThreshold?: number;
     resetTimeoutMs?: number;
@@ -35,6 +39,7 @@ export interface CircuitBreakerOptions {
     rollingWindowMs?: number;
     maxConcurrent?: number;
     maxQueue?: number;
+    logger?: CircuitLogger | false;
 }
 export declare class CircuitOpenError extends Error {
     constructor(name: string);
@@ -56,6 +61,7 @@ export declare class CircuitBreaker extends EventEmitter {
     private activeCount;
     private waiters;
     private options;
+    private logger;
     constructor(name: string, options?: CircuitBreakerOptions);
     /**
      * Execute a function through the circuit breaker.

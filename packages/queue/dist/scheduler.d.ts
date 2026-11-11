@@ -21,6 +21,7 @@
  *   scheduler.start()
  */
 import { EventEmitter } from 'events';
+import { QueueLoggerOption } from './logger';
 export interface ParsedCron {
     minutes: number[];
     hours: number[];
@@ -37,6 +38,20 @@ export interface ParsedCron {
  */
 export declare function parseCron(expression: string): ParsedCron;
 /**
+ * Validate a 5-field cron expression without scheduling anything.
+ * Returns true if `validateCron` reports no error.
+ *
+ *   isValidCron('0 9 * * 1-5')  // true
+ *   isValidCron('61 * * * *')   // false (no minute can ever match)
+ */
+export declare function isValidCron(expression: string): boolean;
+/**
+ * Validate a cron expression and return the error message, or null if valid.
+ * Besides `parseCron` errors, an expression with a field that matches no
+ * value at all (e.g. minute "61") is reported, since it could never fire.
+ */
+export declare function validateCron(expression: string): string | null;
+/**
  * Check whether a given Date matches a parsed cron schedule.
  */
 export declare function matchesCron(date: Date, cron: ParsedCron): boolean;
@@ -49,11 +64,16 @@ export interface ScheduledTask {
     runCount: number;
     enabled: boolean;
 }
+export interface SchedulerOptions {
+    logger?: QueueLoggerOption;
+}
 export declare class Scheduler extends EventEmitter {
     private tasks;
     private alignTimer?;
     private lastTickAt;
     private running;
+    private log;
+    constructor(options?: SchedulerOptions);
     /**
      * Register a task to run on a cron schedule.
      *

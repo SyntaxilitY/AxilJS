@@ -47,4 +47,12 @@ bus.setMaxListeners(100)
 decorators. With TC39 decorators the handlers are recorded when the instance is
 constructed, so call `registerEventHandlers(instance, bus)` after `new`.
 
+`registerEventHandlers` logs each registration to the console by default. Pass
+`{ logger: false }` to silence it, or `{ logger: { info, warn } }` to route the
+(plain-text) messages to your own logger:
+
+```typescript
+registerEventHandlers(new NotificationService(), bus, { logger: false })
+```
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

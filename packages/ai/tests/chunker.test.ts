@@ -79,6 +79,23 @@ describe('DocumentChunker', () => {
     }
   });
 
+  it('keeps a non-empty document shorter than minChunkSize as one chunk', () => {
+    const chunker = new DocumentChunker(); // minChunkSize defaults to 50
+    const content = '  AxilJS supports PostgreSQL.  ';
+    const chunks = chunker.chunk([
+      { id: 's', content, metadata: META },
+      { id: 'e', content: '  \n\n ', metadata: META }
+    ]);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]).toMatchObject({ id: 's-chunk-0', documentId: 's', chunkIndex: 0, metadata: META });
+    expect(chunks[0].content.trim()).toBe('AxilJS supports PostgreSQL.');
+    expect(content.slice(chunks[0].startChar, chunks[0].endChar).trim()).toBe('AxilJS supports PostgreSQL.');
+
+    // Same for strategies that split into pieces that are each too small
+    const para = new DocumentChunker({ strategy: 'paragraph', chunkSize: 1000, minChunkSize: 500 });
+    expect(para.chunkDocument({ id: 'p', content: 'a\n\nb', metadata: META })).toHaveLength(1);
+  });
+
   it('chunk() handles multiple documents', () => {
     const chunker = new DocumentChunker({ chunkSize: 50, overlap: 0, minChunkSize: 1 });
     const chunks = chunker.chunk([

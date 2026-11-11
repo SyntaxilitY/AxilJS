@@ -32,7 +32,12 @@ export interface TestResponse {
 
 // ─── Test Request Builder ─────────────────────────────────────────────────────
 
-class TestRequest {
+/**
+ * A pending request built by TestClient (get/post/…). Chain set/auth/send,
+ * then await it for a TestResponse. Exported so helpers that return
+ * `client.post(...)` can be declared in emitted .d.ts files.
+ */
+export class TestRequest implements PromiseLike<TestResponse> {
   // Keys are lowercase so set('Content-Type', ...) overrides the default
   // instead of sending two content-type headers
   private _headers: Record<string, string> = {
@@ -144,14 +149,13 @@ class TestRequest {
    */
   private makeRequest(port: number): Promise<TestResponse> {
     return new Promise((resolve, reject) => {
-      // Strings and Buffers are sent as-is when a non-JSON content-type is
-      // set (form bodies, plain text, XML…); everything else is JSON-encoded.
-      const contentType = this._headers['content-type'] || '';
-      const isJson = /\bjson\b/i.test(contentType);
+      // Strings and Buffers are sent as-is (exact bytes, whatever the
+      // content-type: pre-serialized JSON, form bodies, text, binary…);
+      // everything else is JSON-encoded.
       let bodyStr: string | Buffer = '';
       if (this._body !== undefined) {
-        if (!isJson && (typeof this._body === 'string' || Buffer.isBuffer(this._body))) {
-          bodyStr = this._body as string | Buffer;
+        if (typeof this._body === 'string' || Buffer.isBuffer(this._body)) {
+          bodyStr = this._body;
         } else {
           bodyStr = JSON.stringify(this._body);
         }

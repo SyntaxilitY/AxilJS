@@ -12,8 +12,13 @@ function raw(xff?: string | string[], remote = '10.0.0.1', url = '/') {
 }
 
 describe('resolveClientIp (trustProxy)', () => {
-  it('defaults to the left-most X-Forwarded-For entry', () => {
-    expect(new Request(raw('1.1.1.1, 2.2.2.2')).ip).toBe('1.1.1.1');
+  it('ignores X-Forwarded-For by default (no spoofing without opt-in)', () => {
+    expect(new Request(raw('1.1.1.1, 2.2.2.2')).ip).toBe('10.0.0.1');
+    expect(new Request(raw('1.1.1.1'), {}).ip).toBe('10.0.0.1');
+  });
+
+  it('true uses the left-most X-Forwarded-For entry', () => {
+    expect(new Request(raw('1.1.1.1, 2.2.2.2'), { trustProxy: true }).ip).toBe('1.1.1.1');
     expect(resolveClientIp(raw('1.1.1.1, 2.2.2.2'), true)).toBe('1.1.1.1');
   });
 

@@ -6,6 +6,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 
+import { SCALING_FILE, loadScalingConfig, resolveScaling } from '@axiljs/scale'
+
 import * as ui from '../ui'
 
 export interface DeployOptions {
@@ -44,12 +46,34 @@ coverage
 
 export async function deploy(options: DeployOptions = {}): Promise<void> {
   const port     = positiveInt(options.port, 3000, '--port', 65535)
-  const replicas = positiveInt(options.replicas, 3, '--replicas', 1000)
   const force    = options.force === true
 
   ui.title('deploy', 'Generate Docker + Kubernetes files')
 
   const cwd = options.cwd || process.cwd()
+
+  // axil.scaling.json sizes the pods, replicas and autoscaler (see axil capacity)
+  let scaling: ReturnType<typeof resolveScaling> | undefined
+  let sized = false
+  try {
+    const raw = loadScalingConfig(cwd)
+    if (raw) {
+      scaling = resolveScaling(raw, { cores: 1, memoryBytes: 2 ** 30 })
+      sized = raw.horizontal?.instanceSize !== undefined
+      ui.success(`Using ${SCALING_FILE}`, `instances ${scaling.horizontal.min}–${scaling.horizontal.max}${sized ? `, ${scaling.horizontal.instanceSize.cpus} CPU / ${scaling.horizontal.instanceSize.memoryGb} GB pods` : ''}`)
+    }
+  } catch (err: any) {
+    ui.error(err.message, `Fix ${SCALING_FILE} or remove it.`)
+    process.exit(1)
+  }
+
+  const replicas = positiveInt(options.replicas, scaling?.horizontal.min ?? 3, '--replicas', 1000)
+  const hpa      = scaling !== undefined && scaling.horizontal.max > replicas
+  const cpus     = scaling?.horizontal.instanceSize.cpus ?? 1
+  const memGi    = scaling?.horizontal.instanceSize.memoryGb ?? 1
+  // availableParallelism() ignores CPU quotas, so pin the worker count to the pod size
+  const workers  = scaling ? (scaling.vertical.workersAuto ? Math.max(1, Math.floor(cpus)) : scaling.vertical.workers) : 1
+  const grace    = scaling ? Math.ceil(scaling.vertical.shutdownTimeoutMs / 1000) + 5 : 30
   const pkgPath = join(cwd, 'package.json')
 
   if (!existsSync(pkgPath)) {
@@ -93,9 +117,13 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --production
 COPY --from=builder /app/dist ./dist
-EXPOSE ${port}
+${scaling ? `# serve() reads worker, connection and shutdown limits from it
+COPY axil.scaling.json ./
+` : ''}EXPOSE ${port}
 ENV NODE_ENV=production
 ENV PORT=${port}
+# Containers must listen on all interfaces to be reachable
+ENV HOST=0.0.0.0
 CMD ["node", "dist/main.js"]
 `)
 
@@ -124,7 +152,18 @@ spec:
           value: "production"
         - name: PORT
           value: "${port}"
-        livenessProbe:
+        - name: HOST
+          value: "0.0.0.0"
+${scaling ? `        - name: AXIL_WORKERS
+          value: "${workers}"
+` : ''}${sized ? `        resources:
+          requests:
+            cpu: "${cpus}"
+            memory: "${memGi}Gi"
+          limits:
+            cpu: "${cpus}"
+            memory: "${memGi}Gi"
+` : ''}        livenessProbe:
           httpGet:
             path: /health/live
             port: ${port}
@@ -136,7 +175,8 @@ spec:
             port: ${port}
           initialDelaySeconds: 5
           periodSeconds: 10
----
+${scaling ? `      terminationGracePeriodSeconds: ${grace}
+` : ''}---
 apiVersion: v1
 kind: Service
 metadata:
@@ -147,7 +187,26 @@ spec:
   ports:
   - port: 80
     targetPort: ${port}
-`)
+${hpa ? `---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ${appName}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ${appName}
+  minReplicas: ${replicas}
+  maxReplicas: ${scaling!.horizontal.max}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: ${Math.round(100 / (1 + scaling!.headroom))}
+` : ''}`)
 
   // Deploy script
   writeFileSync(join(dir, 'deploy.sh'), `#!/bin/bash
@@ -177,7 +236,7 @@ echo "Deployment complete."
   ui.success('Deployment files generated', ui.path('deploy/'))
   ui.table([
     [ui.c.green('write'), ui.path('deploy/Dockerfile'),      ui.muted(`node:20-alpine, port ${port}`)],
-    [ui.c.green('write'), ui.path('deploy/deployment.yaml'), ui.muted(`${appName}:${version}, ${replicas} replica(s)`)],
+    [ui.c.green('write'), ui.path('deploy/deployment.yaml'), ui.muted(`${appName}:${version}, ${hpa ? `${replicas}–${scaling!.horizontal.max} replicas (HPA)` : `${replicas} replica(s)`}${scaling ? `, ${workers} workers/pod` : ''}`)],
     [ui.c.green('write'), ui.path('deploy/deploy.sh'),       ui.muted('build + kubectl apply')],
     [
       dockerignoreStatus === 'kept existing' ? ui.muted('keep') : ui.c.green('write'),

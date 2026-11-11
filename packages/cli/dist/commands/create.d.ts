@@ -29,9 +29,10 @@ export interface CreateOptions {
     force?: boolean;
     cwd?: string;
     interactive?: boolean;
+    template?: string;
 }
 export declare const CREATE_DEFAULTS: ProjectOptions;
-export declare function createProject(name: string, opts?: CreateOptions): Promise<void>;
+export declare function createProject(nameArg: string | undefined, opts?: CreateOptions): Promise<void>;
 export interface ResourceNames {
     file: string;
     className: string;

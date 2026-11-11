@@ -58,7 +58,9 @@ describe.each([['sqlite'], ['postgres']])('driver %s', (driver) => { /* ... */ }
 - Nested `describe` blocks; names are prefixed with every parent suite.
 - Hooks are inherited: parent `beforeEach` → child `beforeEach` → test →
   child `afterEach` → parent `afterEach`. Several hooks of the same type run in
-  registration order. `beforeAll`/`afterAll` run once per suite (skipped when
+  registration order. Hooks called outside any `describe` apply to every test in
+  that file (outermost: top-level `beforeEach` runs before the suites' own, its
+  `afterEach` after them). `beforeAll`/`afterAll` run once per suite (skipped when
   nothing in the suite will run). A failing `beforeAll` fails every test of the suite;
   a failing `beforeEach`/`afterEach` fails that test.
 - `only` applies across all suites; `skip` wins over `only`.
@@ -112,8 +114,12 @@ Mock API: `mock.calls`, `mock.results`, `mock.lastCall`, `mockReturnValue(Once)`
 ## HTTP test client
 
 `createTestClient(app)` → `get/post/put/patch/delete(path)`, chain `.set(name, value)`,
-`.auth(token)`, `.send(body)`, then `await`. Bodies are JSON-encoded by default; a
-string or `Buffer` body is sent **as-is** when a non-JSON `Content-Type` is set
-(e.g. `application/x-www-form-urlencoded`, `text/plain`).
+`.auth(token)`, `.send(body)`, then `await`. Objects, arrays, numbers etc. are
+JSON-encoded (default `Content-Type: application/json`); a string or `Buffer` body
+is always sent **as-is**, so you can post exact pre-serialized JSON or set another
+`Content-Type` (e.g. `application/x-www-form-urlencoded`, `text/plain`). The builder
+type is exported as `TestRequest`, so helpers like
+`export const createUser = (body: object) => client.post('/users').send(body)`
+work with `declaration: true`.
 
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

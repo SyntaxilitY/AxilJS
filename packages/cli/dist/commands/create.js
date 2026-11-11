@@ -57,6 +57,8 @@ exports.generateEmptyMigration = generateEmptyMigration;
 const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const prompts = __importStar(require("../prompts"));
+const args_1 = require("../args");
+const templates_1 = require("../templates");
 const node_fs_2 = __importDefault(require("node:fs"));
 const node_path_2 = __importDefault(require("node:path"));
 const ui = __importStar(require("../ui"));
@@ -111,37 +113,84 @@ function getAxilJSVersion() {
 }
 const axilVersion = getAxilJSVersion();
 // Range for sibling @axiljs/* packages. The CLI can be published at a newer
-// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.1), so pin to the
+// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.2), so pin to the
 // minor line instead of the CLI's exact patch to keep `npm install` resolvable.
 const axilRange = `^${axilVersion.split('.').slice(0, 2).join('.')}.0`;
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
-async function createProject(name, opts = {}) {
-    validateProjectName(name);
+/** Directory problems for a project name, or undefined when it is usable. */
+function directoryProblem(name, parent, force) {
+    const projectDir = (0, node_path_1.join)(parent, name);
+    if (!(0, node_fs_1.existsSync)(projectDir))
+        return undefined;
+    if (!node_fs_2.default.statSync(projectDir).isDirectory())
+        return `"${name}" already exists and is not a directory.`;
+    const empty = node_fs_2.default.readdirSync(projectDir).length === 0;
+    if (!empty && !force)
+        return `Directory "${name}" already exists and is not empty. Use --force to create into it anyway.`;
+    return undefined;
+}
+/** The create flow's four steps, shown as "n/4" on each prompt. */
+const STEP = { name: '1/4', template: '2/4', configure: '3/4', confirm: '4/4' };
+async function createProject(nameArg, opts = {}) {
     if (opts.db !== undefined && !exports.DATABASES.includes(opts.db)) {
         throw new Error(`Invalid database "${opts.db}". Expected one of: ${exports.DATABASES.join(', ')}.`);
-    }
-    const projectDir = (0, node_path_1.join)(opts.cwd || process.cwd(), name);
-    if ((0, node_fs_1.existsSync)(projectDir)) {
-        const empty = node_fs_2.default.statSync(projectDir).isDirectory() && node_fs_2.default.readdirSync(projectDir).length === 0;
-        if (!node_fs_2.default.statSync(projectDir).isDirectory()) {
-            throw new Error(`"${name}" already exists and is not a directory.`);
-        }
-        if (!empty && !opts.force) {
-            throw new Error(`Directory "${name}" already exists and is not empty. Use --force to create into it anyway.`);
-        }
     }
     // Prompt only on a TTY and without --yes; otherwise use flags + defaults
     const interactive = opts.interactive ?? (!opts.yes && process.stdin.isTTY === true);
     const startedAt = Date.now();
+    const parent = opts.cwd || process.cwd();
+    // Fail fast on a bad name given as an argument, before drawing anything
+    if (nameArg !== undefined) {
+        validateProjectName(nameArg);
+        const problem = directoryProblem(nameArg, parent, opts.force);
+        if (problem)
+            throw new Error(problem);
+    }
+    else if (!interactive) {
+        throw new Error('Project name is required.');
+    }
     // ── Header ───────────────────────────────────────────────────────────
     ui.title('create', `AxilJS v${axilVersion}`);
-    ui.step(`Creating ${ui.c.bold(name)}`, opts.cwd ? projectDir : `.${node_path_1.sep}${name}`);
-    // ── Features ─────────────────────────────────────────────────────────
+    // ── 1. Name ──────────────────────────────────────────────────────────
+    const name = nameArg ?? (await prompts.text({
+        message: 'Project name',
+        placeholder: 'my-api',
+        step: STEP.name,
+        validate: value => {
+            try {
+                validateProjectName(value);
+            }
+            catch (err) {
+                return err.message;
+            }
+            return directoryProblem(value.trim(), parent, opts.force);
+        }
+    })).trim();
+    const projectDir = (0, node_path_1.join)(parent, name);
+    if (nameArg !== undefined)
+        ui.step(`Creating ${ui.c.bold(name)}`, opts.cwd ? projectDir : `.${node_path_1.sep}${name}`);
+    // ── 2. Template ──────────────────────────────────────────────────────
+    let template = opts.template !== undefined ? resolveTemplate(opts.template) : undefined;
+    const featureFlagsGiven = [opts.db, opts.auth, opts.ai, opts.ws, opts.queue].some(v => v !== undefined);
+    if (template && featureFlagsGiven) {
+        throw new Error(`--template ${template.id} defines its own stack; drop --db/--auth/--ai/--ws/--queue, or create without --template.`);
+    }
+    if (!template && interactive && !featureFlagsGiven) {
+        const choice = await pickTemplate();
+        if (choice !== CUSTOM)
+            template = (0, templates_1.findTemplate)(choice);
+    }
+    if (template) {
+        await createFromTemplate(name, projectDir, template, opts, interactive, startedAt);
+        return;
+    }
+    // ── 3. Configure (custom stack) ──────────────────────────────────────
     const database = opts.db ?? (interactive
         ? await prompts.select({
             message: 'Database',
+            step: STEP.configure,
             initial: exports.CREATE_DEFAULTS.database,
             options: [
                 { value: 'none', label: 'None', hint: 'No database' },
@@ -165,6 +214,7 @@ async function createProject(name, opts = {}) {
     const picked = interactive && askable.length > 0
         ? await prompts.multiselect({
             message: 'Features',
+            step: STEP.configure,
             options: askable,
             initial: askable.filter(f => featureDefaults[f.value]).map(f => f.value)
         })
@@ -181,18 +231,20 @@ async function createProject(name, opts = {}) {
         includeWebsocket,
         includeQueue
     };
-    // ── Summary ──────────────────────────────────────────────────────────
-    ui.section('Summary');
-    const on = ui.c.green('on');
-    const off = ui.muted('-');
-    ui.keyValue([
+    // ── 4. Confirm ───────────────────────────────────────────────────────
+    const on = ui.c.green(`${ui.sym.tick} on`);
+    const off = ui.muted('off');
+    ui.line();
+    ui.card(name, summaryRows([
+        ['Stack', 'Custom'],
         ['Database', database === 'none' ? ui.muted('none') : ui.cmd(database)],
         ['Auth', includeAuth ? on : off],
         ['AI', includeAI ? on : off],
         ['WebSocket', includeWebsocket ? on : off],
-        ['Queue', includeQueue ? on : off]
-    ]);
-    const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true }) : true;
+        ['Queue', includeQueue ? on : off],
+        ['Location', ui.muted(opts.cwd ? projectDir : `.${node_path_1.sep}${name}`)]
+    ]), { meta: 'port 3000' });
+    const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true, step: STEP.confirm }) : true;
     if (!ok) {
         ui.warn('Cancelled.');
         ui.line();
@@ -295,6 +347,175 @@ async function createProject(name, opts = {}) {
     ui.line();
     ui.line(`${ui.muted('Run')} ${ui.cmd('npm run dev')} ${ui.muted('inside')} ${ui.c.bold(name)} ${ui.muted('to start developing.')}`);
     ui.line();
+}
+// ---------------------------------------------------------------------------
+// Templates (--template <id>)
+// ---------------------------------------------------------------------------
+const CUSTOM = '__custom__';
+/** "@axiljs/core, @axiljs/orm" → "core · orm". */
+function shortPackages(packages) {
+    return packages.map(p => p.replace(/^@axiljs\//, '')).join(` ${ui.sym.dot} `);
+}
+/** Aligned "label  value" rows for a card. */
+function summaryRows(rows) {
+    const w = Math.max(...rows.map(([k]) => k.length));
+    return rows.map(([k, v]) => `${ui.muted(k.padEnd(w))}  ${v}`);
+}
+/** Step 2: browse templates by category (↑↓ ←→, space/enter, / search). */
+async function pickTemplate() {
+    const options = [
+        ...templates_1.TEMPLATES.map(t => ({
+            value: t.id,
+            label: t.title,
+            hint: t.summary,
+            group: t.category,
+            keywords: [t.id, ...t.packages, ...t.highlights]
+        })),
+        {
+            value: CUSTOM,
+            label: 'Custom',
+            hint: 'Pick a database and features yourself',
+            group: 'Custom',
+            keywords: ['database', 'sqlite', 'postgres', 'mysql', 'auth', 'websocket', 'queue', 'ai']
+        }
+    ];
+    return prompts.browse({
+        message: 'Pick a template',
+        step: STEP.template,
+        counter: `${templates_1.TEMPLATES.length} templates`,
+        groups: [...templates_1.TEMPLATE_CATEGORIES, 'Custom'],
+        options,
+        initial: templates_1.TEMPLATES[0]?.id ?? CUSTOM,
+        details: option => {
+            if (option.value === CUSTOM) {
+                return {
+                    title: 'Custom',
+                    lines: [
+                        `${ui.sym.bullet} Choose a database: SQLite, Postgres, MySQL or none`,
+                        `${ui.sym.bullet} Toggle auth, WebSocket, queue and AI`,
+                        `${ui.sym.bullet} Users module with controller + service`,
+                        ui.muted('Same as: axil create <name> --db=<driver> --auth …')
+                    ]
+                };
+            }
+            const t = (0, templates_1.findTemplate)(option.value);
+            return {
+                title: t.title,
+                meta: `port ${t.port}`,
+                lines: [
+                    ...t.highlights.map(h => `${ui.c.green(ui.sym.tick)} ${h}`),
+                    ui.muted(shortPackages(t.packages))
+                ]
+            };
+        }
+    });
+}
+function resolveTemplate(id) {
+    const found = (0, templates_1.findTemplate)(id);
+    if (found)
+        return found;
+    const guess = (0, args_1.closest)(id, templates_1.TEMPLATE_IDS);
+    throw new Error(`Unknown template "${id}".${guess ? ` Did you mean "${guess}"?` : ''} Available: ${templates_1.TEMPLATE_IDS.join(', ')}.`);
+}
+const REQUIRED_TEMPLATE_FILES = ['src/main.ts', 'README.md', '.env.example'];
+async function createFromTemplate(name, projectDir, template, opts, interactive, startedAt) {
+    const ctx = { name, axilRange, cliVersion: axilVersion };
+    ui.line();
+    ui.card(name, summaryRows([
+        ['Template', `${ui.c.bold(template.title)}  ${ui.muted(template.id)}`],
+        ['Category', template.category],
+        ['Packages', shortPackages(template.packages)],
+        ['Location', ui.muted(opts.cwd ? projectDir : `.${node_path_1.sep}${name}`)]
+    ]), { meta: `port ${template.port}` });
+    const ok = interactive ? await prompts.confirm({ message: 'Create project?', initial: true, step: STEP.confirm }) : true;
+    if (!ok) {
+        ui.warn('Cancelled.');
+        ui.outro();
+        return;
+    }
+    const files = template.files(ctx);
+    const missing = REQUIRED_TEMPLATE_FILES.filter(f => !(f in files));
+    if (missing.length > 0) {
+        throw new Error(`Template "${template.id}" is incomplete: missing ${missing.join(', ')}.`);
+    }
+    ui.section('Scaffold');
+    try {
+        writeFile(projectDir, 'package.json', generateTemplatePackageJson(name, template, ctx));
+        writeFile(projectDir, 'tsconfig.json', generateTsConfig());
+        writeFile(projectDir, '.gitignore', generateGitignore());
+        for (const [rel, content] of Object.entries(files))
+            writeFile(projectDir, rel, content);
+        ui.success('Application files', `${Object.keys(files).length + 3} files written`);
+        await installDependencies(projectDir, opts.skipInstall === true);
+    }
+    catch (err) {
+        ui.line();
+        ui.warn(`Left at: ${projectDir}`);
+        ui.detail('Remove it manually before retrying.');
+        throw err;
+    }
+    ui.done(`Created ${name}`, startedAt);
+    const copyCmd = process.platform === 'win32' ? 'Copy-Item .env.example .env' : 'cp .env.example .env';
+    const steps = [[`cd ${name}`]];
+    if (opts.skipInstall)
+        steps.push(['npm install']);
+    steps.push([copyCmd], ...template.nextSteps(ctx), ['npm run dev', `http://localhost:${template.port}`]);
+    printNextSteps(steps);
+    ui.keyValue([
+        ['Template', ui.cmd(template.id)],
+        ['Docs', ui.path('README.md')]
+    ]);
+    ui.line();
+}
+function generateTemplatePackageJson(name, template, ctx) {
+    const sortKeys = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+    return JSON.stringify({
+        name,
+        version: '1.0.0',
+        private: true,
+        type: 'module',
+        description: `${name} - AxilJS ${template.title} (template: ${template.id})`,
+        scripts: {
+            dev: 'axil run',
+            build: 'tsc',
+            start: 'node dist/main.js',
+            test: 'axil test',
+            ...template.scripts
+        },
+        dependencies: sortKeys(template.dependencies(ctx)),
+        devDependencies: sortKeys({
+            '@axiljs/cli': `^${axilVersion}`,
+            '@axiljs/testing': axilRange,
+            '@types/node': '^26.2.0',
+            typescript: '^7.0.2',
+            ...template.devDependencies?.(ctx)
+        })
+    }, null, 2) + '\n';
+}
+async function installDependencies(projectDir, skip) {
+    if (skip) {
+        ui.warn('Skipped (--skip-install)', 'run npm install inside the project');
+        return;
+    }
+    const installStart = Date.now();
+    const spin = ui.spinner('Installing dependencies');
+    const result = await (0, exec_1.runCaptured)('npm install', projectDir);
+    if (result.code !== 0) {
+        spin.fail('Dependency install failed', 'npm install');
+        (0, exec_1.printCaptured)(result.output, l => console.error(l));
+        throw new Error(`npm install exited with code ${result.code}.`);
+    }
+    spin.succeed('Dependencies installed', (0, exec_1.npmSummary)(result.output) ?? ui.formatDuration(Date.now() - installStart));
+}
+function printNextSteps(steps) {
+    const lines = [];
+    steps.forEach(([command, hint], i) => {
+        const isCommand = !/^(Edit|Review|Open|Start|Set) /.test(command);
+        lines.push(`${ui.muted(`${i + 1}.`)} ${isCommand ? ui.cmd(command) : ui.c.bold(command)}`);
+        if (hint)
+            lines.push(`   ${ui.muted(hint)}`);
+    });
+    ui.box('Next steps', lines);
 }
 // ---------------------------------------------------------------------------
 // Generators (unchanged logic, clean output)

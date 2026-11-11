@@ -3,6 +3,7 @@ import { connect } from 'net';
 import {
   startServer, Harness, closePayload, readClose, waitForClients, delay
 } from './helpers';
+import { WSServer } from '../src/ws-server';
 
 let h: Harness | undefined;
 
@@ -398,6 +399,38 @@ describe('upgrade routing', () => {
     // Non-WebSocket upgrade (previously destroyed regardless of path)
     const c = await h.connect('/other', { Upgrade: 'h2c', 'Sec-WebSocket-Key': '', 'Sec-WebSocket-Version': '' }, false);
     expect(c.responseHead).toMatch(/^HTTP\/1\.1 418/);
+  });
+
+  it('answers an upgrade on another path with 404 when it is the only upgrade listener', async () => {
+    h = await startServer({ path: '/ws' });
+    const started = Date.now();
+    const c = await h.connect('/nope', {}, false);
+    expect(c.responseHead).toMatch(/^HTTP\/1\.1 404/);
+    await c.waitClosed();
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(h.serverClients).toHaveLength(0);
+  });
+
+  it('two WSServers on one http.Server (different paths) both still work', async () => {
+    h = await startServer({ path: '/a' });
+    const second = new WSServer(h.http, { path: '/b' });
+    second.on('connection', (client) => {
+      h!.serverClients.push(client);
+      client.on('message', (data) => client.send(`b:${data}`));
+    });
+
+    const a = await h.connect('/a');
+    a.sendText('1');
+    expect((await a.nextFrame()).payload.toString()).toBe('echo:1');
+
+    const b = await h.connect('/b');
+    b.sendText('2');
+    expect((await b.nextFrame()).payload.toString()).toBe('b:2');
+
+    // Once the second server detaches, the first is the sole listener again
+    second.close();
+    const miss = await h.connect('/b', {}, false);
+    expect(miss.responseHead).toMatch(/^HTTP\/1\.1 404/);
   });
 
   it('rejects a non-WebSocket upgrade on the configured path with 400', async () => {

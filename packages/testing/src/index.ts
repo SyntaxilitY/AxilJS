@@ -37,5 +37,5 @@ export { fn, spyOn, isMockFunction } from './mock/mock';
 export type { MockFunction, MockState, MockResult } from './mock/mock';
 
 // HTTP test client
-export { TestClient, createTestClient } from './http/test-client';
+export { TestClient, TestRequest, createTestClient } from './http/test-client';
 export type { TestResponse } from './http/test-client';

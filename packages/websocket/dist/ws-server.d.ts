@@ -100,6 +100,7 @@ export declare class WSServer {
      * Does not close the underlying HTTP server.
      */
     close(code?: number, reason?: string): void;
+    private isSoleUpgradeListener;
     private handleUpgrade;
 }
 export {};

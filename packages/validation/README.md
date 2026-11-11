@@ -46,6 +46,13 @@ v.record(v.number().min(0))                 // object with any keys, every value
   input. They are skipped for `null`/`undefined`. A throwing transform makes
   `parse()` fail with code `TRANSFORM_ERROR`.
 - `v.number()` rejects `NaN` and `±Infinity` (including the strings `'NaN'`/`'Infinity'`).
+- Query/form strings are coerced: `v.number()` accepts numeric strings and returns
+  the **number** (`'42'` → `42`; empty/blank strings are rejected), `v.boolean()`
+  returns `true` for `'true'`/`'1'` and `false` for `'false'`/`'0'`.
+  `integer/min/max/positive`, `custom()` and `transform()` see the coerced value.
+- The validator classes (`StringValidator`, `NumberValidator`, `ObjectValidator`, …,
+  `BaseValidator`) and helper types (`SchemaShape`, `InferShape`, …) are exported,
+  so `export const userSchema = v.object({...})` compiles with `declaration: true`.
 
 ## Testing
 

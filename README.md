@@ -1,11 +1,6 @@
-```
- █████╗ ██╗  ██╗██╗██╗         ██╗███████╗
-██╔══██╗╚██╗██╔╝██║██║         ██║██╔════╝
-███████║ ╚███╔╝ ██║██║         ██║███████╗
-██╔══██║ ██╔██╗ ██║██║     ██  ██║╚════██║
-██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║
-╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝
-```
+<p align="center">
+  <img src="assets/logo-mark-256.png" alt="AxilJS logo" width="128" height="128">
+</p>
 
 # AxilJS
 
@@ -221,6 +216,8 @@ All packages live under the `@axiljs` scope and work together out of the box.
 | `@axiljs/pm` | Package manager with lock file and checksums |
 | `@axiljs/studio` | **Browser-based developer dashboard (ORM Studio)** |
 | `@axiljs/cli` | CLI — all `axil` commands |
+| `@axiljs/scale` | Cluster mode, capacity planner (`axil capacity`), load generator, multi-process readiness checks |
+| `@axiljs/runtime` | Request context + interceptors that execute decorator metadata (`tRetry`, `tTimeout`, `tAudit`, `tRedact`) |
 
 ---
 

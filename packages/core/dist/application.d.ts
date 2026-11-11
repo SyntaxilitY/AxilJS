@@ -12,6 +12,13 @@ import { Server } from 'http';
 import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axiljs/common';
 import { Router } from './router/router';
 /**
+ * The installed @axiljs/core version, read from its package.json.
+ * Resolved relative to this file (src/ or dist/ are both one level below the
+ * package root); falls back to 'unknown' if it can't be read.
+ * @internal
+ */
+export declare function coreVersion(): string;
+/**
  * Parse a size such as '1mb', '512kb', '100b' or '2048' into bytes.
  * @internal
  */

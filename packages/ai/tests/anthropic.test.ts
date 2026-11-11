@@ -64,7 +64,7 @@ describe('AnthropicProvider', () => {
     expect(req.headers['x-api-key']).toBe('ak');
     expect(req.headers['anthropic-version']).toBe('2023-06-01');
     expect(req.body).toMatchObject({
-      model: 'claude-3-5-haiku-20241022',
+      model: 'claude-haiku-4-5-20251001',
       system: 'sys',
       max_tokens: 4096,
       temperature: 0,
@@ -165,5 +165,6 @@ describe('AnthropicProvider', () => {
 
   it('does not support embeddings', async () => {
     await expect(provider.embed({ input: 'x' })).rejects.toThrow(/does not support embeddings/);
+    await expect(provider.embed({ input: 'x' })).rejects.toThrow(/embeddingProvider/);
   });
 });

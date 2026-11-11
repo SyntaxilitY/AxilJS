@@ -10,8 +10,13 @@ import { realtimeChatTemplate }   from './realtime-chat'
 import { backgroundJobsTemplate } from './background-jobs'
 import { aiAssistantTemplate }    from './ai-assistant'
 import { saasApiTemplate }        from './saas-api'
+import { microserviceTemplate }   from './microservice'
+import { webhookReceiverTemplate } from './webhook-receiver'
+import { liveDashboardTemplate }  from './live-dashboard'
+import { highScaleApiTemplate }   from './high-scale-api'
 
-export type { ProjectTemplate, TemplateContext } from './types'
+export type { ProjectTemplate, TemplateContext, TemplateCategory } from './types'
+export { TEMPLATE_CATEGORIES } from './types'
 
 export const TEMPLATES: ProjectTemplate[] = [
   minimalTemplate,
@@ -19,7 +24,11 @@ export const TEMPLATES: ProjectTemplate[] = [
   realtimeChatTemplate,
   backgroundJobsTemplate,
   aiAssistantTemplate,
-  saasApiTemplate
+  saasApiTemplate,
+  microserviceTemplate,
+  webhookReceiverTemplate,
+  liveDashboardTemplate,
+  highScaleApiTemplate
 ]
 
 export const TEMPLATE_IDS = TEMPLATES.map(t => t.id)

@@ -44,18 +44,16 @@ class DocumentChunker {
      */
     chunkDocument(document) {
         const texts = this.splitText(document.content);
-        const chunks = [];
+        const all = [];
         // Chunks start at non-decreasing positions; search from the previous start
         let prevStart = -1;
         texts.forEach((text, index) => {
             const span = locateChunk(document.content, text, prevStart);
             if (span)
                 prevStart = span.start;
-            if (text.length < this.minChunkSize)
-                return;
             const startChar = span ? span.start : 0;
             const endChar = span ? span.end : startChar + text.length;
-            chunks.push({
+            all.push({
                 id: `${document.id}-chunk-${index}`,
                 content: text,
                 documentId: document.id,
@@ -65,7 +63,10 @@ class DocumentChunker {
                 metadata: { ...document.metadata }
             });
         });
-        return chunks;
+        const kept = all.filter(c => c.content.length >= this.minChunkSize);
+        // Every piece is below minChunkSize (e.g. a document shorter than it):
+        // keep them rather than silently dropping the whole document
+        return kept.length > 0 ? kept : all.filter(c => c.content.trim());
     }
     // ─── Split Strategies ────────────────────────────────────────────────────────
     splitText(text) {

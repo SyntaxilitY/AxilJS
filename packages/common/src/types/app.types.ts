@@ -38,8 +38,9 @@ export interface ServerConfig {
   methodNotAllowed?: boolean;
 
   // Which proxies to trust when deriving req.ip from X-Forwarded-For.
-  //   true   - use the left-most X-Forwarded-For entry (default)
-  //   false  - ignore X-Forwarded-For, use the socket address
+  //   false  - ignore X-Forwarded-For, use the socket address (default)
+  //   true   - use the left-most X-Forwarded-For entry (only behind a proxy
+  //            that overwrites the header; clients can forge it otherwise)
   //   number - trust that many proxy hops in front of the server
   //   fn     - (address, hop) => boolean, called from the socket address
   //            outwards; the first untrusted address is the client

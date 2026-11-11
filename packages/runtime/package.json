@@ -1,0 +1,48 @@
+{
+  "name": "@axiljs/runtime",
+  "version": "0.3.2",
+  "description": "AxilJS runtime: request context and interceptors that execute @axiljs/decorator metadata (tRetry, tTimeout, tAudit, tRedact)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@axiljs/common": "^0.3.2",
+    "@axiljs/decorator": "^0.3.2",
+    "@axiljs/circuit": "^0.3.2",
+    "@axiljs/events": "^0.3.2"
+  },
+  "devDependencies": {
+    "@axiljs/core": "^0.3.2",
+    "@axiljs/testing": "^0.3.2",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SyntaxilitY/AxilJS.git"
+  },
+  "homepage": "https://github.com/SyntaxilitY/AxilJS#readme",
+  "bugs": {
+    "url": "https://github.com/SyntaxilitY/AxilJS/issues"
+  },
+  "author": "Tariq Mehmood <tariq@syntaxility.dev>",
+  "license": "MIT",
+  "keywords": [
+    "axiljs",
+    "backend",
+    "javascript",
+    "typescript",
+    "nodejs"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

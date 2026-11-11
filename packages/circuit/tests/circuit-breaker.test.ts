@@ -249,3 +249,44 @@ describe('bulkhead', () => {
     await expect(cb.execute(ok)).resolves.toBe('fb');
   });
 });
+
+describe('logger option', () => {
+  it('logger: false writes nothing to stdout; stateChange still fires', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const cb = new CircuitBreaker('svc', { failureThreshold: 1, resetTimeoutMs: 100, logger: false });
+    const changes: string[] = [];
+    cb.on('stateChange', (to, from) => changes.push(`${from}->${to}`));
+    await failTimes(cb, 1);
+    vi.advanceTimersByTime(100);
+    await cb.execute(ok);
+    write.mockRestore();
+    expect(changes).toEqual(['CLOSED->OPEN', 'OPEN->HALF_OPEN', 'HALF_OPEN->CLOSED']);
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('a custom logger receives plain-text transitions (OPEN via warn)', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const cb = new CircuitBreaker('svc', { failureThreshold: 1, resetTimeoutMs: 100, logger });
+    await failTimes(cb, 1);
+    vi.advanceTimersByTime(100);
+    await cb.execute(ok);
+    expect(logger.warn).toHaveBeenCalledWith("[CircuitBreaker] 'svc': CLOSED → OPEN");
+    expect(logger.info).toHaveBeenCalledWith("[CircuitBreaker] 'svc': OPEN → HALF_OPEN");
+    expect(logger.info).toHaveBeenCalledWith("[CircuitBreaker] 'svc': HALF_OPEN → CLOSED");
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('defaults to console.log (unchanged behaviour)', async () => {
+    const log = vi.mocked(console.log);
+    const cb = new CircuitBreaker('svc', { failureThreshold: 1 });
+    await failTimes(cb, 1);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("'svc': CLOSED → OPEN"));
+  });
+});

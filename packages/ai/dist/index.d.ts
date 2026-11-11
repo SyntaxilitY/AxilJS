@@ -3,6 +3,7 @@
  * The complete AxilJS AI platform.
  */
 export * from './types';
+export type { AILogger } from './logger';
 export { OpenAIProvider } from './providers/openai';
 export { AnthropicProvider } from './providers/anthropic';
 export { OllamaProvider } from './providers/ollama';

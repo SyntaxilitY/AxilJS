@@ -4,7 +4,7 @@
  * Developed by SyntaxilitY
  *
  * Commands:
- *   axil create <name>           Create a new project
+ *   axil create [name]           Create a new project (interactive picker)
  *   axil generate <kind> <name>  Generate module/controller/service/entity/migration
  *   axil migrate [up|down|status] Run database migrations
  *   axil run                     Start development server
@@ -13,6 +13,7 @@
  *   axil deploy                  Generate Docker + K8s files
  *   axil install                 Install packages
  *   axil doctor                  Diagnose project
+ *   axil capacity                Check capacity against the scaling target
  *   axil decorator list          List all semantic decorators
  *   axil decorator info <name>   Show decorator documentation
  *   axil decorator search <q>    Search decorators by keyword
@@ -42,8 +43,11 @@ import { installPackages } from './commands/install'
 import { runDoctor }       from './commands/doctor'
 import { runTests }        from './commands/test'
 import { deploy }          from './commands/deploy'
+import { capacity }        from './commands/capacity'
 import { runDecorator }    from './commands/decorator'
 import * as ui             from './ui'
+import { canPrompt }       from './prompts'
+import { TEMPLATES }       from './templates'
 
 // ============================================================================
 // CLI PACKAGE METADATA
@@ -231,8 +235,9 @@ async function runCommand(name: string, parsed: ParsedArgs): Promise<void> {
     case 'create': {
       const projectName = pos[0]
 
-      if (!projectName) {
-        fail('Please provide a project name.', 'axil create <project-name> [--yes] [--db=<driver>]')
+      // On a terminal a missing name is asked for (step 1 of the create flow)
+      if (!projectName && (flagBool(parsed, 'yes') || !canPrompt())) {
+        fail('Please provide a project name.', 'axil create <project-name> [--yes] [--template=<id>]')
       }
       if (pos.length > 1) {
         fail(`Unexpected argument '${pos[1]}'.`, 'axil create <project-name> [options]')
@@ -319,6 +324,19 @@ async function runCommand(name: string, parsed: ParsedArgs): Promise<void> {
       break
     }
 
+    case 'capacity': {
+      await capacity({
+        url:           flagString(parsed, 'url'),
+        serverWorkers: flagString(parsed, 'server-workers'),
+        duration:      flagString(parsed, 'duration'),
+        connections:   flagString(parsed, 'connections'),
+        init:          flagBool(parsed, 'init'),
+        force:         flagBool(parsed, 'force'),
+        json:          flagBool(parsed, 'json')
+      })
+      break
+    }
+
     // ========================================================================
     // DECORATOR
     // ========================================================================
@@ -354,15 +372,30 @@ async function runCommand(name: string, parsed: ParsedArgs): Promise<void> {
  * args.ts, so a command's summary only lives in one place.
  */
 const HELP_GROUPS: Array<{ title: string; commands: Array<[string, string]> }> = [
-  { title: 'Project',  commands: [['create', 'create <name>'], ['generate', 'generate <kind> <name>'], ['install', 'install [packages…]']] },
+  { title: 'Project',  commands: [['create', 'create [name]'], ['generate', 'generate <kind> <name>'], ['install', 'install [packages…]']] },
   { title: 'Develop',  commands: [['run', 'run'], ['test', 'test [pattern]'], ['doctor', 'doctor']] },
   { title: 'Database', commands: [['migrate', 'migrate [up|down|status]']] },
-  { title: 'Ship',     commands: [['build', 'build'], ['deploy', 'deploy']] },
+  { title: 'Ship',     commands: [['build', 'build'], ['capacity', 'capacity'], ['deploy', 'deploy']] },
   { title: 'Inspect',  commands: [['decorator', 'decorator <sub>']] }
 ]
 
 function printHelp(): void {
   ui.banner(CLI_VERSION, CLI_TAGLINE)
+
+  ui.line()
+  // Template ids wrapped to the card width
+  const idLines: string[] = []
+  for (const id of TEMPLATES.map(t => t.id)) {
+    const last = idLines.length - 1
+    if (last >= 0 && idLines[last].length + id.length + 3 <= 66) idLines[last] += ` ${ui.sym.dot} ${id}`
+    else idLines.push(id)
+  }
+  ui.card('Start a project', [
+    `${ui.muted('$')} ${ui.cmd('axil create')}                     ${ui.muted('browse templates, space to pick')}`,
+    `${ui.muted('$')} ${ui.cmd('axil create my-api -t rest-api')}  ${ui.muted('or name one directly')}`,
+    '',
+    ...idLines.map(l => ui.muted(l))
+  ], { meta: `${TEMPLATES.length} templates`, width: 74 })
 
   ui.section('Usage:')
   ui.line(`  ${ui.muted('$')} ${ui.cmd('axil <command> [options]')}`)
@@ -389,6 +422,7 @@ function printHelp(): void {
   for (const example of [
     'axil create my-api --yes --db=sqlite',
     'cd my-api && axil run',
+    'axil capacity',
     'axil generate module products',
     'axil migrate status',
     'axil decorator search cache'

@@ -32,6 +32,8 @@ export interface axilRequest {
   query: QueryParams;
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
+  // Unparsed body text, set by core's body parser (e.g. for webhook signatures)
+  rawBody?: string;
   ip: string;
   locals: Record<string, unknown>;
 }

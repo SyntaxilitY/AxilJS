@@ -21,6 +21,8 @@
  *     type run in registration order
  *   - it.skip / it.only / describe.skip / describe.only (+ xit/fit,
  *     xdescribe/fdescribe)
+ *   - hooks outside any describe() apply to every test in that file
+ *     (outermost: they run before / after the describe-level hooks)
  *   - per-test timeout: it(name, fn, timeoutMs) (default 5000 ms)
  *   - it.each(table)(name, fn) / describe.each(table)(name, fn)
  */
@@ -102,7 +104,8 @@ export declare function xdescribe(name: string, fn: () => void): void;
 export declare function fdescribe(name: string, fn: () => void): void;
 /**
  * Setup hooks. Several hooks of the same type may be registered per suite;
- * they run in registration order. Hooks outside any describe() are ignored.
+ * they run in registration order. Hooks outside any describe() apply to every
+ * test in the file that registered them, outside the describe-level hooks.
  */
 export declare function beforeAll(fn: HookFn): void;
 export declare function afterAll(fn: HookFn): void;

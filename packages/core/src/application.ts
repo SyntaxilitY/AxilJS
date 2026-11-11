@@ -16,6 +16,8 @@ import {
   Server,
   ServerOptions
 } from 'http';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   AppConfig,
   MiddlewareFn,
@@ -43,6 +45,34 @@ const KNOWN_METHODS: HttpMethod[] = [
   'DELETE',
   'OPTIONS'
 ];
+
+let cachedVersion: string | undefined;
+
+/**
+ * The installed @axiljs/core version, read from its package.json.
+ * Resolved relative to this file (src/ or dist/ are both one level below the
+ * package root); falls back to 'unknown' if it can't be read.
+ * @internal
+ */
+export function coreVersion(): string {
+  if (cachedVersion !== undefined) return cachedVersion;
+  cachedVersion = 'unknown';
+  const dir = typeof __dirname === 'string' ? __dirname : '';
+  if (!dir) return cachedVersion;
+
+  for (const candidate of [join(dir, '..', 'package.json'), join(dir, '..', '..', 'package.json')]) {
+    try {
+      const pkg = JSON.parse(readFileSync(candidate, 'utf-8'));
+      if (pkg && pkg.name === '@axiljs/core' && typeof pkg.version === 'string') {
+        cachedVersion = pkg.version;
+        break;
+      }
+    } catch {
+      // Not readable here - try the next candidate
+    }
+  }
+  return cachedVersion as string;
+}
 
 /**
  * Parse a size such as '1mb', '512kb', '100b' or '2048' into bytes.
@@ -412,8 +442,10 @@ export class Application {
         const boundPort =
           address && typeof address === 'object' ? address.port : listenPort;
 
-        // Print startup banner
-        this.printBanner(boundPort, listenHost);
+        // Print startup banner unless logging is off or running under tests
+        if (this.config.logging !== false && this.config.env !== 'test') {
+          this.printBanner(boundPort, listenHost);
+        }
         resolve({ port: boundPort, host: listenHost });
       });
     });
@@ -479,7 +511,7 @@ export class Application {
     console.log('\x1b[36m\x1b[1m ██║  ██║██╔╝ ██╗██║███████╗╚█████╔╝███████║\x1b[0m')
     console.log('\x1b[36m\x1b[1m ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝ ╚════╝ ╚══════╝\x1b[0m')
     console.log('')
-    console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv0.1.0\x1b[0m`)
+    console.log(`\x1b[1m AxilJS\x1b[0m \x1b[90mv${coreVersion()}\x1b[0m`)
     console.log('')
     console.log(`  \x1b[32m✓\x1b[0m Server running`)
     console.log(`  \x1b[32m✓\x1b[0m http://${host}:${port}`)

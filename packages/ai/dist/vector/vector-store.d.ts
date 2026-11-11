@@ -29,6 +29,13 @@ export interface VectorDocument {
 }
 export interface SearchResult {
     document: VectorDocument;
+    /**
+     * Similarity score, higher = more similar. The scale depends on the metric:
+     *   - 'cosine'    (default): raw cosine similarity, -1..1
+     *                 (1 = same direction, 0 = unrelated/orthogonal, -1 = opposite)
+     *   - 'dot':      raw dot product (unbounded; equals cosine for unit vectors)
+     *   - 'euclidean': 1 / (1 + distance), 0..1 (1 = identical)
+     */
     score: number;
 }
 export interface SearchOptions {

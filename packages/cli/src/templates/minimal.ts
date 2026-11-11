@@ -11,6 +11,13 @@ export const minimalTemplate: ProjectTemplate = {
   id:       'minimal',
   title:    'Minimal API',
   summary:  'Routes, validation, CORS and tests; nothing else',
+  category: 'Start',
+  highlights: [
+    'Typed .env config with defineConfig',
+    'Validated routes, 404/405/422 as one JSON shape',
+    'CORS for a configurable origin',
+    'Tests that never open a port'
+  ],
   packages: ['@axiljs/core', '@axiljs/config', '@axiljs/validation', '@axiljs/testing'],
   port:     3000,
 

@@ -22,8 +22,10 @@
 import { AIProvider, Message } from '../types';
 import { VectorStore } from '../vector/vector-store';
 import { RawDocument } from './document-loader';
+import { AILogger } from '../logger';
 export interface RAGPipelineOptions {
     provider: AIProvider;
+    embeddingProvider?: AIProvider;
     vectorStore?: VectorStore;
     generationModel?: string;
     embeddingModel?: string;
@@ -32,7 +34,9 @@ export interface RAGPipelineOptions {
     chunker?: {
         chunkSize?: number;
         overlap?: number;
+        minChunkSize?: number;
     };
+    logger?: AILogger | false;
     systemPrompt?: string;
 }
 export interface RAGQueryResult {
@@ -49,8 +53,11 @@ export interface RAGQueryResult {
 }
 export declare class RAGPipeline {
     private provider;
+    private embeddingProvider;
     private vectorStore;
     private chunker;
+    private logger;
+    private logProgress;
     private options;
     private totalEmbeddingTokens;
     constructor(options: RAGPipelineOptions);

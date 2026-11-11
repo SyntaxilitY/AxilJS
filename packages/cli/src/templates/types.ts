@@ -20,13 +20,21 @@ export interface TemplateContext {
   cliVersion: string
 }
 
+/** Groups in the template picker, in display order. */
+export const TEMPLATE_CATEGORIES = ['Start', 'APIs', 'Realtime', 'Background', 'AI', 'Production'] as const
+export type TemplateCategory = typeof TEMPLATE_CATEGORIES[number]
+
 export interface ProjectTemplate {
   /** Value of --template, kebab-case. */
   id: string
   /** Display name, e.g. "REST API". */
   title: string
-  /** One line for help screens and the template picker. */
+  /** One line for help screens and the template picker (max 60 chars). */
   summary: string
+  /** Picker group. */
+  category: TemplateCategory
+  /** 3–5 short bullets shown in the picker's detail panel (max 60 chars each). */
+  highlights: string[]
   /** @axiljs packages it showcases, for the picker / docs. */
   packages: string[]
   /** Port the app listens on (shown in the summary and next steps). */

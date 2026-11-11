@@ -24,12 +24,18 @@ import { AIProvider, Message } from '../types';
 import { VectorStore } from '../vector/vector-store';
 import { DocumentChunker } from './chunker';
 import { RawDocument } from './document-loader';
+import { AILogger, resolveLogger } from '../logger';
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface RAGPipelineOptions {
-  // AI provider for embeddings and completions
+  // AI provider for completions (and embeddings, unless embeddingProvider is set)
   provider: AIProvider;
+
+  // Provider used for embeddings (index + query). Defaults to `provider`.
+  // Needed when `provider` has no embeddings API, e.g. AnthropicProvider:
+  //   new RAGPipeline({ provider: anthropic, embeddingProvider: openai })
+  embeddingProvider?: AIProvider;
 
   // Vector store (created externally or defaults to in-memory)
   vectorStore?: VectorStore;
@@ -43,14 +49,22 @@ export interface RAGPipelineOptions {
   // Number of documents to retrieve per query (default: 5)
   topK?: number;
 
-  // Minimum similarity score for retrieved documents (default: 0.3)
+  // Minimum similarity score for retrieved documents (default: 0.3).
+  // Uses the vector store's scale; for the default cosine metric that is raw
+  // cosine similarity (-1..1, 0 = unrelated), see SearchResult.score.
   minScore?: number;
 
   // Chunker options
   chunker?: {
     chunkSize?: number;
     overlap?: number;
+    // Discard chunks shorter than this (default: 50). A document shorter
+    // than this is still indexed as one chunk.
+    minChunkSize?: number;
   };
+
+  // Progress logging. Default: coloured console output. false = silent.
+  logger?: AILogger | false;
 
   // System prompt template for RAG
   systemPrompt?: string;
@@ -90,20 +104,28 @@ Instructions:
 
 export class RAGPipeline {
   private provider: AIProvider;
+  private embeddingProvider: AIProvider;
   private vectorStore: VectorStore;
   private chunker: DocumentChunker;
-  private options: Required<Omit<RAGPipelineOptions, 'vectorStore' | 'chunker' | 'provider'>>;
+  private logger: AILogger;
+  // The in-place progress line is only drawn for the default console logger
+  private logProgress: boolean;
+  private options: Required<Omit<RAGPipelineOptions, 'vectorStore' | 'chunker' | 'provider' | 'embeddingProvider' | 'logger'>>;
 
   // Track total tokens used
   private totalEmbeddingTokens = 0;
 
   constructor(options: RAGPipelineOptions) {
     this.provider = options.provider;
+    this.embeddingProvider = options.embeddingProvider || options.provider;
     this.vectorStore = options.vectorStore || new VectorStore();
+    this.logger = resolveLogger(options.logger, 'AxilJS AI');
+    this.logProgress = options.logger === undefined;
 
     this.chunker = new DocumentChunker({
-      chunkSize: options.chunker?.chunkSize ?? 800,
-      overlap:   options.chunker?.overlap   ?? 150
+      chunkSize:    options.chunker?.chunkSize    ?? 800,
+      overlap:      options.chunker?.overlap      ?? 150,
+      minChunkSize: options.chunker?.minChunkSize ?? 50
     });
 
     this.options = {
@@ -127,15 +149,11 @@ export class RAGPipeline {
     documentsIndexed: number;
     chunksCreated: number;
   }> {
-    console.log(
-      `\x1b[36m[AxilJS AI]\x1b[0m Indexing ${documents.length} document(s)...`
-    );
+    this.logger.info(`Indexing ${documents.length} document(s)...`);
 
     // Step 1: Chunk documents
     const chunks = this.chunker.chunk(documents);
-    console.log(
-      `\x1b[90m[AxilJS AI]\x1b[0m Created ${chunks.length} chunk(s)`
-    );
+    this.logger.info(`Created ${chunks.length} chunk(s)`);
 
     // Step 2: Generate embeddings for all chunks
     // Batch in groups of 20 to avoid rate limits
@@ -151,7 +169,7 @@ export class RAGPipeline {
         embeddingOptions.model = this.options.embeddingModel;
       }
 
-      const result = await this.provider.embed(embeddingOptions);
+      const result = await this.embeddingProvider.embed(embeddingOptions);
 
       this.totalEmbeddingTokens += result.usage.totalTokens;
 
@@ -170,14 +188,16 @@ export class RAGPipeline {
       await this.vectorStore.add(vectorDocs);
       processed += batch.length;
 
-      process.stdout.write(
-        `\r\x1b[90m[AxilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
-      );
+      if (this.logProgress) {
+        process.stdout.write(
+          `\r\x1b[90m[AxilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`
+        );
+      }
     }
 
-    console.log('');
-    console.log(
-      `\x1b[32m[AxilJS AI]\x1b[0m Indexed ${documents.length} documents ` +
+    if (this.logProgress) console.log('');
+    this.logger.info(
+      `Indexed ${documents.length} documents ` +
       `(${chunks.length} chunks, ${this.totalEmbeddingTokens} tokens)`
     );
 
@@ -202,7 +222,7 @@ export class RAGPipeline {
       embeddingOptions.model = this.options.embeddingModel;
     }
 
-    const queryEmbedding = await this.provider.embed(embeddingOptions);
+    const queryEmbedding = await this.embeddingProvider.embed(embeddingOptions);
     const embeddingTokens = queryEmbedding.usage.totalTokens;
 
     // Step 2: Retrieve most similar chunks
@@ -281,7 +301,7 @@ export class RAGPipeline {
   }> {
     // Retrieve context (same as query())
     // Must use the same embedding model as index(), or dimensions mismatch
-    const queryEmbedding = await this.provider.embed(
+    const queryEmbedding = await this.embeddingProvider.embed(
       this.options.embeddingModel
         ? { input: question, model: this.options.embeddingModel }
         : { input: question }

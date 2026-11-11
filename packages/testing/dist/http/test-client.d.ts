@@ -17,7 +17,12 @@ export interface TestResponse {
     body: any;
     text: string;
 }
-declare class TestRequest {
+/**
+ * A pending request built by TestClient (get/post/…). Chain set/auth/send,
+ * then await it for a TestResponse. Exported so helpers that return
+ * `client.post(...)` can be declared in emitted .d.ts files.
+ */
+export declare class TestRequest implements PromiseLike<TestResponse> {
     private method;
     private path;
     private _headers;
@@ -69,5 +74,4 @@ export declare class TestClient {
  *   expect(res.status).toBe(200)
  */
 export declare function createTestClient(app: Application): TestClient;
-export {};
 //# sourceMappingURL=test-client.d.ts.map

@@ -9,10 +9,20 @@
  *
  *   app.use(observabilityMiddleware({ metrics, tracer }))
  *   app.get('/metrics', metricsHandler(metrics))
+ *
+ * With a tracer, the request's server span is exposed to later middleware
+ * and handlers as req.locals.span (plus req.locals.tracer and
+ * req.locals.traceContext) so they can create child spans and propagate the
+ * trace to downstream calls:
+ *
+ *   await tracer.trace('db.query', async () => db.query(sql), getRequestSpan(req))
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.observabilityMiddleware = observabilityMiddleware;
+exports.getRequestSpan = getRequestSpan;
+exports.getTraceContext = getTraceContext;
 exports.metricsHandler = metricsHandler;
+const tracing_1 = require("./tracing");
 /**
  * Create observability middleware.
  * Tracks request count, duration, and distributed traces.
@@ -39,6 +49,13 @@ function observabilityMiddleware(options = {}) {
             // Attach trace IDs to response headers
             const traceHeaders = tracer.injectContext(span);
             Object.entries(traceHeaders).forEach(([k, v]) => res.header(k, v));
+            // Expose the server span so handlers can start child spans and
+            // propagate the trace (tracer.injectContext(child)) downstream
+            if (req.locals) {
+                req.locals.span = span;
+                req.locals.tracer = tracer;
+                req.locals.traceContext = { traceId: span.traceId, spanId: span.spanId };
+            }
         }
         // Track active requests
         activeRequests?.inc();
@@ -83,6 +100,21 @@ function observabilityMiddleware(options = {}) {
         };
         next();
     };
+}
+/**
+ * The server span observabilityMiddleware started for this request
+ * (req.locals.span), or undefined when no tracer is configured.
+ */
+function getRequestSpan(req) {
+    const span = req.locals?.span;
+    return span instanceof tracing_1.Span ? span : undefined;
+}
+/**
+ * Trace context ({ traceId, spanId }) of the request's server span
+ * (req.locals.traceContext), or undefined when no tracer is configured.
+ */
+function getTraceContext(req) {
+    return req.locals?.traceContext;
 }
 /**
  * Create a route handler that serves Prometheus metrics.

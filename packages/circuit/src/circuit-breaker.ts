@@ -30,6 +30,13 @@ import { EventEmitter } from 'events';
 
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
+// ─── Logger ───────────────────────────────────────────────────────────────────
+
+export interface CircuitLogger {
+  info(msg: string): void;
+  warn(msg: string): void;
+}
+
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface CircuitBreakerOptions {
@@ -61,6 +68,13 @@ export interface CircuitBreakerOptions {
   // Bulkhead: how many calls may wait for a free slot when maxConcurrent is
   // reached (default: 0 = reject immediately with BulkheadRejectedError)
   maxQueue?: number;
+
+  // Where state-change messages go.
+  // Default: console.log with ANSI colour (unchanged). false: silent.
+  // { info, warn }: plain-text messages to your logger.
+  // State changes are always observable via the 'stateChange' event:
+  //   cb.on('stateChange', (next, previous) => ...)
+  logger?: CircuitLogger | false;
 }
 
 // ─── Circuit Breaker Error ─────────────────────────────────────────────────────
@@ -101,7 +115,8 @@ export class CircuitBreaker extends EventEmitter {
   private activeCount: number = 0;
   private waiters: Array<() => void> = [];
 
-  private options: Required<CircuitBreakerOptions>;
+  private options: Required<Omit<CircuitBreakerOptions, 'logger'>>;
+  private logger: CircuitLogger | false | undefined;
 
   constructor(
     public readonly name: string,
@@ -120,6 +135,7 @@ export class CircuitBreaker extends EventEmitter {
       maxConcurrent: options.maxConcurrent ?? Infinity,
       maxQueue: options.maxQueue ?? 0
     };
+    this.logger = options.logger;
   }
 
   // ─── Execute ─────────────────────────────────────────────────────────────────
@@ -339,10 +355,14 @@ export class CircuitBreaker extends EventEmitter {
     }
 
     if (previousState !== newState) {
-      console.log(
-        `\x1b[33m[CircuitBreaker]\x1b[0m '${this.name}': ` +
-          `${previousState} → ${newState}`
-      );
+      const msg = `'${this.name}': ${previousState} → ${newState}`;
+      if (this.logger === undefined) {
+        console.log(`\x1b[33m[CircuitBreaker]\x1b[0m ${msg}`);
+      } else if (this.logger) {
+        // Opening is the noteworthy transition; recovery is informational
+        if (newState === 'OPEN') this.logger.warn(`[CircuitBreaker] ${msg}`);
+        else this.logger.info(`[CircuitBreaker] ${msg}`);
+      }
       this.emit('stateChange', newState, previousState);
     }
   }

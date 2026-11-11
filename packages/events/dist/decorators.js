@@ -61,14 +61,15 @@ function isTc39MethodContext(ctx) {
         ctx.kind === 'method' &&
         typeof ctx.addInitializer === 'function');
 }
-// ─── registerEventHandlers ────────────────────────────────────────────────────
 /**
  * Register all @OnEvent decorated methods from an instance on the event bus.
  *
  * Usage:
  *   registerEventHandlers(new NotificationService(), eventBus)
+ *   registerEventHandlers(new NotificationService(), eventBus, { logger: false })
  */
-function registerEventHandlers(instance, bus) {
+function registerEventHandlers(instance, bus, options = {}) {
+    const { logger } = options;
     const proto = Object.getPrototypeOf(instance);
     // Legacy decorators store metadata on the prototype; TC39 decorators on the instance
     const ownTc39 = Object.prototype.hasOwnProperty.call(instance, EVENT_HANDLERS_KEY)
@@ -80,13 +81,19 @@ function registerEventHandlers(instance, bus) {
     for (const { eventType, methodName } of handlers) {
         const method = instance[methodName];
         if (typeof method !== 'function') {
-            console.warn(`[AxilJS Events] '${methodName}' is not a function on ` +
-                `${instance.constructor.name}`);
+            const msg = `[AxilJS Events] '${methodName}' is not a function on ${instance.constructor.name}`;
+            if (logger === undefined)
+                console.warn(msg);
+            else if (logger)
+                logger.warn(msg);
             continue;
         }
         bus.on(eventType, (event) => method.call(instance, event));
-        console.log(`\x1b[90m[AxilJS Events]\x1b[0m Registered: ` +
-            `${instance.constructor.name}.${methodName} → '${eventType}'`);
+        const msg = `Registered: ${instance.constructor.name}.${methodName} → '${eventType}'`;
+        if (logger === undefined)
+            console.log(`\x1b[90m[AxilJS Events]\x1b[0m ${msg}`);
+        else if (logger)
+            logger.info(`[AxilJS Events] ${msg}`);
     }
 }
 //# sourceMappingURL=decorators.js.map

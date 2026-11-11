@@ -12,10 +12,15 @@
  *   expect(res.body.data).toHaveLength(1)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TestClient = void 0;
+exports.TestClient = exports.TestRequest = void 0;
 exports.createTestClient = createTestClient;
 const http_1 = require("http");
 // ─── Test Request Builder ─────────────────────────────────────────────────────
+/**
+ * A pending request built by TestClient (get/post/…). Chain set/auth/send,
+ * then await it for a TestResponse. Exported so helpers that return
+ * `client.post(...)` can be declared in emitted .d.ts files.
+ */
 class TestRequest {
     method;
     path;
@@ -110,13 +115,12 @@ class TestRequest {
      */
     makeRequest(port) {
         return new Promise((resolve, reject) => {
-            // Strings and Buffers are sent as-is when a non-JSON content-type is
-            // set (form bodies, plain text, XML…); everything else is JSON-encoded.
-            const contentType = this._headers['content-type'] || '';
-            const isJson = /\bjson\b/i.test(contentType);
+            // Strings and Buffers are sent as-is (exact bytes, whatever the
+            // content-type: pre-serialized JSON, form bodies, text, binary…);
+            // everything else is JSON-encoded.
             let bodyStr = '';
             if (this._body !== undefined) {
-                if (!isJson && (typeof this._body === 'string' || Buffer.isBuffer(this._body))) {
+                if (typeof this._body === 'string' || Buffer.isBuffer(this._body)) {
                     bodyStr = this._body;
                 }
                 else {
@@ -171,6 +175,7 @@ class TestRequest {
         });
     }
 }
+exports.TestRequest = TestRequest;
 // ─── Test Client ──────────────────────────────────────────────────────────────
 class TestClient {
     app;

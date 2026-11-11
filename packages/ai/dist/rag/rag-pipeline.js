@@ -24,6 +24,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RAGPipeline = void 0;
 const vector_store_1 = require("../vector/vector-store");
 const chunker_1 = require("./chunker");
+const logger_1 = require("../logger");
 // ─── Default System Prompt ────────────────────────────────────────────────────
 const DEFAULT_SYSTEM_PROMPT = `You are a helpful assistant that answers questions based on the provided context documents.
 
@@ -35,17 +36,25 @@ Instructions:
 // ─── RAG Pipeline ────────────────────────────────────────────────────────────
 class RAGPipeline {
     provider;
+    embeddingProvider;
     vectorStore;
     chunker;
+    logger;
+    // The in-place progress line is only drawn for the default console logger
+    logProgress;
     options;
     // Track total tokens used
     totalEmbeddingTokens = 0;
     constructor(options) {
         this.provider = options.provider;
+        this.embeddingProvider = options.embeddingProvider || options.provider;
         this.vectorStore = options.vectorStore || new vector_store_1.VectorStore();
+        this.logger = (0, logger_1.resolveLogger)(options.logger, 'AxilJS AI');
+        this.logProgress = options.logger === undefined;
         this.chunker = new chunker_1.DocumentChunker({
             chunkSize: options.chunker?.chunkSize ?? 800,
-            overlap: options.chunker?.overlap ?? 150
+            overlap: options.chunker?.overlap ?? 150,
+            minChunkSize: options.chunker?.minChunkSize ?? 50
         });
         this.options = {
             generationModel: options.generationModel || this.provider.defaultModel,
@@ -63,10 +72,10 @@ class RAGPipeline {
      * @param documents  Raw documents to index
      */
     async index(documents) {
-        console.log(`\x1b[36m[AxilJS AI]\x1b[0m Indexing ${documents.length} document(s)...`);
+        this.logger.info(`Indexing ${documents.length} document(s)...`);
         // Step 1: Chunk documents
         const chunks = this.chunker.chunk(documents);
-        console.log(`\x1b[90m[AxilJS AI]\x1b[0m Created ${chunks.length} chunk(s)`);
+        this.logger.info(`Created ${chunks.length} chunk(s)`);
         // Step 2: Generate embeddings for all chunks
         // Batch in groups of 20 to avoid rate limits
         const BATCH_SIZE = 20;
@@ -78,7 +87,7 @@ class RAGPipeline {
             if (this.options.embeddingModel) {
                 embeddingOptions.model = this.options.embeddingModel;
             }
-            const result = await this.provider.embed(embeddingOptions);
+            const result = await this.embeddingProvider.embed(embeddingOptions);
             this.totalEmbeddingTokens += result.usage.totalTokens;
             // Step 3: Store chunks with their embeddings
             const vectorDocs = batch.map((chunk, j) => ({
@@ -93,10 +102,13 @@ class RAGPipeline {
             }));
             await this.vectorStore.add(vectorDocs);
             processed += batch.length;
-            process.stdout.write(`\r\x1b[90m[AxilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`);
+            if (this.logProgress) {
+                process.stdout.write(`\r\x1b[90m[AxilJS AI]\x1b[0m Embedded ${processed}/${chunks.length} chunks`);
+            }
         }
-        console.log('');
-        console.log(`\x1b[32m[AxilJS AI]\x1b[0m Indexed ${documents.length} documents ` +
+        if (this.logProgress)
+            console.log('');
+        this.logger.info(`Indexed ${documents.length} documents ` +
             `(${chunks.length} chunks, ${this.totalEmbeddingTokens} tokens)`);
         return { documentsIndexed: documents.length, chunksCreated: chunks.length };
     }
@@ -113,7 +125,7 @@ class RAGPipeline {
         if (this.options.embeddingModel) {
             embeddingOptions.model = this.options.embeddingModel;
         }
-        const queryEmbedding = await this.provider.embed(embeddingOptions);
+        const queryEmbedding = await this.embeddingProvider.embed(embeddingOptions);
         const embeddingTokens = queryEmbedding.usage.totalTokens;
         // Step 2: Retrieve most similar chunks
         const searchResults = await this.vectorStore.search(queryEmbedding.embeddings[0], {
@@ -175,7 +187,7 @@ class RAGPipeline {
     async *queryStream(question, conversation = []) {
         // Retrieve context (same as query())
         // Must use the same embedding model as index(), or dimensions mismatch
-        const queryEmbedding = await this.provider.embed(this.options.embeddingModel
+        const queryEmbedding = await this.embeddingProvider.embed(this.options.embeddingModel
             ? { input: question, model: this.options.embeddingModel }
             : { input: question });
         const searchResults = await this.vectorStore.search(queryEmbedding.embeddings[0], { topK: this.options.topK, minScore: this.options.minScore });

@@ -7,7 +7,8 @@
  *
  * Guarantees:
  *   • Tenant ID is validated before any downstream lookup.
- *   • Suspended / archived tenants are rejected with 403.
+ *   • Unknown, suspended and archived tenants are rejected with 401
+ *     (UnauthorizedError), before any route or auth middleware runs.
  *   • Tenant context is attached to `req.locals.tenant`.
  *   • Works safely in multi-instance deployments (no process state).
  */

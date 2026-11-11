@@ -51,6 +51,44 @@ const echoTool = createTool({
 describe('Agent with a mock provider', () => {
   beforeEach(() => silenceConsole(vi));
 
+  it('logger: false prints nothing; a custom logger receives the messages', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const failing = createTool({
+      name: 'boom', description: 'fails', parameters: { type: 'object', properties: {} },
+      handler: async () => { throw new Error('kaput'); }
+    });
+    const script = (): Array<Partial<CompletionResponse>> => [
+      { content: 'thinking', finishReason: 'tool_use', toolCalls: [
+        { id: 't1', name: 'echo', arguments: { text: 'x' } },
+        { id: 't2', name: 'boom', arguments: {} }
+      ] },
+      { content: 'done' }
+    ];
+
+    const silent = new Agent({ provider: new ScriptedProvider(script()), tools: [echoTool, failing], logger: false });
+    expect((await silent.run('task')).response).toBe('done');
+    const capped = new Agent({ provider: new ScriptedProvider(script()), tools: [echoTool, failing], logger: false, maxIterations: 1 });
+    expect((await capped.run('task')).success).toBe(false);
+    for (const spy of [log, warn, error, write]) expect(spy).not.toHaveBeenCalled();
+
+    const info: string[] = [];
+    const warns: string[] = [];
+    const custom = new Agent({
+      provider: new ScriptedProvider(script()), tools: [echoTool, failing],
+      logger: { info: m => info.push(m), warn: m => warns.push(m) }
+    });
+    await custom.run('task');
+    expect(info.some(m => m.includes('Starting task'))).toBe(true);
+    expect(info.some(m => m.includes('Completed in 2'))).toBe(true);
+    expect(warns).toEqual(['Tool boom failed: kaput']);
+    expect([...info, ...warns].some(m => m.includes('\u001b['))).toBe(false);
+    for (const spy of [log, warn, error, write]) expect(spy).not.toHaveBeenCalled();
+  });
+
   it('runs tools and returns the final answer', async () => {
     const provider = new ScriptedProvider([
       { content: 'calling', finishReason: 'tool_use', toolCalls: [

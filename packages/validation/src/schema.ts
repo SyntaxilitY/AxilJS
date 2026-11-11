@@ -38,7 +38,7 @@ export interface ValidationError {
 
 // ─── Base Validator ───────────────────────────────────────────────────────────
 
-abstract class BaseValidator<T> {
+export abstract class BaseValidator<T> {
   protected _optional: boolean = false;
   protected _nullable: boolean = false;
   protected _defaultValue: T | undefined = undefined;
@@ -125,6 +125,10 @@ abstract class BaseValidator<T> {
       return [{ path, message: `${path} cannot be null`, code: 'NULL_VALUE' }];
     }
 
+    // Coerce accepted string forms (e.g. '5' -> 5) so type checks and
+    // custom rules see the same value parse() returns
+    value = this._coerce(value);
+
     // Type-specific validation
     const typeErrors = this.validateType(value, path);
     if (typeErrors.length > 0) return typeErrors;
@@ -168,7 +172,18 @@ abstract class BaseValidator<T> {
    * @internal
    */
   protected _build(value: unknown): unknown {
-    return value === undefined ? this._defaultValue : value;
+    const out = value === undefined ? this._defaultValue : value;
+    return out === undefined || out === null ? out : this._coerce(out);
+  }
+
+  /**
+   * Convert an accepted alternate input form to the output type
+   * (e.g. numeric query-string values). Unrecognised values pass through
+   * unchanged and are rejected by validateType().
+   * @internal
+   */
+  protected _coerce(value: unknown): unknown {
+    return value;
   }
 
   protected abstract validateType(value: unknown, path: string): ValidationError[];
@@ -192,7 +207,7 @@ function buildOutput<T>(validator: BaseValidator<any>, value: unknown): Validati
 
 // ─── String Validator ─────────────────────────────────────────────────────────
 
-class StringValidator extends BaseValidator<string> {
+export class StringValidator extends BaseValidator<string> {
   private _min?: number;
   private _max?: number;
   private _pattern?: RegExp;
@@ -293,7 +308,7 @@ class StringValidator extends BaseValidator<string> {
 
 // ─── Number Validator ─────────────────────────────────────────────────────────
 
-class NumberValidator extends BaseValidator<number> {
+export class NumberValidator extends BaseValidator<number> {
   private _min?: number;
   private _max?: number;
   private _integer: boolean = false;
@@ -304,11 +319,18 @@ class NumberValidator extends BaseValidator<number> {
   integer(): this { this._integer = true; return this; }
   positive(): this { this._positive = true; return this; }
 
-  protected validateType(value: unknown, path: string): ValidationError[] {
-    // Accept string numbers too (from query params)
-    const num = typeof value === 'string' ? Number(value) : value;
+  /** Numeric strings (from query params / form data) become numbers. */
+  protected _coerce(value: unknown): unknown {
+    if (typeof value !== 'string' || value.trim() === '') return value;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : value;
+  }
 
-    // NaN and +/-Infinity are not usable numbers (also rejects 'Infinity')
+  protected validateType(value: unknown, path: string): ValidationError[] {
+    const num = value;
+
+    // Strings that did not coerce are rejected here, as are NaN and
+    // +/-Infinity (not usable numbers; also rejects 'Infinity') and +/-Infinity are not usable numbers (also rejects 'Infinity')
     if (typeof num !== 'number' || !Number.isFinite(num)) {
       return [{ path, message: `${path} must be a number`, code: 'TYPE_ERROR' }];
     }
@@ -337,12 +359,15 @@ class NumberValidator extends BaseValidator<number> {
 
 // ─── Boolean Validator ────────────────────────────────────────────────────────
 
-class BooleanValidator extends BaseValidator<boolean> {
-  protected validateType(value: unknown, path: string): ValidationError[] {
-    // Accept string booleans from query params / form data
-    if (value === 'true' || value === '1') return [];
-    if (value === 'false' || value === '0') return [];
+export class BooleanValidator extends BaseValidator<boolean> {
+  /** String booleans from query params / form data become booleans. */
+  protected _coerce(value: unknown): unknown {
+    if (value === 'true' || value === '1') return true;
+    if (value === 'false' || value === '0') return false;
+    return value;
+  }
 
+  protected validateType(value: unknown, path: string): ValidationError[] {
     if (typeof value !== 'boolean') {
       return [{ path, message: `${path} must be a boolean`, code: 'TYPE_ERROR' }];
     }
@@ -352,7 +377,7 @@ class BooleanValidator extends BaseValidator<boolean> {
 
 // ─── Array Validator ──────────────────────────────────────────────────────────
 
-class ArrayValidator<T> extends BaseValidator<T[]> {
+export class ArrayValidator<T> extends BaseValidator<T[]> {
   private _min?: number;
   private _max?: number;
 
@@ -404,12 +429,12 @@ class ArrayValidator<T> extends BaseValidator<T[]> {
 
 // ─── Object Validator ─────────────────────────────────────────────────────────
 
-type SchemaShape = Record<string, BaseValidator<any>>;
-type InferShape<S extends SchemaShape> = {
+export type SchemaShape = Record<string, BaseValidator<any>>;
+export type InferShape<S extends SchemaShape> = {
   [K in keyof S]: S[K] extends BaseValidator<infer T> ? T : never;
 };
 
-class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferShape<S>> {
+export class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferShape<S>> {
   private _strip: boolean = false; // Strip unknown fields
 
   constructor(private shape: S) {
@@ -476,7 +501,7 @@ class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferShape<S>
 
 // ─── Enum Validator ───────────────────────────────────────────────────────────
 
-class EnumValidator<T extends string> extends BaseValidator<T> {
+export class EnumValidator<T extends string> extends BaseValidator<T> {
   constructor(private values: T[]) {
     super();
   }
@@ -495,9 +520,9 @@ class EnumValidator<T extends string> extends BaseValidator<T> {
 
 // ─── Literal Validator ────────────────────────────────────────────────────────
 
-type Primitive = string | number | boolean | null;
+export type Primitive = string | number | boolean | null;
 
-class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
+export class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
   constructor(private expected: T) {
     super();
     // v.literal(null) must accept null
@@ -518,9 +543,9 @@ class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
 
 // ─── Union Validator ──────────────────────────────────────────────────────────
 
-type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
+export type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
 
-class UnionValidator<T> extends BaseValidator<T> {
+export class UnionValidator<T> extends BaseValidator<T> {
   constructor(private options: BaseValidator<any>[]) {
     super();
     // null is allowed if any option allows it (e.g. v.literal(null))
@@ -554,7 +579,7 @@ class UnionValidator<T> extends BaseValidator<T> {
 
 // ─── Record Validator ─────────────────────────────────────────────────────────
 
-class RecordValidator<T> extends BaseValidator<Record<string, T>> {
+export class RecordValidator<T> extends BaseValidator<Record<string, T>> {
   constructor(private valueValidator: BaseValidator<T>) {
     super();
   }
@@ -615,5 +640,3 @@ export const v = {
     new UnionValidator<InferValidator<V[number]>>(options),
   record: <T>(valueSchema: BaseValidator<T>) => new RecordValidator(valueSchema)
 };
-
-export type { BaseValidator };

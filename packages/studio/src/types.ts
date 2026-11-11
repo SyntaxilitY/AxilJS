@@ -35,6 +35,41 @@ export interface ColumnInfo {
   default?:   unknown
 }
 
+export interface ForeignKeyInfo {
+  column:    string
+  refTable:  string
+  refColumn: string
+}
+
+export interface IndexInfo {
+  name:    string
+  columns: string[]
+  unique:  boolean
+}
+
+/** A table with its constraints (GET /api/studio/schema). */
+export interface TableSchema extends TableInfo {
+  foreignKeys: ForeignKeyInfo[]
+  indexes:     IndexInfo[]
+}
+
+/** One filter chip in the data grid: GET /api/studio/table/:name?filter=[...] */
+export interface RowFilter {
+  column: string
+  op:     'eq' | 'neq' | 'contains' | 'starts' | 'gt' | 'gte' | 'lt' | 'lte' | 'null' | 'notnull'
+  value?: unknown
+}
+
+export interface RowQuery {
+  limit?:   number
+  offset?:  number
+  sort?:    string
+  dir?:     'asc' | 'desc'
+  /** Case-insensitive "contains" across every column. */
+  search?:  string
+  filters?: RowFilter[]
+}
+
 export interface TableRow {
   [key: string]: unknown
 }

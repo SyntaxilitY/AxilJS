@@ -65,7 +65,7 @@ export interface CompletionOptions {
   // Messages in the conversation
   messages: Message[];
 
-  // Model to use (provider-specific, e.g. 'gpt-4o', 'claude-3-5-sonnet')
+  // Model to use (provider-specific, e.g. 'gpt-4o', 'claude-sonnet-5-5')
   model?: string;
 
   // Temperature: 0 = deterministic, 1 = creative (default: 0.7)

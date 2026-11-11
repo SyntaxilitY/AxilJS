@@ -1,6 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { connect } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Router } from '../src/router/router';
+import { coreVersion } from '../src/application';
 import { axilError, BadRequestError, MiddlewareFn } from '@axiljs/common';
 import { createApp, start, stopAll } from './helpers';
 
@@ -391,8 +394,16 @@ describe('405 Method Not Allowed', () => {
 });
 
 describe('trustProxy', () => {
-  it('uses X-Forwarded-For by default', async () => {
+  it('ignores X-Forwarded-For by default', async () => {
     const app = createApp();
+    app.get('/ip', (req, res) => res.text(req.ip));
+    const base = await start(app);
+    const res = await fetch(`${base}/ip`, { headers: { 'X-Forwarded-For': '203.0.113.9' } });
+    expect(await res.text()).toMatch(/127\.0\.0\.1$/);
+  });
+
+  it('trustProxy: true uses the left-most X-Forwarded-For entry', async () => {
+    const app = createApp({ server: { trustProxy: true } });
     app.get('/ip', (req, res) => res.text(req.ip));
     const base = await start(app);
     const res = await fetch(`${base}/ip`, { headers: { 'X-Forwarded-For': '203.0.113.9' } });
@@ -501,5 +512,84 @@ describe('Body parsing and server limits', () => {
     const app = createApp();
     await start(app);
     expect(app.getServer()!.requestTimeout).toBe(300000);
+  });
+});
+
+describe('Raw body', () => {
+  it('exposes the exact raw JSON text as req.rawBody and req.locals.rawBody', async () => {
+    const app = createApp();
+    let seen: { raw?: string; local?: unknown; body?: unknown } = {};
+    app.post('/hook', (req, res) => {
+      seen = { raw: (req as any).rawBody, local: req.locals.rawBody, body: req.body };
+      res.json({ ok: true });
+    });
+    const base = await start(app);
+
+    const payload = '{\n  "name": "Zoë ✓ 日本",\n  "n":   1\n}\n';
+    const res = await fetch(`${base}/hook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    expect(res.status).toBe(200);
+    expect(seen.raw).toBe(payload);
+    expect(seen.local).toBe(payload);
+    expect(Buffer.from(seen.raw!, 'utf-8').equals(Buffer.from(payload, 'utf-8'))).toBe(true);
+    expect(seen.body).toEqual({ name: 'Zoë ✓ 日本', n: 1 });
+  });
+
+  it('sets rawBody for urlencoded and text bodies, not for GET', async () => {
+    const app = createApp();
+    app.all('/raw', (req, res) => res.json({ raw: (req as any).rawBody ?? null }));
+    const base = await start(app);
+
+    const form = await fetch(`${base}/raw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'a=1&b=x+y'
+    });
+    expect((await form.json()).raw).toBe('a=1&b=x+y');
+
+    const text = await fetch(`${base}/raw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'hello'
+    });
+    expect((await text.json()).raw).toBe('hello');
+
+    expect((await (await fetch(`${base}/raw`)).json()).raw).toBeNull();
+  });
+});
+
+describe('Startup banner', () => {
+  function bannerOutput(spy: ReturnType<typeof vi.spyOn>): string {
+    return spy.mock.calls.map(c => c.join(' ')).join('\n');
+  }
+
+  it('is not printed when logging is false', async () => {
+    const app = createApp({ logging: false, env: 'development' });
+    const spy = vi.mocked(console.log);
+    await start(app);
+    expect(bannerOutput(spy as any)).not.toContain('Server running');
+  });
+
+  it('is not printed when env is test', async () => {
+    const app = createApp({ logging: true, env: 'test' });
+    const spy = vi.mocked(console.log);
+    await start(app);
+    expect(bannerOutput(spy as any)).not.toContain('Server running');
+  });
+
+  it('prints the real @axiljs/core version', async () => {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+    expect(coreVersion()).toBe(pkg.version);
+
+    const app = createApp({ logging: true, env: 'development' });
+    const spy = vi.mocked(console.log);
+    await start(app);
+    const out = bannerOutput(spy as any);
+    expect(out).toContain('Server running');
+    expect(out).toContain(`v${pkg.version}`);
+    expect(out).not.toContain('v0.1.0');
   });
 });

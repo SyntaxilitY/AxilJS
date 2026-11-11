@@ -27,6 +27,7 @@ exports.Queue = void 0;
 const events_1 = require("events");
 const job_1 = require("./job");
 const store_1 = require("./store");
+const logger_1 = require("./logger");
 // ─── Queue ────────────────────────────────────────────────────────────────────
 class Queue extends events_1.EventEmitter {
     name;
@@ -37,6 +38,7 @@ class Queue extends events_1.EventEmitter {
     pollTimer;
     running = false;
     options;
+    log;
     constructor(name, options = {}) {
         super();
         this.name = name;
@@ -46,6 +48,7 @@ class Queue extends events_1.EventEmitter {
             backoff: options.backoff ?? { type: 'exponential', delay: 1000 }
         };
         this.store = options.store ?? new store_1.InMemoryQueueStore();
+        this.log = (0, logger_1.createLogSink)(options.logger, '[AxilJS Queue]');
     }
     // ─── Job Registration ─────────────────────────────────────────────────────────
     /**
@@ -119,8 +122,7 @@ class Queue extends events_1.EventEmitter {
         this.pollTimer = setInterval(() => {
             this.processNext();
         }, this.options.pollIntervalMs);
-        console.log(`\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' started ` +
-            `(concurrency: ${this.options.concurrency})`);
+        this.log('info', `'${this.name}' started (concurrency: ${this.options.concurrency})`);
     }
     /**
      * Stop processing jobs gracefully.
@@ -135,7 +137,7 @@ class Queue extends events_1.EventEmitter {
         while (this.activeCount > 0) {
             await new Promise(resolve => setTimeout(resolve, 100));
         }
-        console.log(`\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' stopped`);
+        this.log('info', `'${this.name}' stopped`);
     }
     // ─── Job Queries ──────────────────────────────────────────────────────────────
     /**
@@ -305,16 +307,21 @@ class Queue extends events_1.EventEmitter {
         }
     }
     reportListenerError(event, err) {
-        console.error(`\x1b[31m[AxilJS Queue]\x1b[0m '${this.name}' ${event} listener threw:`, err instanceof Error ? err.message : err);
+        this.log('error', `'${this.name}' ${event} listener threw: ${err instanceof Error ? err.message : String(err)}`, '\x1b[31m');
     }
     /**
      * Calculate backoff delay for retry attempts.
+     *
+     * exponential: base * 2^(attempt-1), with ±25% proportional jitter, i.e.
+     *              a uniformly random value in [0.75 × d, 1.25 × d]. Jitter scales
+     *              with the delay, so a 10 ms base waits 7.5–12.5 ms (not ~1 s).
+     * fixed:       always exactly `delay` (no jitter).
      */
     calculateBackoff(attemptNumber) {
         const { type, delay } = this.options.backoff;
         if (type === 'exponential') {
-            // Exponential: 1s, 2s, 4s, 8s... with jitter
-            return delay * Math.pow(2, attemptNumber - 1) + Math.random() * 1000;
+            const base = delay * Math.pow(2, attemptNumber - 1);
+            return Math.max(0, base * (0.75 + Math.random() * 0.5));
         }
         // Fixed: always the same delay
         return delay;

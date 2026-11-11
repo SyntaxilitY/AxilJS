@@ -14,7 +14,7 @@
  */
 
 import { c, cmd, gradient, muted, sym } from './ui'
-import { TEMPLATES, TEMPLATE_IDS } from './templates'
+import { TEMPLATES, TEMPLATE_IDS, TEMPLATE_CATEGORIES } from './templates'
 
 // ============================================================================
 // TYPES
@@ -193,7 +193,7 @@ function levenshtein(a: string, b: string): number {
 export const COMMANDS: CommandSpec[] = [
   {
     name:    'create',
-    usage:   'axil create <name> [options]',
+    usage:   'axil create [name] [options]',
     summary: 'Create a new AxilJS project',
     flags: [
       { name: 'template',     alias: 't', type: 'string', valueName: 'name', values: TEMPLATE_IDS, description: 'Start from a ready-made app (see Templates below)' },
@@ -207,12 +207,16 @@ export const COMMANDS: CommandSpec[] = [
       { name: 'force',        type: 'boolean', description: 'Allow creating into an existing non-empty directory' }
     ],
     details: [
-      'Prompts for every option not given as a flag when stdin is a TTY.',
-      'Without a TTY (CI, pipes) or with --yes, defaults are used instead of prompting.',
+      'On a terminal, `axil create` asks for anything not given: the name, then a template',
+      'picker (↑↓ move, ←→ category, space/enter pick, / search), then a confirmation.',
+      'Without a TTY (CI, pipes) or with --yes, defaults are used and a name is required.',
       'A --template sets its own stack, so it cannot be combined with --db/--auth/--ai/--ws/--queue.',
       '',
       'Templates:',
-      ...TEMPLATES.map(t => `  ${t.id.padEnd(17)}${t.summary}`)
+      ...TEMPLATE_CATEGORIES.flatMap(cat => {
+        const inCat = TEMPLATES.filter(t => t.category === cat)
+        return inCat.length ? [`  ${cat}`, ...inCat.map(t => `    ${t.id.padEnd(18)}${t.summary}`)] : []
+      })
     ],
     examples: [
       'axil create my-api',
@@ -323,6 +327,32 @@ export const COMMANDS: CommandSpec[] = [
       '.dockerignore is created only when missing (or replaced with --force).'
     ],
     examples: ['axil deploy', 'axil deploy --port=8080 --replicas=2', 'axil deploy --force']
+  },
+  {
+    name:    'capacity',
+    aliases: ['cap'],
+    usage:   'axil capacity [options]',
+    summary: 'Check whether this machine / deployment can carry the scaling target',
+    flags: [
+      { name: 'init',           type: 'boolean', description: 'Write a starter axil.scaling.json' },
+      { name: 'url',            type: 'string', valueName: 'url', description: 'Measure your own running route instead of a hello-world calibration' },
+      { name: 'server-workers', type: 'string', valueName: 'n', description: 'Workers the server behind --url runs (default: 1)' },
+      { name: 'duration',       type: 'string', valueName: 's', description: 'Measurement length in seconds (default: 5)' },
+      { name: 'connections',    type: 'string', valueName: 'n', description: 'Concurrent keep-alive connections (default: 128)' },
+      { name: 'json',           type: 'boolean', description: 'Print the full report as JSON (exit 1 when it fails)' },
+      { name: 'force',          type: 'boolean', description: 'With --init, overwrite an existing file' }
+    ],
+    details: [
+      'Reads axil.scaling.json (target, vertical, horizontal). Without --url it measures one',
+      '@axiljs/core worker on this machine: a framework ceiling, real routes are slower.',
+      'With several workers or instances it also scans src/ for in-memory state that breaks.'
+    ],
+    examples: [
+      'axil capacity --init',
+      'axil capacity',
+      'axil capacity --url http://localhost:3000/api/users --server-workers 8',
+      'axil capacity --json > capacity.json'
+    ]
   },
   {
     name:    'doctor',

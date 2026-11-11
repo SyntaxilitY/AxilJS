@@ -15,7 +15,7 @@ import {
 
 /** Options for building a Request. */
 export interface RequestOptions {
-  // How to derive req.ip from X-Forwarded-For (default: true)
+  // How to derive req.ip from X-Forwarded-For (default: false - socket address)
   trustProxy?: TrustProxy;
 }
 
@@ -80,6 +80,9 @@ export class Request implements axilRequest {
   public query: QueryParams;
   public headers: Record<string, string | string[] | undefined>;
   public body: unknown;
+  // Unparsed request body text, set by the body parser (e.g. for webhook
+  // signature verification); undefined when there was no body
+  public rawBody: string | undefined;
   public ip: string;
   public locals: Record<string, unknown>;
 
@@ -105,9 +108,11 @@ export class Request implements axilRequest {
 
     // Body is populated by body parser middleware
     this.body = null;
+    this.rawBody = undefined;
 
-    // Get client IP - X-Forwarded-For is honoured per the trustProxy option
-    this.ip = resolveClientIp(raw, options.trustProxy ?? true);
+    // Get client IP - X-Forwarded-For is only honoured when trustProxy opts
+    // in; trusting it by default would let any client spoof its address
+    this.ip = resolveClientIp(raw, options.trustProxy ?? false);
 
     // Empty locals store for middleware to populate
     this.locals = {};

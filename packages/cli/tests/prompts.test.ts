@@ -104,6 +104,60 @@ describe('interactive prompts', () => {
     expect(screen()).toContain('At least 3 characters')
   })
 
+  it('select also submits with space and scrolls long lists', async () => {
+    const many = Array.from({ length: 20 }, (_, i) => ({ value: i, label: `Item ${i}` }))
+    const answer = prompts.select({ message: 'Pick', options: many, maxVisible: 5, step: '2/4' })
+    await press([undefined, { name: 'end' }], [' ', { name: 'space' }])
+    expect(await answer).toBe(19)
+    expect(screen()).toContain('2/4')
+    expect(screen()).toContain('↓ 15 more')
+    expect(screen()).toContain('↑ 15 more')
+  })
+
+  describe('browse', () => {
+    const TPL = [
+      { value: 'minimal',  label: 'Minimal API',   hint: 'Routes + tests',     group: 'Start' },
+      { value: 'rest',     label: 'REST API',      hint: 'CRUD + SQLite',      group: 'APIs' },
+      { value: 'saas',     label: 'SaaS API',      hint: 'Multi-tenant',       group: 'APIs', keywords: ['tenancy'] },
+      { value: 'chat',     label: 'Realtime Chat', hint: 'WebSocket rooms',    group: 'Realtime' }
+    ]
+    const details = (o: { label: string; value: string }) => ({ title: o.label, meta: `id ${o.value}`, lines: [`about ${o.value}`] })
+
+    it('selects with space; down flows from one tab into the next', async () => {
+      const answer = prompts.browse({ message: 'Pick a template', options: TPL, groups: ['Start', 'APIs', 'Realtime'], details, step: '2/4', counter: '4 templates' })
+      await press([undefined, { name: 'down' }], [undefined, { name: 'down' }], [' ', { name: 'space' }])
+      expect(await answer).toBe('saas')
+      const s = screen()
+      expect(s).toContain('Pick a template  2/4')
+      expect(s).toContain('4 templates')
+      expect(s).toMatch(/Start\s+APIs\s+Realtime/)
+      expect(s).toContain('╭─ SaaS API')
+      expect(s).toContain('id saas')
+      expect(s).toContain('about saas')
+    })
+
+    it('left/right jump between tabs and up wraps back to the last tab', async () => {
+      const answer = prompts.browse({ message: 'Pick', options: TPL, groups: ['Start', 'APIs', 'Realtime'] })
+      await press([undefined, { name: 'right' }], [undefined, { name: 'right' }], [undefined, { name: 'left' }], [undefined, { name: 'up' }], [undefined, { name: 'up' }], ['\r', { name: 'return' }])
+      expect(await answer).toBe('chat')
+    })
+
+    it('/ searches across tabs by label, hint and keywords; esc leaves search, not the prompt', async () => {
+      const answer = prompts.browse({ message: 'Pick', options: TPL, details })
+      await press(['/', {}], ['t', {}], ['e', {}], ['n', {}])
+      await press([undefined, { name: 'escape' }], ['/', {}], ['w', {}], ['e', {}], ['b', {}], ['\r', { name: 'return' }])
+      expect(await answer).toBe('chat')
+      expect(screen()).toContain('1 match')
+      expect(process.stdin.listenerCount('keypress')).toBe(0)
+    })
+
+    it('returns the initial option without a TTY', async () => {
+      restoreTty()
+      expect(await prompts.browse({ message: 'Pick', options: TPL, initial: 'rest' })).toBe('rest')
+      fakeTty()
+    })
+  })
+
   it('Ctrl+C cancels, restores the terminal and rejects with PromptCancelled', async () => {
     const answer = prompts.select({ message: 'Database', options: DBS })
     await press(['\x03', { name: 'c', ctrl: true }])

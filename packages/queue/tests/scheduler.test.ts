@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Scheduler, parseCron, matchesCron } from '../src/scheduler';
+import { Scheduler, parseCron, matchesCron, isValidCron, validateCron } from '../src/scheduler';
+import * as publicApi from '../src/index';
 
 let schedulers: Scheduler[] = [];
 function makeScheduler(): Scheduler {
@@ -193,5 +194,71 @@ describe('Scheduler', () => {
   it('schedule() validates the expression', () => {
     const s = makeScheduler();
     expect(() => s.schedule('bad', '* *', () => {})).toThrow();
+  });
+});
+
+describe('cron validation helpers', () => {
+  it('are exported from the package entry point', () => {
+    expect(publicApi.parseCron).toBe(parseCron);
+    expect(publicApi.matchesCron).toBe(matchesCron);
+    expect(publicApi.isValidCron).toBe(isValidCron);
+    expect(publicApi.validateCron).toBe(validateCron);
+  });
+
+  it('isValidCron accepts valid and rejects invalid expressions without throwing', () => {
+    expect(isValidCron('0 9 * * 1-5')).toBe(true);
+    expect(isValidCron('*/15 * * * *')).toBe(true);
+    expect(isValidCron('* *')).toBe(false);
+    expect(isValidCron('*/0 * * * *')).toBe(false);
+    expect(isValidCron('x * * * *')).toBe(false);
+    expect(isValidCron('61 * * * *')).toBe(false); // could never fire
+    expect(isValidCron(undefined as unknown as string)).toBe(false);
+  });
+
+  it('validateCron returns null or the error message', () => {
+    expect(validateCron('0 0 1 1 *')).toBeNull();
+    expect(validateCron('* * * *')).toMatch(/exactly 5 fields/);
+    expect(validateCron('0 25 * * *')).toMatch(/hour field matches no values/);
+  });
+});
+
+describe('Scheduler logger option', () => {
+  it('logger: false prints nothing on start/stop or task failure', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const s = new Scheduler({ logger: false });
+    const failed = vi.fn();
+    s.on('failed', failed);
+    s.schedule('bad', '* * * * *', async () => { throw new Error('nope'); });
+    s.start();
+    await vi.advanceTimersByTimeAsync(60_000);
+    s.stop();
+    expect(failed).toHaveBeenCalledTimes(1); // still observable via the event
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('a custom logger receives plain-text messages', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const s = new Scheduler({ logger });
+    s.on('failed', () => {});
+    s.schedule('bad', '* * * * *', async () => { throw new Error('nope'); });
+    s.start();
+    await vi.advanceTimersByTimeAsync(60_000);
+    s.stop();
+    const info = logger.info.mock.calls.map(c => c[0] as string);
+    expect(info[0]).toBe('[AxilJS Scheduler] Started');
+    expect(info).toContain('[AxilJS Scheduler] 1 task(s) registered:');
+    expect(info.some(m => m.includes('bad') && m.includes('* * * * *'))).toBe(true);
+    expect(info[info.length - 1]).toBe('[AxilJS Scheduler] Stopped');
+    expect(logger.warn).toHaveBeenCalledWith("[AxilJS Scheduler] Task 'bad' failed: nope");
+    expect(log).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Agent = void 0;
+const logger_1 = require("../logger");
 // ─── Default System Prompt ────────────────────────────────────────────────────
 const DEFAULT_AGENT_PROMPT = `You are a capable AI assistant with access to tools.
 
@@ -39,9 +40,11 @@ If you can answer from your training, do so directly.`;
 class Agent {
     provider;
     tools;
+    logger;
     options;
     constructor(options) {
         this.provider = options.provider;
+        this.logger = (0, logger_1.resolveLogger)(options.logger, 'AxilJS Agent');
         // Index tools by name for O(1) lookup
         this.tools = new Map(options.tools.map(tool => [tool.definition.name, tool]));
         this.options = {
@@ -65,7 +68,7 @@ class Agent {
             ...context,
             { role: 'user', content: task }
         ];
-        console.log(`\x1b[36m[AxilJS Agent]\x1b[0m Starting task: "${task.slice(0, 60)}..."`);
+        this.logger.info(`Starting task: "${task.slice(0, 60)}..."`);
         for (let iteration = 1; iteration <= this.options.maxIterations; iteration++) {
             const step = { iteration };
             // Ask the model what to do next
@@ -81,8 +84,7 @@ class Agent {
             // Log thinking
             if (response.content) {
                 step.thought = response.content;
-                console.log(`\x1b[90m[Agent Step ${iteration}]\x1b[0m Thought: ` +
-                    `${response.content.slice(0, 100)}...`);
+                this.logger.info(`Step ${iteration} thought: ${response.content.slice(0, 100)}...`);
             }
             // Check if model wants to call tools
             if (response.toolCalls && response.toolCalls.length > 0) {
@@ -98,7 +100,7 @@ class Agent {
                 const toolResultMessages = [];
                 await Promise.all(response.toolCalls.map(async (toolCall) => {
                     const tool = this.tools.get(toolCall.name);
-                    console.log(`\x1b[33m[Agent Tool]\x1b[0m Calling: ${toolCall.name}` +
+                    this.logger.info(`Calling tool: ${toolCall.name}` +
                         `(${JSON.stringify(toolCall.arguments).slice(0, 60)})`);
                     let result;
                     let error;
@@ -109,13 +111,12 @@ class Agent {
                     else {
                         try {
                             result = await tool.handler(toolCall.arguments);
-                            console.log(`\x1b[32m[Agent Tool]\x1b[0m ${toolCall.name} → ` +
-                                `${JSON.stringify(result).slice(0, 80)}`);
+                            this.logger.info(`Tool ${toolCall.name} → ${JSON.stringify(result)?.slice(0, 80)}`);
                         }
                         catch (err) {
                             error = err.message;
                             result = { error };
-                            console.error(`\x1b[31m[Agent Tool]\x1b[0m ${toolCall.name} failed: ${error}`);
+                            this.logger.warn(`Tool ${toolCall.name} failed: ${error}`);
                         }
                     }
                     step.toolResults.push({
@@ -144,7 +145,7 @@ class Agent {
                 step.finalAnswer = response.content;
                 steps.push(step);
                 this.options.onStep?.(step);
-                console.log(`\x1b[32m[AxilJS Agent]\x1b[0m Completed in ${iteration} iteration(s)`);
+                this.logger.info(`Completed in ${iteration} iteration(s)`);
                 return {
                     response: response.content,
                     steps,
@@ -156,7 +157,7 @@ class Agent {
             steps.push(step);
         }
         // Hit max iterations without finishing
-        console.warn(`\x1b[33m[AxilJS Agent]\x1b[0m Hit max iterations (${this.options.maxIterations})`);
+        this.logger.warn(`Hit max iterations (${this.options.maxIterations})`);
         return {
             response: `Task could not be completed within ${this.options.maxIterations} iterations.`,
             steps,

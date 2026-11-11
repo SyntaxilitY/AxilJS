@@ -24,8 +24,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Scheduler = void 0;
 exports.parseCron = parseCron;
+exports.isValidCron = isValidCron;
+exports.validateCron = validateCron;
 exports.matchesCron = matchesCron;
 const events_1 = require("events");
+const logger_1 = require("./logger");
 /**
  * Parse a single cron field into an array of valid numeric values.
  *
@@ -120,6 +123,45 @@ function parseCron(expression) {
     };
 }
 /**
+ * Validate a 5-field cron expression without scheduling anything.
+ * Returns true if `validateCron` reports no error.
+ *
+ *   isValidCron('0 9 * * 1-5')  // true
+ *   isValidCron('61 * * * *')   // false (no minute can ever match)
+ */
+function isValidCron(expression) {
+    return validateCron(expression) === null;
+}
+/**
+ * Validate a cron expression and return the error message, or null if valid.
+ * Besides `parseCron` errors, an expression with a field that matches no
+ * value at all (e.g. minute "61") is reported, since it could never fire.
+ */
+function validateCron(expression) {
+    if (typeof expression !== 'string')
+        return 'Cron expression must be a string';
+    let parsed;
+    try {
+        parsed = parseCron(expression);
+    }
+    catch (err) {
+        return err instanceof Error ? err.message : String(err);
+    }
+    const fields = [
+        ['minute', parsed.minutes],
+        ['hour', parsed.hours],
+        ['day', parsed.days],
+        ['month', parsed.months],
+        ['weekday', parsed.weekdays]
+    ];
+    for (const [name, values] of fields) {
+        if (values.length === 0) {
+            return `Invalid cron expression: "${expression}". The ${name} field matches no values`;
+        }
+    }
+    return null;
+}
+/**
  * Check whether a given Date matches a parsed cron schedule.
  */
 function matchesCron(date, cron) {
@@ -134,7 +176,6 @@ function matchesCron(date, cron) {
         cron.months.includes(date.getMonth() + 1) && // getMonth() is 0-indexed
         dayMatches);
 }
-// ─── Scheduler ────────────────────────────────────────────────────────────────
 class Scheduler extends events_1.EventEmitter {
     // All registered tasks keyed by name
     tasks = new Map();
@@ -144,6 +185,11 @@ class Scheduler extends events_1.EventEmitter {
     lastTickAt = 0;
     // Whether the scheduler is currently running
     running = false;
+    log;
+    constructor(options = {}) {
+        super();
+        this.log = (0, logger_1.createLogSink)(options.logger, '[AxilJS Scheduler]');
+    }
     /**
      * Register a task to run on a cron schedule.
      *
@@ -178,7 +224,7 @@ class Scheduler extends events_1.EventEmitter {
             return;
         this.running = true;
         this.scheduleNextTick();
-        console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Started');
+        this.log('info', 'Started');
         this.listTasks();
     }
     /**
@@ -192,7 +238,7 @@ class Scheduler extends events_1.EventEmitter {
             clearTimeout(this.alignTimer);
             this.alignTimer = undefined;
         }
-        console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Stopped');
+        this.log('info', 'Stopped');
     }
     /**
      * Enable or disable a specific task by name.
@@ -256,7 +302,7 @@ class Scheduler extends events_1.EventEmitter {
             if (matchesCron(now, task.parsed)) {
                 // Run in background — don't await so other tasks aren't blocked
                 this.runTask(task).catch(err => {
-                    console.error(`\x1b[31m[AxilJS Scheduler]\x1b[0m Tick error in '${task.name}':`, err.message);
+                    this.log('error', `Tick error in '${task.name}': ${err?.message ?? err}`, '\x1b[31m');
                 });
             }
         }
@@ -276,7 +322,7 @@ class Scheduler extends events_1.EventEmitter {
         catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             this.emit('failed', task.name, err);
-            console.error(`\x1b[31m[AxilJS Scheduler]\x1b[0m Task '${task.name}' failed:`, err.message);
+            this.log('error', `Task '${task.name}' failed: ${err.message}`, '\x1b[31m');
         }
     }
     /**
@@ -284,13 +330,12 @@ class Scheduler extends events_1.EventEmitter {
      */
     listTasks() {
         if (this.tasks.size === 0) {
-            console.log('\x1b[90m[AxilJS Scheduler]\x1b[0m No tasks registered');
+            this.log('info', 'No tasks registered', '\x1b[90m');
             return;
         }
-        console.log(`\x1b[90m[AxilJS Scheduler]\x1b[0m ` +
-            `${this.tasks.size} task(s) registered:`);
+        this.log('info', `${this.tasks.size} task(s) registered:`, '\x1b[90m');
         for (const task of this.tasks.values()) {
-            console.log(`  • ${task.name.padEnd(25)} ${task.expression}`);
+            this.log('info', `  • ${task.name.padEnd(25)} ${task.expression}`, null);
         }
     }
 }

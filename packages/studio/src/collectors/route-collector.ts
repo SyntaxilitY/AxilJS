@@ -96,11 +96,14 @@ export class RouteCollector {
       if (path.length > 200) continue
       if (!path.startsWith('/')) continue
 
+      // Arguments of THIS call only: (path, ...middleware, handler)
+      const args = callArguments(content, content.indexOf('(', match.index))
+      const rest = args.slice(1)
       routes.push({
         method,
         path,
-        handler:    this.extractHandlerName(content, match.index),
-        middleware: this.extractMiddleware(content, match.index)
+        handler:    rest.length ? handlerName(rest[rest.length - 1]) : 'anonymous',
+        middleware: rest.slice(0, -1).map(middlewareName).filter((m): m is string => m !== null)
       })
     }
   }
@@ -155,30 +158,61 @@ export class RouteCollector {
     }
   }
 
-  private extractHandlerName(content: string, index: number): string {
-    // Try to find the function name after the route path
-    const slice = content.slice(index, index + 300)
-    const match = slice.match(/,\s*(?:async\s+)?(?:(?:\w+\s*,\s*)*)((?:\w+\.)*\w+)\s*(?:\)|as)/)
-    return match ? match[1] : 'anonymous'
+}
+
+// ─── Call-argument parsing ────────────────────────────────────────────────────
+
+/**
+ * Top-level arguments of the call whose "(" is at `open`, as source text.
+ * Tracks (), [], {} nesting and skips strings, template literals and
+ * comments, so `app.get('/', (req, res) => res.json({ a: [1, 2] }))`
+ * yields ["'/'", "(req, res) => res.json({ a: [1, 2] })"].
+ */
+export function callArguments(src: string, open: number): string[] {
+  if (open < 0 || src[open] !== '(') return []
+  const args: string[] = []
+  // Argument text without comments ("//" after ":" is a URL, not a comment)
+  const clean = (text: string) =>
+    text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1').trim()
+  let depth = 0
+  let start = open + 1
+  for (let i = open; i < src.length && i < open + 20_000; i++) {
+    const ch = src[i]
+    if (ch === '"' || ch === "'" || ch === '`') {
+      // Skip the string (template ${} nesting is rare in route args; good enough)
+      for (i++; i < src.length && src[i] !== ch; i++) if (src[i] === '\\') i++
+      continue
+    }
+    if (ch === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue }
+    if (ch === '/' && src[i + 1] === '*') { i = src.indexOf('*/', i + 2); if (i < 0) break; i++; continue }
+    if (ch === '(' || ch === '[' || ch === '{') depth++
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      depth--
+      if (depth === 0) {
+        const last = clean(src.slice(start, i))
+        if (last) args.push(last)
+        return args
+      }
+    } else if (ch === ',' && depth === 1) {
+      args.push(clean(src.slice(start, i)))
+      start = i + 1
+    }
   }
+  return args
+}
 
-  private extractMiddleware(content: string, index: number): string[] {
-    const middleware: string[] = []
-    const slice = content.slice(index, index + 300)
+/** "listUsers" / "users.list" for references; "anonymous" for inline functions. */
+export function handlerName(arg: string): string {
+  const named = /^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)/.exec(arg)
+  if (named) return named[1]
+  if (/^(?:async\s+)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>)/.test(arg)) return 'anonymous'
+  const ref = /^((?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*)(?:\.bind\(.*\))?\s*(?:as\s+\w+)?$/.exec(arg)
+  return ref ? ref[1] : 'anonymous'
+}
 
-    if (slice.includes('authenticate') || slice.includes('auth')) {
-      middleware.push('authenticate')
-    }
-    if (slice.includes('validate') || slice.includes('Validate')) {
-      middleware.push('validate')
-    }
-    if (slice.includes('rateLimit') || slice.includes('throttle')) {
-      middleware.push('rateLimit')
-    }
-    if (slice.includes('cors')) {
-      middleware.push('cors')
-    }
-
-    return middleware
-  }
+/** "authenticate()" → "authenticate", "validate({ body })" → "validate", "auth.required" → "auth.required". */
+export function middlewareName(arg: string): string | null {
+  if (/^(?:async\s+)?(?:function\b|\(|[A-Za-z_$][\w$]*\s*=>)/.test(arg)) return 'inline'
+  const m = /^((?:[A-Za-z_$][\w$]*\.)*[A-Za-z_$][\w$]*)/.exec(arg)
+  return m ? m[1] : null
 }

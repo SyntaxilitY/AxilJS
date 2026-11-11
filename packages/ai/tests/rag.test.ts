@@ -105,3 +105,87 @@ describe('RAGPipeline with a fake embedding provider', () => {
     expect(events[events.length - 1]).toMatchObject({ type: 'done', data: { content: 'Postgres' } });
   });
 });
+
+describe('RAGPipeline defaults and options', () => {
+  const DOCS = [
+    { id: 'db', content: 'AxilJS is a framework. It supports postgres, mysql and sqlite as its database. '.repeat(3), metadata: { source: 'db.md' } },
+    { id: 'pets', content: 'Cats and dogs are pets. Dogs bark and cats meow. '.repeat(3), metadata: { source: 'pets.md' } }
+  ];
+
+  it('default minScore (0.3 raw cosine) keeps the related chunk and filters the unrelated one', async () => {
+    const provider = new FakeProvider();
+    const rag = new RAGPipeline({ provider, logger: false });
+    await rag.index(DOCS);
+
+    const answer = await rag.query('postgres database');
+    expect(answer.sources.map(s => s.metadata.source)).toEqual(['db.md']);
+    expect(answer.sources[0].score).toBeGreaterThan(0.3);
+
+    const pets = await rag.query('cats');
+    expect(pets.sources.map(s => s.metadata.source)).toEqual(['pets.md']);
+  });
+
+  it('indexes a document shorter than minChunkSize, and minChunkSize is configurable', async () => {
+    const provider = new FakeProvider();
+    const store = new VectorStore();
+    const rag = new RAGPipeline({ provider, vectorStore: store, logger: false });
+    const res = await rag.index([{ id: 'tiny', content: 'Uses postgres.', metadata: {} }]);
+    expect(res).toEqual({ documentsIndexed: 1, chunksCreated: 1 });
+    expect(store.getAll()[0].content).toBe('Uses postgres.');
+
+    // chunker.minChunkSize is passed through: pieces under it are dropped
+    const strict = new RAGPipeline({
+      provider, vectorStore: new VectorStore(), logger: false,
+      chunker: { chunkSize: 30, overlap: 0, minChunkSize: 25 }
+    });
+    const out = await strict.index([{ id: 'p', content: 'short.\n\nthis paragraph is long enough', metadata: {} }]);
+    expect(out.chunksCreated).toBe(1);
+  });
+
+  it('logger: false prints nothing (console or stdout)', async () => {
+    vi.restoreAllMocks();
+    const spies = [
+      vi.spyOn(console, 'log').mockImplementation(() => {}),
+      vi.spyOn(console, 'warn').mockImplementation(() => {}),
+      vi.spyOn(console, 'error').mockImplementation(() => {}),
+      vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    ];
+    const rag = new RAGPipeline({ provider: new FakeProvider(), logger: false });
+    await rag.index(DOCS);
+    await rag.query('postgres');
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+
+    const lines: string[] = [];
+    const custom = new RAGPipeline({ provider: new FakeProvider(), logger: { info: m => lines.push(m), warn: m => lines.push(m) } });
+    await custom.index(DOCS);
+    expect(lines[0]).toBe('Indexing 2 document(s)...');
+    expect(lines[lines.length - 1]).toMatch(/^Indexed 2 documents \(2 chunks, \d+ tokens\)$/);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('uses embeddingProvider for embeddings and provider for generation', async () => {
+    class NoEmbedProvider extends FakeProvider {
+      async embed(): Promise<EmbeddingResponse> {
+        throw new Error('no embeddings here');
+      }
+    }
+    const generator = new NoEmbedProvider();
+    const embedder = new FakeProvider();
+    const rag = new RAGPipeline({ provider: generator, embeddingProvider: embedder, embeddingModel: 'e1', logger: false });
+
+    await rag.index(DOCS);
+    const answer = await rag.query('postgres database');
+    await collect(rag.queryStream('postgres database'));
+
+    expect(answer.response).toBe('AxilJS supports PostgreSQL.');
+    expect(embedder.embedCalls).toHaveLength(3); // 1 index batch + query + queryStream
+    expect(embedder.embedCalls.every(c => c.model === 'e1')).toBe(true);
+    expect(embedder.completeCalls).toHaveLength(0);
+    expect(generator.completeCalls).toHaveLength(2);
+    expect(generator.completeCalls[0].model).toBe('fake-gen');
+
+    // Without embeddingProvider the single provider is still used for both
+    const single = new RAGPipeline({ provider: generator, logger: false });
+    await expect(single.index(DOCS)).rejects.toThrow('no embeddings here');
+  });
+});

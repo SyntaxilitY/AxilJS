@@ -1,6 +1,6 @@
 {
   "name": "axiljs",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -28,7 +28,9 @@
     "build:memory": "cd packages/memory       && npm run build",
     "build:studio": "cd packages/studio       && npm run build",
     "build:decorator": "cd packages/decorator       && npm run build",
-    "build:all": "npm run build:common && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory && npm run build:studio && npm run build:decorator",
+    "build:runtime": "cd packages/runtime         && npm run build",
+    "build:scale": "cd packages/scale           && npm run build",
+    "build:all": "npm run build:common && npm run build:scale && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory && npm run build:studio && npm run build:decorator && npm run build:runtime",
     "dev": "npm run dev  --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",

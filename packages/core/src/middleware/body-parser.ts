@@ -6,6 +6,8 @@
  *   application/json          → parses JSON
  *   application/x-www-form-urlencoded → parses form data
  *   text/plain                → raw string
+ *
+ * The unparsed text is always kept as req.rawBody (and req.locals.rawBody).
  */
 
 import { MiddlewareFn, BadRequestError } from '@axiljs/common';
@@ -31,6 +33,12 @@ export function bodyParser(limit: number = 1024 * 1024): MiddlewareFn {
         // No body - that's fine
         return next();
       }
+
+      // Keep the exact body text (webhook signatures are computed over it).
+      // req.rawBody is on core's Request; locals.rawBody serves code typed
+      // against the axilRequest interface.
+      (req as unknown as Request).rawBody = rawBody;
+      req.locals.rawBody = rawBody;
 
       // Media types are case-insensitive (RFC 9110 §8.3.1)
       const contentType = ((req.headers['content-type'] as string) || '').toLowerCase();

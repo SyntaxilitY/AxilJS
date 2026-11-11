@@ -37,6 +37,35 @@ headers) and returns the new span in the response `traceparent`. Set
 const span = tracer.startSpan('job', { parent: tracer.extractContext(headers) })
 ```
 
+### Child spans in handlers
+
+With a `tracer`, the middleware exposes the request's server span to later
+middleware and handlers:
+
+| `req.locals` key | Value |
+|---|---|
+| `span` | the server `Span` (`getRequestSpan(req)` returns it typed) |
+| `tracer` | the `Tracer` passed to the middleware |
+| `traceContext` | `{ traceId, spanId }` of the server span (`getTraceContext(req)`) |
+
+```typescript
+import { getRequestSpan } from '@axiljs/observability'
+
+app.get('/orders/:id', async (req, res) => {
+  const parent = getRequestSpan(req)
+
+  // Child span around local work (ended and exported automatically)
+  const order = await tracer.trace('db.order', () => db.find(req.params.id), parent)
+
+  // Propagate to a downstream service
+  const child = tracer.startSpan('http.inventory', { parent })
+  await fetch(inventoryUrl, { headers: tracer.injectContext(child) })
+  tracer.exportSpan(child.end())
+
+  res.success(order)
+})
+```
+
 ## Route labels
 
 The `path` metric label is the raw path by default. Use `pathLabel` to avoid

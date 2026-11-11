@@ -45,8 +45,10 @@ npm run build:<pkg> / npm run build:all             # REWRITES the committed dis
 | `memory` | Leak detection + heap monitoring | `MemoryMonitor`, `trackTimer/trackCache/trackEmitter`, `optimizer`, `memoryMiddleware` |
 | `pm` | Experimental package manager (`Installer.extract` is still a stub) | `RegistryClient`, `LockFileManager`, `Installer` |
 | `studio` | Local dev dashboard on app port + 1 (routes, DB browser, Postman/OpenAPI export) | `StudioServer` |
-| `cli` | `axil` / `axiljs` binary | `create`, `run`, `build`, `install`/`i`, `test`, `deploy`, `doctor`, `decorator list/info/search/check/graph/categories` |
+| `scale` | Zero-dep scaling: `axil.scaling.json` config, node:cluster supervisor, worker-thread load generator, capacity planner, `src/` readiness scan. Built before `cli` (cli depends on it) | `serve`, `resolveScaling`, `loadScalingConfig`, `detectSystem`, `loadTest`, `calibrate`, `planCapacity`, `hostChecks`, `scanProject` |
+| `cli` | `axil` / `axiljs` binary | `create`, `run`, `build`, `install`/`i`, `test`, `deploy` (sized from `axil.scaling.json`), `capacity`/`cap`, `doctor`, `decorator list/info/search/check/graph/categories` |
 | `decorator` | 119 semantic `t*` decorators that only record metadata | `tHttp`, `tAuth`, `tRetry`, `tSaga`, … + `getMetadata`, `validateComposition`, `listDecorators` |
+| `runtime` | Executes decorator metadata: AsyncLocalStorage request context + interceptors (`tAudit` 100, `tRetry` 200, `tTimeout` 300; lower = outer) + metadata-driven redaction | `requestContext`, `getContext`, `runWithContext`, `wire`, `wireAll`, `registerInterceptor`, `redact`, `redactResponses`, `redactingTransport`, `TimeoutError` |
 
 ## Request pipeline (core)
 
@@ -56,6 +58,7 @@ npm run build:<pkg> / npm run build:all             # REWRITES the committed dis
 
 All `axil` terminal output goes through `packages/cli/src/ui.ts`; interactive input goes through `packages/cli/src/prompts.ts` (`select`, `multiselect`, `confirm`, `text`; they return defaults without a TTY and throw `PromptCancelled` on Ctrl+C).
 
+- Brand: logo in `assets/` (`logo.png` 512px original; `logo-mark-{32,64,128,256}.png` square crops). Palette from the logo: orange `#FD8702` → red `#ED1010` (deep `#B70A0C`). CLI uses it via `ui.accent` / `gradient()` (yellow fallback on 16-colour terminals); don't reintroduce the old cyan/indigo.
 - Look: gradient `▲ AXIL` banner + `badge()`s for help screens; a **rail** for command flows. `ui.title()` opens it (`┌`), helpers draw on it (`◇` success, `▲` warn, `●` info, `○` step, `◆` section/result, `│` lines), and `box()` / `failed()` / `error()` / `outro()` / process exit close it (`└`).
 - Never write raw `\x1b[` codes elsewhere; `git grep -n 'x1b\[' -- 'packages/cli/src/*.ts'` should only hit `ui.ts` and `prompts.ts`.
 - Third-party output that would break the rail (e.g. the ORM's migration logs) is captured and re-rendered: see `withOrmOutput` in `commands/migrate.ts`.

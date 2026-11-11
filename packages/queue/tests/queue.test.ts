@@ -140,7 +140,8 @@ describe('Queue processing', () => {
   it('uses exponential backoff by default', async () => {
     const q = new Queue('exp', { pollIntervalMs: 10 });
     queues.push(q);
-    vi.spyOn(Math, 'random').mockReturnValue(0);
+    // 0.5 → jitter factor 1.0, i.e. exactly base * 2^(attempt-1)
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
     q.process('bad', async () => { throw new Error('x'); });
     q.start();
     const job = await q.add('bad', null);
@@ -430,5 +431,94 @@ describe('QueueStore', () => {
     expect(calls).toEqual(['add', 'update:active', 'update:completed']);
     q.purge();
     expect(jobs.size).toBe(0);
+  });
+});
+
+describe('exponential backoff jitter', () => {
+  async function firstRetryDelay(base: number, random: number): Promise<number> {
+    const q = new Queue('jit', { pollIntervalMs: 1, backoff: { type: 'exponential', delay: base }, logger: false });
+    queues.push(q);
+    const spy = vi.spyOn(Math, 'random').mockReturnValue(random);
+    q.process('bad', async () => { throw new Error('x'); });
+    q.start();
+    const job = await q.add('bad', null, { maxAttempts: 3 });
+    await tick(1);
+    expect(job.status).toBe('delayed');
+    const delay = job.runAt.getTime() - Date.now();
+    spy.mockRestore();
+    return delay;
+  }
+
+  it('jitter is proportional to the delay (±25%), not a fixed +0..1000 ms', async () => {
+    // Regression: a 10 ms base used to wait up to ~1010 ms
+    expect(await firstRetryDelay(10, 0.999)).toBeLessThanOrEqual(13);
+    expect(await firstRetryDelay(10, 0)).toBeGreaterThanOrEqual(7);
+    expect(await firstRetryDelay(1000, 0.999)).toBeLessThanOrEqual(1250);
+    expect(await firstRetryDelay(1000, 0)).toBeGreaterThanOrEqual(749);
+  });
+
+  it('a short base delay retries within milliseconds', async () => {
+    const q = new Queue('fast', { pollIntervalMs: 1, backoff: { type: 'exponential', delay: 10 }, logger: false });
+    queues.push(q);
+    let calls = 0;
+    q.process('flaky', async () => { if (++calls < 3) throw new Error('x'); return 'ok'; });
+    q.start();
+    const job = await q.add('flaky', null, { maxAttempts: 3 });
+    // 1st retry <= 12.5 ms, 2nd <= 25 ms, plus polling slack
+    await tick(60);
+    expect(job.status).toBe('completed');
+    expect(calls).toBe(3);
+  });
+});
+
+describe('logger option', () => {
+  it('logger: false prints nothing on start/stop or listener errors', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const q = makeQueue({ logger: false });
+    q.on('completed', () => { throw new Error('listener boom'); });
+    q.process('j', async () => 1);
+    q.start();
+    await q.add('j', null);
+    await tick(50);
+    const p = q.stop();
+    await tick(200);
+    await p;
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('a custom logger receives plain-text messages instead of the console', async () => {
+    vi.restoreAllMocks();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logger = { info: vi.fn(), warn: vi.fn() };
+    const q = makeQueue({ logger });
+    q.on('completed', () => { throw new Error('listener boom'); });
+    q.process('j', async () => 1);
+    q.start();
+    await q.add('j', null);
+    await tick(50);
+    const p = q.stop();
+    await tick(200);
+    await p;
+    expect(logger.info).toHaveBeenCalledWith("[AxilJS Queue] 'test' started (concurrency: 1)");
+    expect(logger.info).toHaveBeenCalledWith("[AxilJS Queue] 'test' stopped");
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('listener boom'));
+    for (const [m] of [...logger.info.mock.calls, ...logger.warn.mock.calls]) {
+      expect(m).not.toContain('\x1b[');
+    }
+    expect(log).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('defaults to the console (unchanged behaviour)', () => {
+    const log = vi.mocked(console.log);
+    const q = makeQueue();
+    q.start();
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("'test' started"));
   });
 });

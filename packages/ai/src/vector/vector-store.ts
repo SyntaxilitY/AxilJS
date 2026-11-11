@@ -44,7 +44,13 @@ export interface VectorDocument {
 export interface SearchResult {
   document: VectorDocument;
 
-  // Cosine similarity score (0-1, higher = more similar)
+  /**
+   * Similarity score, higher = more similar. The scale depends on the metric:
+   *   - 'cosine'    (default): raw cosine similarity, -1..1
+   *                 (1 = same direction, 0 = unrelated/orthogonal, -1 = opposite)
+   *   - 'dot':      raw dot product (unbounded; equals cosine for unit vectors)
+   *   - 'euclidean': 1 / (1 + distance), 0..1 (1 = identical)
+   */
   score: number;
 }
 
@@ -52,7 +58,8 @@ export interface SearchOptions {
   // Number of results to return (default: 5)
   topK?: number;
 
-  // Minimum similarity score threshold (0-1, default: 0)
+  // Minimum similarity score threshold, on the metric's scale (see
+  // SearchResult.score). Default: no threshold (top-K regardless of score)
   minScore?: number;
 
   // Filter by metadata fields
@@ -71,8 +78,9 @@ function assertSameDimension(a: number[], b: number[]): void {
 
 /**
  * Compute cosine similarity between two vectors.
- * Returns a value between -1 and 1 (1 = identical direction).
- * We normalize to 0-1 for convenience.
+ * Returns the raw value between -1 and 1 (1 = identical direction,
+ * 0 = orthogonal/unrelated, -1 = opposite). Not rescaled, so thresholds
+ * mean the same thing as in other vector databases.
  */
 function cosineSimilarity(a: number[], b: number[]): number {
   assertSameDimension(a, b);
@@ -92,8 +100,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
   if (magnitudeA === 0 || magnitudeB === 0) return 0;
 
-  // Normalize to 0-1 range
-  return (dotProduct / (magnitudeA * magnitudeB) + 1) / 2;
+  return dotProduct / (magnitudeA * magnitudeB);
 }
 
 /**
@@ -194,7 +201,7 @@ export class VectorStore {
   ): Promise<SearchResult[]> {
     const {
       topK = 5,
-      minScore = 0,
+      minScore = -Infinity,
       filter
     } = options;
 

@@ -45,9 +45,26 @@ new WSServer(server, {
   frames, invalid close codes. Invalid UTF-8 in text frames closes with **1007**.
 - Heartbeat: a client that hasn't answered the previous ping with a pong by the
   next tick is terminated (`close` fires with 1006).
-- Upgrades for other paths are left alone for other `upgrade` handlers. A
+- Upgrades for other paths are left alone when the http server has other
+  `upgrade` listeners (e.g. several `WSServer`s on different paths sharing one
+  server). When this `WSServer` is the only `upgrade` listener, they get
+  `404 Not Found` and the socket is closed, so clients don't hang. A
   non-WebSocket upgrade on the configured path gets `400`.
 - `wss.close(code?, reason?)` closes every client; `client.terminate()` drops one
   without a handshake.
+
+## Connecting from a client
+
+This package is **server-only**: `WSClient` is the server-side wrapper for an
+accepted connection, not an outbound client. To connect, use Node's global
+`WebSocket` (Node ≥ 22), the browser `WebSocket`, or any RFC 6455 client:
+
+```typescript
+const ws = new WebSocket('ws://localhost:3000/ws')
+ws.addEventListener('open', () => ws.send('hello'))
+ws.addEventListener('message', (e) => console.log('got', e.data))
+ws.addEventListener('close', (e) => console.log('closed', e.code))
+ws.addEventListener('error', (e) => console.error(e))
+```
 
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

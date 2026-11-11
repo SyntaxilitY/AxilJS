@@ -25,6 +25,7 @@
 import { EventEmitter } from 'events';
 import { Job, JobOptions, JobHandler, JobStatus, createJob } from './job';
 import { QueueStore, InMemoryQueueStore } from './store';
+import { QueueLoggerOption, LogSink, createLogSink } from './logger';
 
 // ─── Queue Options ────────────────────────────────────────────────────────────
 
@@ -43,6 +44,11 @@ export interface QueueOptions {
 
   // Job storage (default: InMemoryQueueStore)
   store?: QueueStore;
+
+  // Where start/stop and listener-error messages go.
+  // Default: console (unchanged). false: silent. { info, warn }: your logger
+  // (plain text, no ANSI; errors are reported via warn).
+  logger?: QueueLoggerOption;
 }
 
 // ─── Internal ─────────────────────────────────────────────────────────────────
@@ -70,7 +76,8 @@ export class Queue extends EventEmitter {
   private activeRuns = new Map<string, ActiveRun>();
   private pollTimer?: ReturnType<typeof setInterval>;
   private running = false;
-  private options: Required<Omit<QueueOptions, 'store'>>;
+  private options: Required<Omit<QueueOptions, 'store' | 'logger'>>;
+  private log: LogSink;
 
   constructor(
     public readonly name: string,
@@ -84,6 +91,7 @@ export class Queue extends EventEmitter {
       backoff: options.backoff ?? { type: 'exponential', delay: 1000 }
     };
     this.store = options.store ?? new InMemoryQueueStore();
+    this.log = createLogSink(options.logger, '[AxilJS Queue]');
   }
 
   // ─── Job Registration ─────────────────────────────────────────────────────────
@@ -179,10 +187,7 @@ export class Queue extends EventEmitter {
       this.processNext();
     }, this.options.pollIntervalMs);
 
-    console.log(
-      `\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' started ` +
-        `(concurrency: ${this.options.concurrency})`
-    );
+    this.log('info', `'${this.name}' started (concurrency: ${this.options.concurrency})`);
   }
 
   /**
@@ -201,7 +206,7 @@ export class Queue extends EventEmitter {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    console.log(`\x1b[36m[AxilJS Queue]\x1b[0m '${this.name}' stopped`);
+    this.log('info', `'${this.name}' stopped`);
   }
 
   // ─── Job Queries ──────────────────────────────────────────────────────────────
@@ -398,21 +403,27 @@ export class Queue extends EventEmitter {
   }
 
   private reportListenerError(event: string, err: unknown): void {
-    console.error(
-      `\x1b[31m[AxilJS Queue]\x1b[0m '${this.name}' ${event} listener threw:`,
-      err instanceof Error ? err.message : err
+    this.log(
+      'error',
+      `'${this.name}' ${event} listener threw: ${err instanceof Error ? err.message : String(err)}`,
+      '\x1b[31m'
     );
   }
 
   /**
    * Calculate backoff delay for retry attempts.
+   *
+   * exponential: base * 2^(attempt-1), with ±25% proportional jitter, i.e.
+   *              a uniformly random value in [0.75 × d, 1.25 × d]. Jitter scales
+   *              with the delay, so a 10 ms base waits 7.5–12.5 ms (not ~1 s).
+   * fixed:       always exactly `delay` (no jitter).
    */
   private calculateBackoff(attemptNumber: number): number {
     const { type, delay } = this.options.backoff;
 
     if (type === 'exponential') {
-      // Exponential: 1s, 2s, 4s, 8s... with jitter
-      return delay * Math.pow(2, attemptNumber - 1) + Math.random() * 1000;
+      const base = delay * Math.pow(2, attemptNumber - 1);
+      return Math.max(0, base * (0.75 + Math.random() * 0.5));
     }
 
     // Fixed: always the same delay

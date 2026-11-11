@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as R from '../src/runner/test-runner';
 import { expect as axilExpect } from '../src/assertions/expect';
+import { registerSecondFile } from './fixtures/second-file';
 
 // The runner keeps a global registry: start every test from a clean slate
 beforeEach(() => {
@@ -278,5 +279,78 @@ describe('runner: each', () => {
       'driver sqlite > has a name',
       'driver postgres > has a name'
     ]);
+  });
+});
+
+describe('runner: top-level hooks (bug fix: they were silently dropped)', () => {
+  it('apply to every test in the file, outside describe-level hooks', async () => {
+    const log: string[] = [];
+    R.beforeAll(() => { log.push('root:beforeAll'); });
+    R.afterAll(() => { log.push('root:afterAll'); });
+    R.beforeEach(() => { log.push('root:beforeEach'); });
+    R.afterEach(() => { log.push('root:afterEach'); });
+
+    R.describe('A', () => {
+      R.beforeAll(() => { log.push('A:beforeAll'); });
+      R.afterAll(() => { log.push('A:afterAll'); });
+      R.beforeEach(() => { log.push('A:beforeEach'); });
+      R.afterEach(() => { log.push('A:afterEach'); });
+      R.it('a1', () => { log.push('a1'); });
+    });
+    R.describe('B', () => {
+      R.it('b1', () => { log.push('b1'); });
+    });
+
+    const summary = await run();
+    expect(summary.passed).toBe(2);
+    expect(log).toEqual([
+      'root:beforeAll',
+      'A:beforeAll',
+      'root:beforeEach', 'A:beforeEach', 'a1', 'A:afterEach', 'root:afterEach',
+      'A:afterAll',
+      'root:beforeEach', 'b1', 'root:afterEach',
+      'root:afterAll'
+    ]);
+    // Grouping suites stay invisible in names
+    expect(summary.results.map(r => r.fullName)).toEqual(['A > a1', 'B > b1']);
+  });
+
+  it('are registered even when declared after the describe blocks', async () => {
+    const log: string[] = [];
+    R.describe('S', () => { R.it('t', () => { log.push('t'); }); });
+    R.afterAll(() => { log.push('afterAll'); });
+    await run();
+    expect(log).toEqual(['t', 'afterAll']);
+  });
+
+  it('do not leak into tests registered from another file', async () => {
+    const log: string[] = [];
+    R.beforeEach(() => { log.push('file1:beforeEach'); });
+    R.describe('first', () => { R.it('t1', () => { log.push('file1:test'); }); });
+    registerSecondFile(log);
+
+    const summary = await run();
+    expect(summary.passed).toBe(2);
+    expect(log).toEqual([
+      'file1:beforeEach', 'file1:test',
+      'file2:beforeEach', 'file2:test'
+    ]);
+  });
+
+  it('a failing top-level beforeAll fails that file\'s tests', async () => {
+    R.beforeAll(() => { throw new Error('setup broke'); });
+    R.describe('S', () => { R.it('t', () => {}); });
+    const summary = await run();
+    expect(summary.success).toBe(false);
+    expect(summary.results[0].error!.message).toBe('setup broke');
+  });
+
+  it('are cleared by resetTests()', async () => {
+    const hook = vi.fn();
+    R.beforeEach(hook);
+    R.resetTests();
+    R.describe('S', () => { R.it('t', () => {}); });
+    await run();
+    expect(hook).not.toHaveBeenCalled();
   });
 });

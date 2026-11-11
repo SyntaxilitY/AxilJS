@@ -1,6 +1,6 @@
 /**
  * Anthropic Provider.
- * Supports Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku.
+ * Works with any Messages API model (Claude Opus 5.5, Sonnet 5.5, Haiku 4.5, ...).
  * Pure Node.js https - no SDK required.
  *
  * Usage:
@@ -9,7 +9,7 @@
  *   })
  *   const response = await provider.complete({
  *     messages: [{ role: 'user', content: 'Hello!' }],
- *     model: 'claude-3-5-sonnet-20241022'
+ *     model: 'claude-sonnet-5-5'
  *   })
  */
 
@@ -40,7 +40,7 @@ export interface AnthropicProviderOptions {
 
 export class AnthropicProvider implements AIProvider {
   readonly name = 'anthropic';
-  readonly defaultModel = 'claude-3-5-haiku-20241022';
+  readonly defaultModel = 'claude-haiku-4-5-20251001';
 
   private apiKey: string;
   private baseUrl: string;
@@ -228,7 +228,8 @@ export class AnthropicProvider implements AIProvider {
     // Use OpenAI or a dedicated embedding provider for this
     throw new Error(
       'Anthropic does not support embeddings.\n' +
-      'Use OpenAIProvider or OllamaProvider for embeddings.'
+      'Use OpenAIProvider, GeminiProvider or OllamaProvider for embeddings; ' +
+      'with RAGPipeline, pass one as `embeddingProvider` and keep Anthropic as `provider`.'
     );
   }
 

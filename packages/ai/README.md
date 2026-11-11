@@ -35,6 +35,44 @@ const agent = new Agent({ provider: ai, tools: [calculatorTool] })
 const result = await agent.run('What is 25 * 4?')
 ```
 
+Default models: OpenAI `gpt-4o-mini`, Anthropic `claude-haiku-4-5-20251001`,
+Gemini `gemini-1.5-flash`, Ollama `llama3.2`. Pass `model` per call to override.
+
+## RAG options
+
+```typescript
+const rag = new RAGPipeline({
+  provider: new AnthropicProvider({ apiKey }),            // generates answers
+  embeddingProvider: new OpenAIProvider({ apiKey: oaKey }), // embeds chunks + queries (default: provider)
+  minScore: 0.3,                                          // raw cosine similarity, see below
+  chunker: { chunkSize: 800, overlap: 150, minChunkSize: 50 },
+  logger: false                                           // silence progress output
+})
+```
+
+- `embeddingProvider` is required when `provider` has no embeddings API
+  (`AnthropicProvider.embed()` always throws).
+- Chunks shorter than `chunker.minChunkSize` are dropped, but a non-empty document
+  shorter than that is still indexed as one chunk.
+- `logger` (also on `Agent`): omit for the default coloured console output, pass
+  `false` for silence, or `{ info(msg), warn(msg) }` to route messages elsewhere.
+
+## Similarity scores
+
+`VectorStore.search()` results (and `RAGQueryResult.sources[].score`) use the
+metric's own scale, higher = more similar:
+
+| metric | `score` |
+|---|---|
+| `cosine` (default) | raw cosine similarity, **-1..1** (1 = same direction, 0 = unrelated, -1 = opposite) |
+| `dot` | raw dot product (equals cosine for unit-length vectors) |
+| `euclidean` | `1 / (1 + distance)`, 0..1 |
+
+`minScore` thresholds use the same scale. `VectorStore.search()` has no threshold by
+default; `RAGPipeline` defaults to `minScore: 0.3`. (Up to 0.3.2 cosine scores were
+rescaled to `(cos + 1) / 2`, so 0.5 meant "unrelated"; a stored threshold `t` from
+that scale corresponds to `2t - 1` now.)
+
 ## Retries, cancellation and timeouts
 
 All four providers retry 408/409/425/429/5xx (incl. Anthropic's 529) and transient

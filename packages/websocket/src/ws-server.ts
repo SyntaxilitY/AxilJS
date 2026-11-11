@@ -249,6 +249,11 @@ export class WSServer {
 
   // ─── Upgrade Handler ──────────────────────────────────────────────────────────
 
+  private isSoleUpgradeListener(): boolean {
+    const listeners = this.httpServer.listeners('upgrade');
+    return listeners.length === 1 && listeners[0] === this.upgradeListener;
+  }
+
   private async handleUpgrade(
     req: IncomingMessage,
     socket: Socket,
@@ -259,7 +264,13 @@ export class WSServer {
     const path = url.split('?')[0];
 
     if (path !== this.options.path) {
-      // Not our path - let other upgrade handlers deal with it
+      // Not our path. If another 'upgrade' listener exists (e.g. a second
+      // WSServer on a different path sharing this http.Server), leave the
+      // request to it. If we are the only one, nobody else will answer —
+      // reply 404 and close so the client doesn't hang.
+      if (this.isSoleUpgradeListener()) {
+        rejectUpgrade(socket, 404, 'Not Found');
+      }
       return;
     }
 

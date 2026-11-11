@@ -22,6 +22,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { QueueLoggerOption, LogSink, createLogSink } from './logger';
 
 // ─── Cron Parser ──────────────────────────────────────────────────────────────
 
@@ -138,6 +139,45 @@ export function parseCron(expression: string): ParsedCron {
 }
 
 /**
+ * Validate a 5-field cron expression without scheduling anything.
+ * Returns true if `validateCron` reports no error.
+ *
+ *   isValidCron('0 9 * * 1-5')  // true
+ *   isValidCron('61 * * * *')   // false (no minute can ever match)
+ */
+export function isValidCron(expression: string): boolean {
+  return validateCron(expression) === null;
+}
+
+/**
+ * Validate a cron expression and return the error message, or null if valid.
+ * Besides `parseCron` errors, an expression with a field that matches no
+ * value at all (e.g. minute "61") is reported, since it could never fire.
+ */
+export function validateCron(expression: string): string | null {
+  if (typeof expression !== 'string') return 'Cron expression must be a string';
+  let parsed: ParsedCron;
+  try {
+    parsed = parseCron(expression);
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const fields: Array<[string, number[]]> = [
+    ['minute', parsed.minutes],
+    ['hour', parsed.hours],
+    ['day', parsed.days],
+    ['month', parsed.months],
+    ['weekday', parsed.weekdays]
+  ];
+  for (const [name, values] of fields) {
+    if (values.length === 0) {
+      return `Invalid cron expression: "${expression}". The ${name} field matches no values`;
+    }
+  }
+  return null;
+}
+
+/**
  * Check whether a given Date matches a parsed cron schedule.
  */
 export function matchesCron(date: Date, cron: ParsedCron): boolean {
@@ -187,6 +227,14 @@ type ScheduledTaskInternal = ScheduledTask & { parsed: ParsedCron };
 
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 
+export interface SchedulerOptions {
+  // Where start/stop/task-failure messages go.
+  // Default: console (unchanged). false: silent. { info, warn }: your logger
+  // (plain text, no ANSI; errors are reported via warn).
+  // Failures are always observable via the 'failed' event.
+  logger?: QueueLoggerOption;
+}
+
 export class Scheduler extends EventEmitter {
   // All registered tasks keyed by name
   private tasks = new Map<string, ScheduledTaskInternal>();
@@ -199,6 +247,13 @@ export class Scheduler extends EventEmitter {
 
   // Whether the scheduler is currently running
   private running = false;
+
+  private log: LogSink;
+
+  constructor(options: SchedulerOptions = {}) {
+    super();
+    this.log = createLogSink(options.logger, '[AxilJS Scheduler]');
+  }
 
   /**
    * Register a task to run on a cron schedule.
@@ -242,7 +297,7 @@ export class Scheduler extends EventEmitter {
 
     this.scheduleNextTick();
 
-    console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Started');
+    this.log('info', 'Started');
     this.listTasks();
   }
 
@@ -258,7 +313,7 @@ export class Scheduler extends EventEmitter {
       this.alignTimer = undefined;
     }
 
-    console.log('\x1b[36m[AxilJS Scheduler]\x1b[0m Stopped');
+    this.log('info', 'Stopped');
   }
 
   /**
@@ -331,10 +386,7 @@ export class Scheduler extends EventEmitter {
       if (matchesCron(now, task.parsed)) {
         // Run in background — don't await so other tasks aren't blocked
         this.runTask(task).catch(err => {
-          console.error(
-            `\x1b[31m[AxilJS Scheduler]\x1b[0m Tick error in '${task.name}':`,
-            err.message
-          );
+          this.log('error', `Tick error in '${task.name}': ${err?.message ?? err}`, '\x1b[31m');
         });
       }
     }
@@ -359,10 +411,7 @@ export class Scheduler extends EventEmitter {
 
       this.emit('failed', task.name, err);
 
-      console.error(
-        `\x1b[31m[AxilJS Scheduler]\x1b[0m Task '${task.name}' failed:`,
-        err.message
-      );
+      this.log('error', `Task '${task.name}' failed: ${err.message}`, '\x1b[31m');
     }
   }
 
@@ -371,19 +420,14 @@ export class Scheduler extends EventEmitter {
    */
   private listTasks(): void {
     if (this.tasks.size === 0) {
-      console.log('\x1b[90m[AxilJS Scheduler]\x1b[0m No tasks registered');
+      this.log('info', 'No tasks registered', '\x1b[90m');
       return;
     }
 
-    console.log(
-      `\x1b[90m[AxilJS Scheduler]\x1b[0m ` +
-      `${this.tasks.size} task(s) registered:`
-    );
+    this.log('info', `${this.tasks.size} task(s) registered:`, '\x1b[90m');
 
     for (const task of this.tasks.values()) {
-      console.log(
-        `  • ${task.name.padEnd(25)} ${task.expression}`
-      );
+      this.log('info', `  • ${task.name.padEnd(25)} ${task.expression}`, null);
     }
   }
 }

@@ -138,3 +138,37 @@ describe('rateLimit with a custom (async) store', () => {
     expect((await run(rateLimit({ store: throwing }), mockReq(), mockRes())).error?.message).toBe('sync fail');
   });
 });
+
+describe('rateLimit keyGenerator (bug fix: typed to { ip, headers } only)', () => {
+  it('receives the full request, so it can key on route params', async () => {
+    const mw = rateLimit({
+      max: 1,
+      windowMs: 1000,
+      keyGenerator: req => `webhook:${req.params.source}:${req.method}:${req.path}`
+    });
+    const github = mockReq({ params: { source: 'github' }, path: '/hooks/github', method: 'POST' });
+    const stripe = mockReq({ params: { source: 'stripe' }, path: '/hooks/stripe', method: 'POST' });
+
+    expect((await run(mw, github, mockRes())).error).toBeUndefined();
+    // Same IP, different source → separate bucket
+    expect((await run(mw, stripe, mockRes())).error).toBeUndefined();
+    expect((await run(mw, github, mockRes())).error).toBeInstanceOf(TooManyRequestsError);
+  });
+
+  it('passes the very request object to keyGenerator and skip (locals too)', async () => {
+    const req = mockReq({ locals: { tenant: 't1' } });
+    const seen: unknown[] = [];
+    const mw = rateLimit({
+      keyGenerator: r => { seen.push(r); return String(r.locals.tenant); },
+      skip: r => { seen.push(r); return false; }
+    });
+    await run(mw, req, mockRes());
+    expect(seen).toEqual([req, req]);
+    expect(seen[0]).toBe(req);
+  });
+
+  it('still accepts generators typed for the old { ip, headers } shape', () => {
+    const legacy = (req: { ip: string; headers: Record<string, any> }) => req.ip;
+    expect(() => rateLimit({ keyGenerator: legacy })).not.toThrow();
+  });
+});
