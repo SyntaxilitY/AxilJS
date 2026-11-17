@@ -934,7 +934,25 @@ Phase 15: AI-powered code generation from Studio
 
 ---
 
+## Sponsors
+
+AxilJS is free and open source. If it saves you time, please consider supporting its development on
+[Open Collective](https://opencollective.com/axiljs).
+
+[![Sponsors](https://opencollective.com/axiljs/sponsors.svg?width=890)](https://opencollective.com/axiljs)
+
+### Backers
+
+[![Backers](https://opencollective.com/axiljs/backers.svg?width=890)](https://opencollective.com/axiljs)
+
+[Become a sponsor](https://opencollective.com/axiljs/contribute) · [Become a backer](https://opencollective.com/axiljs/contribute)
+
+---
+
 ## Contributing
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Everyone taking part is expected to follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ```bash
 git clone https://github.com/SyntaxilitY/AxilJS.git
