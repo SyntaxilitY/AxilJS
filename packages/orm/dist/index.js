@@ -18,13 +18,14 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.eagerLoad = exports.UnsafeIdentifierError = exports.assertSortDirection = exports.isSafeIdentifier = exports.assertSafeIdentifier = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
+exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.eagerLoad = exports.UnsafeIdentifierError = exports.assertSortDirection = exports.isSafeIdentifier = exports.assertSafeIdentifier = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.classifyStatement = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
 // ── Connection ────────────────────────────────────────────────────────────
 var connection_manager_1 = require("./connection/connection-manager");
 Object.defineProperty(exports, "ConnectionManager", { enumerable: true, get: function () { return connection_manager_1.ConnectionManager; } });
 Object.defineProperty(exports, "createConnection", { enumerable: true, get: function () { return connection_manager_1.createConnection; } });
 var base_driver_1 = require("./connection/base-driver");
 Object.defineProperty(exports, "BaseDriver", { enumerable: true, get: function () { return base_driver_1.BaseDriver; } });
+Object.defineProperty(exports, "classifyStatement", { enumerable: true, get: function () { return base_driver_1.classifyStatement; } });
 // ── Drivers ───────────────────────────────────────────────────────────────
 var sqlite_driver_1 = require("./connection/sqlite-driver");
 Object.defineProperty(exports, "SQLiteDriver", { enumerable: true, get: function () { return sqlite_driver_1.SQLiteDriver; } });

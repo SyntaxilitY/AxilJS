@@ -28,5 +28,66 @@ export {
 export { redact, redactResponses, redactingTransport } from './redact';
 export type { RedactOptions, RedactRule } from './redact';
 
+export {
+  configureIntent,
+  getIntentMode,
+  getIntentViolations,
+  clearIntentViolations,
+  violate,
+  reportSideEffect,
+  currentIntentScope,
+  installSideEffectProbes,
+  setIdempotencyStore,
+  MemoryIdempotencyStore,
+  getSloReport,
+  resetSloReport,
+  IntentViolationError,
+  DeadlineExceededError,
+  pureInterceptor,
+  readOnlyInterceptor,
+  sideEffectInterceptor,
+  tenantIsolatedInterceptor,
+  idempotentInterceptor,
+  sloInterceptor,
+  deprecatedInterceptor,
+  deadlineInterceptor
+} from './intent';
+export type { IntentMode, IntentViolation, IdempotencyStore, SloReport, SideEffectProbeOptions } from './intent';
+
+export {
+  Semaphore,
+  MemoryCacheStore,
+  setCacheStore,
+  getCacheStore,
+  setLockProvider,
+  getCircuitStates,
+  resetResilienceState,
+  RateLimitExceededError,
+  CircuitOpenError,
+  CapacityExceededError,
+  LockTimeoutError,
+  rateLimitInterceptor,
+  throttleInterceptor,
+  debounceInterceptor,
+  cacheInterceptor,
+  cachePutInterceptor,
+  cacheEvictInterceptor,
+  cacheInvalidateInterceptor,
+  dedupeInterceptor,
+  fallbackInterceptor,
+  circuitBreakerInterceptor,
+  bulkheadInterceptor,
+  concurrencyInterceptor,
+  mutexInterceptor,
+  lockInterceptor,
+  hedgeInterceptor
+} from './resilience';
+export type { CacheStore, LockProvider } from './resilience';
+
+export { resolveKey, parseDuration } from './keys';
+export type { KeySpec } from './keys';
+
+export { enforcedDecorators } from './report';
+
 import { registerBuiltins } from './builtins';
 registerBuiltins();

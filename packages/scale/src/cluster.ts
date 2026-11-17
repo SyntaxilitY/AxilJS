@@ -46,6 +46,14 @@ export interface ServeOptions {
   checkOnStart?: boolean;
   /** Logger (default: console with an [axil:scale] prefix). */
   log?: (level: 'info' | 'warn' | 'error', message: string) => void;
+  /**
+   * Runs once in the primary before the workers are forked (cluster mode
+   * only). Use it to install primary-side services that workers talk to
+   * over IPC, e.g. `installClusterRateLimitPrimary()` from @axiljs/security
+   * and `installClusterEventRelay()` from @axiljs/events. A returned function
+   * is called after every worker has stopped.
+   */
+  onPrimary?: () => void | (() => void);
 }
 
 export interface ServeHandle {
@@ -178,6 +186,9 @@ export async function serve(
     slots.set(worker, slot);
   };
 
+  // Primary-side services must listen before the first worker sends to them
+  const disposePrimary = options.onPrimary?.();
+
   const shutdown = (): Promise<void> => {
     if (stopped) return stopped;
     stopping = true;
@@ -194,6 +205,8 @@ export async function serve(
           resolve();
         }
       });
+    }).then(() => {
+      if (typeof disposePrimary === 'function') disposePrimary();
     });
     return stopped;
   };

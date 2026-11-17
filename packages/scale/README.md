@@ -68,6 +68,27 @@ serve(() => {
 - Each worker gets `--max-old-space-size=memoryPerWorkerMb`, `server.maxConnections = maxConnectionsPerWorker`, and `keepAliveTimeoutMs` when set. Behind a load balancer, set `keepAliveTimeoutMs` above the balancer's idle timeout (AWS ALB: 60 s) to avoid sporadic 502s.
 - At startup the primary prints host-check warnings (oversubscription, container quota, memory, `ulimit -n`).
 
+### Shared state across workers
+
+Each worker is a separate process, so in-memory state is per worker. `onPrimary` runs once in the primary before the workers start; use it to install the primary-side services that share rate-limit counters and events between workers:
+
+```typescript
+import { serve } from '@axiljs/scale'
+import { installClusterRateLimitPrimary } from '@axiljs/security'
+import { installClusterEventRelay } from '@axiljs/events'
+
+serve(createApp, {
+  port: 3000,
+  onPrimary: () => {
+    const stopRateLimits = installClusterRateLimitPrimary()
+    const stopRelay = installClusterEventRelay()
+    return () => { stopRateLimits(); stopRelay() }
+  }
+})
+```
+
+Inside the app, use `rateLimit({ store: new ClusterStore() })` and `new EventBus({ transport: new ClusterTransport() })`. Both behave like their in-process versions when there is only one worker.
+
 ## Programmatic API
 
 ```typescript

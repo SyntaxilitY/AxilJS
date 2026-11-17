@@ -53,8 +53,8 @@ async function runDoctor() {
     const nodeMajor = parseInt(nodeVersion.slice(1));
     checks.push({
         name: 'Node.js version',
-        pass: nodeMajor >= 18,
-        message: `${nodeVersion} ${nodeMajor >= 18 ? '(OK)' : '(need >= 18)'}`
+        pass: nodeMajor >= 20,
+        message: `${nodeVersion} ${nodeMajor >= 20 ? '(OK)' : '(need >= 20)'}`
     });
     // TypeScript
     let tsVersion = 'not found';

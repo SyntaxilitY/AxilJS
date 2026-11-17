@@ -3,7 +3,7 @@
  * Trace ID: 992f2995fd8091f39f6f41f757fb766a
  */
 export { ConnectionManager, createConnection } from './connection/connection-manager';
-export { BaseDriver } from './connection/base-driver';
+export { BaseDriver, classifyStatement } from './connection/base-driver';
 export type { TransactionContext } from './connection/base-driver';
 export { SQLiteDriver } from './connection/sqlite-driver';
 export { PostgresDriver } from './connection/postgres-driver';

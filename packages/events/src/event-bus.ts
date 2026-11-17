@@ -1,7 +1,9 @@
 /**
  * In-process Event Bus.
  * Typed publish/subscribe system for decoupled communication.
- * Works within a single process. Phase 6 adds cross-process transport.
+ * Works within a single process by default. Attach an EventTransport
+ * (e.g. ClusterTransport) to deliver `{ broadcast: true }` emits to buses in
+ * other processes; see "Cross-process events" below.
  *
  * Usage:
  *   const bus = new EventBus()
@@ -16,6 +18,20 @@
  *
  *   // Wildcard subscription
  *   bus.on('user.*', (event) => console.log('User event:', event.type))
+ *
+ * Cross-process events (only when a transport is attached):
+ *   - emit(type, payload, { broadcast: true }) runs local handlers exactly once
+ *     AND publishes a JSON copy through the transport. `new EventBus({
+ *     broadcast: true })` makes that the default; an emit can then opt out
+ *     with { broadcast: false }.
+ *   - Events received from the transport run local handlers (and middleware,
+ *     history, once/waitFor) but are never re-published, so relays cannot loop.
+ *   - Every bus has a random originId; messages carrying it are dropped, so a
+ *     transport that echoes publishes back does not cause double delivery.
+ *   - A broadcast payload must be plain JSON data (see assertJsonSafe); a
+ *     non-serializable payload makes emit() throw before any handler runs.
+ *   - Without a transport, broadcast is a no-op (local delivery only), but the
+ *     JSON check still runs so mistakes surface in single-process dev too.
  */
 
 import { randomUUID } from 'crypto';
@@ -24,7 +40,10 @@ import {
   EventHandler,
   Subscription,
   EventBusOptions,
-  EventMiddleware
+  EventMiddleware,
+  EventTransport,
+  EventTransportMessage,
+  EmitOptions
 } from './types';
 
 export class EventBus {
@@ -48,9 +67,20 @@ export class EventBus {
   // Event types already warned about (warn once per type, like Node's EventEmitter)
   private warnedTypes = new Set<string>();
 
+  // Random per-instance id stamped on published messages (own echoes are dropped)
+  readonly originId: string = randomUUID();
+
+  // Cross-process transport (null = in-process only)
+  private transport: EventTransport | null = null;
+  private transportUnsubscribe: (() => void) | null = null;
+
+  // Whether emits broadcast by default
+  private broadcastByDefault: boolean;
+
   constructor(options: EventBusOptions = {}) {
     this.middleware = options.middleware || [];
     this.maxListeners = options.maxListeners ?? 0;
+    this.broadcastByDefault = options.broadcast ?? false;
 
     this.onError = options.onError || ((error, event) => {
       console.error(
@@ -58,6 +88,34 @@ export class EventBus {
         error.message
       );
     });
+
+    if (options.transport) this.useTransport(options.transport);
+  }
+
+  // ─── Transport ───────────────────────────────────────────────────────────────
+
+  /**
+   * Attach a cross-process transport (replacing any previous one), or detach
+   * with `null`. The bus subscribes to it immediately. Detaching does not call
+   * the transport's close(); the caller owns its lifecycle.
+   */
+  useTransport(transport: EventTransport | null): this {
+    if (this.transportUnsubscribe) {
+      this.transportUnsubscribe();
+      this.transportUnsubscribe = null;
+    }
+    this.transport = transport;
+    if (transport) {
+      this.transportUnsubscribe = transport.subscribe((message) => this.receive(message));
+    }
+    return this;
+  }
+
+  /**
+   * The currently attached transport, or null.
+   */
+  getTransport(): EventTransport | null {
+    return this.transport;
   }
 
   // ─── Subscribe ───────────────────────────────────────────────────────────────
@@ -155,15 +213,23 @@ export class EventBus {
    * Emit an event to all matching subscribers.
    * Runs middleware then calls all matching handlers.
    *
+   * Local handlers always run exactly once. With `broadcast` (per emit, or
+   * the bus default) and an attached transport, a JSON copy of the event is
+   * also published to other processes.
+   *
    * @param type     Event type string
    * @param payload  Event data
-   * @param meta     Optional event metadata
+   * @param meta     Optional event metadata, plus `broadcast`
+   * @throws TypeError when broadcasting a payload that is not plain JSON data
    */
   async emit<T = unknown>(
     type: string,
     payload: T,
-    meta: Partial<Pick<axilEvent, 'source' | 'correlationId' | 'causationId' | 'version'>> = {}
+    meta: EmitOptions = {}
   ): Promise<void> {
+    const { broadcast, ...eventMeta } = meta;
+    const shouldBroadcast = broadcast ?? this.broadcastByDefault;
+
     // Build the event object
     const event: axilEvent<T> = {
       id: randomUUID(),
@@ -171,8 +237,63 @@ export class EventBus {
       payload,
       timestamp: new Date().toISOString(),
       version: 1,
-      ...meta
+      ...eventMeta
     };
+
+    // Validate before anything runs, so a bad payload fails loudly and
+    // consistently (with or without a transport)
+    let wire: axilEvent | null = null;
+    if (shouldBroadcast) {
+      assertJsonSafe(event.payload, `Event '${type}' payload`);
+      wire = JSON.parse(JSON.stringify(event)) as axilEvent;
+    }
+
+    // Publish first so remote delivery is not delayed by slow local handlers
+    const published = wire && this.transport
+      ? this.publish(this.transport, wire)
+      : null;
+
+    await this.dispatch(event);
+    if (published) await published;
+  }
+
+  // ─── Remote delivery ─────────────────────────────────────────────────────────
+
+  /**
+   * Handle a message from the transport: drop own echoes and malformed
+   * messages, deliver the rest locally. Never re-published.
+   */
+  private receive(message: EventTransportMessage): void {
+    if (!message || typeof message !== 'object') return;
+    if (message.origin === this.originId) return;
+    const event = message.event;
+    if (!event || typeof event !== 'object' || typeof event.type !== 'string') return;
+
+    this.dispatch(event).catch((error) => {
+      this.onError(error instanceof Error ? error : new Error(String(error)), event);
+    });
+  }
+
+  /**
+   * Publish through the transport. Failures go to onError instead of
+   * rejecting emit(), because local delivery has already happened.
+   */
+  private async publish(transport: EventTransport, event: axilEvent): Promise<void> {
+    try {
+      await transport.publish({ origin: this.originId, event });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.onError(new Error(`Transport publish failed: ${err.message}`), event);
+    }
+  }
+
+  // ─── Local delivery ──────────────────────────────────────────────────────────
+
+  /**
+   * Record the event and run middleware + matching local handlers.
+   */
+  private async dispatch(event: axilEvent<any>): Promise<void> {
+    const type = event.type;
 
     // Store in history (with size limit)
     this.history.push(event);
@@ -211,7 +332,7 @@ export class EventBus {
    * All events are emitted before any handlers run.
    */
   async emitMany<T = unknown>(
-    events: Array<{ type: string; payload: T; meta?: any }>
+    events: Array<{ type: string; payload: T; meta?: EmitOptions }>
   ): Promise<void> {
     await Promise.all(
       events.map(e => this.emit(e.type, e.payload, e.meta))
@@ -344,6 +465,75 @@ export class EventBus {
 
     await next();
   }
+}
+
+// ─── JSON safety ──────────────────────────────────────────────────────────────
+
+/**
+ * Throw a TypeError unless `value` is plain JSON data that survives a
+ * JSON round-trip with its meaning intact.
+ *
+ * Allowed: null, booleans, finite numbers, strings, arrays, plain objects
+ * (prototype Object or null) and Date (arrives on the other side as an ISO
+ * string). Object properties whose value is undefined are dropped, as JSON does.
+ *
+ * A top-level `undefined` (an event without payload) is allowed.
+ *
+ * Rejected: nested undefined (e.g. array items) / function / symbol / bigint
+ * values, NaN and Infinity,
+ * class instances (Map, Set, Buffer, Error, ...) and circular references.
+ */
+export function assertJsonSafe(value: unknown, label: string = 'Value'): void {
+  const seen = new Set<object>();
+
+  const fail = (path: string, what: string): never => {
+    throw new TypeError(`${label} is not JSON-serializable: ${path} is ${what}`);
+  };
+
+  const visit = (v: unknown, path: string): void => {
+    if (v === null) return;
+    switch (typeof v) {
+      case 'string':
+      case 'boolean':
+        return;
+      case 'number':
+        if (!Number.isFinite(v)) fail(path, String(v));
+        return;
+      case 'object':
+        break;
+      case 'undefined':
+        fail(path, 'undefined');
+        return;
+      default:
+        fail(path, `a ${typeof v}`);
+    }
+
+    const obj = v as object;
+    if (obj instanceof Date) return;
+    if (seen.has(obj)) fail(path, 'a circular reference');
+    seen.add(obj);
+
+    if (Array.isArray(obj)) {
+      obj.forEach((item, i) => visit(item, `${path}[${i}]`));
+    } else {
+      const proto = Object.getPrototypeOf(obj);
+      if (proto !== Object.prototype && proto !== null) {
+        const name = (proto && proto.constructor && proto.constructor.name) || 'non-plain object';
+        fail(path, `a ${name} instance (use plain objects and arrays)`);
+      }
+      for (const key of Object.keys(obj)) {
+        const child = (obj as Record<string, unknown>)[key];
+        if (child === undefined) continue;
+        visit(child, `${path}.${key}`);
+      }
+    }
+
+    seen.delete(obj);
+  };
+
+  // A missing top-level value (e.g. an event with no payload) is fine
+  if (value === undefined) return;
+  visit(value, 'payload');
 }
 
 // ─── Global Event Bus ─────────────────────────────────────────────────────────

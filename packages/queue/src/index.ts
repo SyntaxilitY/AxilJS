@@ -15,3 +15,6 @@ export type { Job, JobOptions, JobStatus, JobHandler, JobContext } from './job';
 
 export { InMemoryQueueStore } from './store';
 export type { QueueStore } from './store';
+
+export { FileQueueStore } from './file-store';
+export type { FileQueueStoreOptions } from './file-store';

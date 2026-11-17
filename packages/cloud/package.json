@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/cloud",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "AxilJS enterprise — multi-tenancy, audit logs, feature flags, deployment",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -29,12 +29,12 @@
   "author": "Tariq Mehmood <tariq@syntaxility.dev>",
   "license": "MIT",
   "peerDependencies": {
-    "@axiljs/common": "^0.3.3",
-    "@axiljs/events": "^0.3.3"
+    "@axiljs/common": "^0.3.4",
+    "@axiljs/events": "^0.3.4"
   },
   "devDependencies": {
-    "@axiljs/common": "^0.3.3",
-    "@axiljs/events": "^0.3.3"
+    "@axiljs/common": "^0.3.4",
+    "@axiljs/events": "^0.3.4"
   },
   "publishConfig": {
     "access": "public"

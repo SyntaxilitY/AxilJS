@@ -5,18 +5,24 @@
  *   order 200  tRetry    @axiljs/circuit retry()
  *   order 300  tTimeout  per-attempt deadline
  *
+ * Intent verification (./intent) and resilience (./resilience) interceptors
+ * are registered here too; see those files for their order numbers.
+ *
  * Events go to the global @axiljs/events bus:
  *   'audit.log'      same AuditEvent shape as @axiljs/cloud's auditLog()
  *   'runtime.retry'  { target, attempt, delayMs, error }
  */
 
 import { retry } from '@axiljs/circuit';
-import { getGlobalEventBus } from '@axiljs/events';
 import type { TAuditOptions, TRetryOptions } from '@axiljs/decorator';
 import { getContext } from './context';
 import { redact } from './redact';
+import { emitSafe } from './emit';
+import { label } from './keys';
 import { registerInterceptor } from './interceptors';
-import type { Interceptor, Invocation } from './interceptors';
+import type { Interceptor } from './interceptors';
+import { registerIntentInterceptors } from './intent';
+import { registerResilienceInterceptors } from './resilience';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,21 +33,6 @@ export class TimeoutError extends Error {
     super(`${target} timed out after ${timeoutMs}ms`);
     this.name = 'TimeoutError';
   }
-}
-
-/** Emit without letting a failing subscriber break the business call. */
-function emitSafe(type: string, payload: unknown): void {
-  try {
-    getGlobalEventBus()
-      .emit(type, payload)
-      .catch(err => process.emitWarning(`[@axiljs/runtime] '${type}' subscriber failed: ${err?.message ?? err}`));
-  } catch (err: any) {
-    process.emitWarning(`[@axiljs/runtime] could not emit '${type}': ${err?.message ?? err}`);
-  }
-}
-
-function label(inv: Invocation): string {
-  return `${inv.className}.${inv.method}`;
 }
 
 // ─── tTimeout ─────────────────────────────────────────────────────────────────
@@ -138,4 +129,6 @@ export function registerBuiltins(): void {
   registerInterceptor(auditInterceptor);
   registerInterceptor(retryInterceptor);
   registerInterceptor(timeoutInterceptor);
+  registerIntentInterceptors();
+  registerResilienceInterceptors();
 }

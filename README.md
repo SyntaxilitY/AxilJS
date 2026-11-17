@@ -37,6 +37,7 @@ AxilJS provides the building blocks a production backend usually assembles from 
 - **Minimal dependencies.** Packages are built on Node.js built-ins (`node:http`, `node:crypto`, `node:cluster`, …). Database drivers (`pg`, `mysql2`, `better-sqlite3`) are optional peer dependencies loaded at runtime.
 - **TypeScript-first.** All packages ship type definitions and are written in strict TypeScript.
 - **Consistent conventions.** One response envelope, one error model and one project layout across every package.
+- **Verified intent.** Decorators such as `tReadOnly`, `tTenantIsolated` and `tIdempotent` are checked while the code runs, so a method that breaks its declared contract fails in development instead of in production. See [`@axiljs/runtime`](packages/runtime#intent-verification).
 
 > **Status:** AxilJS is pre-1.0 (`0.3.x`). APIs may change between minor versions. Pin exact versions in production and review the release notes before upgrading.
 
@@ -95,7 +96,7 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | [`@axiljs/core`](packages/core) | HTTP server, trie router, middleware pipeline, SSE, static files, response envelope |
 | [`@axiljs/common`](packages/common) | Shared types and error classes |
 | [`@axiljs/config`](packages/config) | `.env` loading and typed configuration validation |
-| [`@axiljs/security`](packages/security) | Security headers, rate limiting, CSRF protection, input sanitization |
+| [`@axiljs/security`](packages/security) | Security headers, rate limiting (shared across cluster workers), CSRF protection, input sanitization |
 | [`@axiljs/auth`](packages/auth) | JWT, password hashing (scrypt), role- and permission-based access control |
 | [`@axiljs/validation`](packages/validation) | Schema builder and request validation middleware |
 
@@ -104,9 +105,9 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | Package | Description |
 |---|---|
 | [`@axiljs/orm`](packages/orm) | PostgreSQL, MySQL and SQLite; entities, repositories, query builder, migrations, transactions |
-| [`@axiljs/events`](packages/events) | In-process event bus with wildcard subscriptions |
+| [`@axiljs/events`](packages/events) | Event bus with wildcard subscriptions; optional broadcast to other cluster workers |
 | [`@axiljs/websocket`](packages/websocket) | RFC 6455 WebSocket server with rooms and broadcasting |
-| [`@axiljs/queue`](packages/queue) | Job queue with retries and backoff, and a cron scheduler |
+| [`@axiljs/queue`](packages/queue) | Job queue with retries, backoff and optional durable file storage, and a cron scheduler |
 
 **Reliability and operations**
 
@@ -132,7 +133,7 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | [`@axiljs/studio`](packages/studio) | Local development dashboard: routes, database browser, API collection export |
 | [`@axiljs/testing`](packages/testing) | Test runner, assertions and HTTP test client |
 | [`@axiljs/decorator`](packages/decorator) | Declarative `t*` decorators that record intent as metadata |
-| [`@axiljs/runtime`](packages/runtime) | Request context and interceptors that execute decorator metadata (retry, timeout, audit, redaction) |
+| [`@axiljs/runtime`](packages/runtime) | Executes decorator metadata: intent verification, resilience and concurrency interceptors, audit, redaction |
 | [`@axiljs/pm`](packages/pm) | Package manager with lock file and checksum verification *(experimental)* |
 
 ## CLI
