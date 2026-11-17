@@ -105,6 +105,7 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | Package | Description |
 |---|---|
 | [`@axiljs/orm`](packages/orm) | PostgreSQL, MySQL and SQLite; entities, repositories, query builder, migrations, transactions |
+| [`@axiljs/stores`](packages/stores) | SQL-backed shared stores for rate limits, idempotency, cache and locks; multi-server state without Redis |
 | [`@axiljs/events`](packages/events) | Event bus with wildcard subscriptions; optional broadcast to other cluster workers |
 | [`@axiljs/websocket`](packages/websocket) | RFC 6455 WebSocket server with rooms and broadcasting |
 | [`@axiljs/queue`](packages/queue) | Job queue with retries, backoff and optional durable file storage, and a cron scheduler |
@@ -152,6 +153,7 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | `axil install [package]` | Install a package (`-D` for a dev dependency) |
 | `axil doctor` | Diagnose common project and environment issues |
 | `axil decorator <list\|info\|search>` | Browse the decorator catalog |
+| `axil verify [pattern]` | Check which decorators the runtime enforces and run the tests with `AXIL_INTENT_MODE=enforce` (`--static`, `--strict`, `--json`) |
 
 Run `axil <command> --help` for the options of a single command.
 

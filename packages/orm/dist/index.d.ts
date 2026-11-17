@@ -24,7 +24,9 @@ export { Schema, TableBuilder } from './schema/schema-builder';
 export { Transaction, TransactionScope } from './transaction/transaction-manager';
 export { ViewManager } from './views/view-manager';
 export { ProcedureManager } from './procedures/procedure-manager';
-export { MigrationRunner } from './migrations/migration-runner';
-export type { Migration } from './migrations/migration-runner';
+export { MigrationRunner, MigrationSafetyError, checkMigrations } from './migrations/migration-runner';
+export type { Migration, MigrationSafetyMode, MigrationRunnerOptions, MigrationCheckResult, MigrationCheckOptions } from './migrations/migration-runner';
+export { analyzeMigration, splitStatements, isSafeTypeChange, DEFAULT_LARGE_TABLE_THRESHOLD } from './migrations/safety';
+export type { MigrationFinding, MigrationSeverity, AnalyzeMigrationOptions, SqlDialect, SqlStatement } from './migrations/safety';
 export * from './types';
 //# sourceMappingURL=index.d.ts.map

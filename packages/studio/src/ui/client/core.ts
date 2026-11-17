@@ -29,7 +29,8 @@ var S = {
   sql: null,
   rt: {},
   er: null,
-  exp: { tab: "routes", cache: {} }
+  exp: { tab: "routes", cache: {} },
+  intent: null
 };
 
 /* ── storage ─────────────────────────────────────────── */

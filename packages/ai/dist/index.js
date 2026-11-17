@@ -18,7 +18,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.aiAgent = exports.aiEmbed = exports.aiChatStream = exports.aiChat = exports.MCPClient = exports.evaluateMathExpression = exports.jsonTool = exports.calculatorTool = exports.currentDateTimeTool = exports.createTool = exports.Agent = exports.loadFromUrls = exports.loadFromFiles = exports.loadFromString = exports.loadFromText = exports.DocumentChunker = exports.RAGPipeline = exports.VectorStore = exports.AIHttpError = exports.GeminiProvider = exports.OllamaProvider = exports.AnthropicProvider = exports.OpenAIProvider = void 0;
+exports.AIReplayMissError = exports.AIPolicyViolationError = exports.AIBudgetExceededError = exports.requestKey = exports.replayProvider = exports.recordingProvider = exports.ibanValid = exports.luhnValid = exports.redactText = exports.withRedaction = exports.windowFor = exports.estimateTokens = exports.InMemoryBudgetStore = exports.withBudget = exports.aiAgent = exports.aiEmbed = exports.aiChatStream = exports.aiChat = exports.MCPClient = exports.evaluateMathExpression = exports.jsonTool = exports.calculatorTool = exports.currentDateTimeTool = exports.createTool = exports.Agent = exports.loadFromUrls = exports.loadFromFiles = exports.loadFromString = exports.loadFromText = exports.DocumentChunker = exports.RAGPipeline = exports.VectorStore = exports.AIHttpError = exports.GeminiProvider = exports.OllamaProvider = exports.AnthropicProvider = exports.OpenAIProvider = void 0;
 // ─── Types ────────────────────────────────────────────────────────────────────
 __exportStar(require("./types"), exports);
 // ─── Providers ────────────────────────────────────────────────────────────────
@@ -64,4 +64,23 @@ Object.defineProperty(exports, "aiChat", { enumerable: true, get: function () { 
 Object.defineProperty(exports, "aiChatStream", { enumerable: true, get: function () { return ai_middleware_1.aiChatStream; } });
 Object.defineProperty(exports, "aiEmbed", { enumerable: true, get: function () { return ai_middleware_1.aiEmbed; } });
 Object.defineProperty(exports, "aiAgent", { enumerable: true, get: function () { return ai_middleware_1.aiAgent; } });
+// ─── Governance ───────────────────────────────────────────────────────────────
+var budget_1 = require("./governance/budget");
+Object.defineProperty(exports, "withBudget", { enumerable: true, get: function () { return budget_1.withBudget; } });
+Object.defineProperty(exports, "InMemoryBudgetStore", { enumerable: true, get: function () { return budget_1.InMemoryBudgetStore; } });
+Object.defineProperty(exports, "estimateTokens", { enumerable: true, get: function () { return budget_1.estimateTokens; } });
+Object.defineProperty(exports, "windowFor", { enumerable: true, get: function () { return budget_1.windowFor; } });
+var redaction_1 = require("./governance/redaction");
+Object.defineProperty(exports, "withRedaction", { enumerable: true, get: function () { return redaction_1.withRedaction; } });
+Object.defineProperty(exports, "redactText", { enumerable: true, get: function () { return redaction_1.redactText; } });
+Object.defineProperty(exports, "luhnValid", { enumerable: true, get: function () { return redaction_1.luhnValid; } });
+Object.defineProperty(exports, "ibanValid", { enumerable: true, get: function () { return redaction_1.ibanValid; } });
+var recording_1 = require("./governance/recording");
+Object.defineProperty(exports, "recordingProvider", { enumerable: true, get: function () { return recording_1.recordingProvider; } });
+Object.defineProperty(exports, "replayProvider", { enumerable: true, get: function () { return recording_1.replayProvider; } });
+Object.defineProperty(exports, "requestKey", { enumerable: true, get: function () { return recording_1.requestKey; } });
+var errors_1 = require("./governance/errors");
+Object.defineProperty(exports, "AIBudgetExceededError", { enumerable: true, get: function () { return errors_1.AIBudgetExceededError; } });
+Object.defineProperty(exports, "AIPolicyViolationError", { enumerable: true, get: function () { return errors_1.AIPolicyViolationError; } });
+Object.defineProperty(exports, "AIReplayMissError", { enumerable: true, get: function () { return errors_1.AIReplayMissError; } });
 //# sourceMappingURL=index.js.map

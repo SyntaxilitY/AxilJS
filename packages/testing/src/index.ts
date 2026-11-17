@@ -39,3 +39,26 @@ export type { MockFunction, MockState, MockResult } from './mock/mock';
 // HTTP test client
 export { TestClient, TestRequest, createTestClient } from './http/test-client';
 export type { TestResponse } from './http/test-client';
+
+// Contract testing (idempotency, tenant isolation, runtime intent)
+export {
+  expectIdempotent,
+  expectTenantIsolated,
+  expectNoIntentViolations,
+  extractRows,
+  ContractViolationError,
+  DEFAULT_IDEMPOTENCY_IGNORE,
+  RUNTIME_REPORT_KEY
+} from './contracts';
+export type {
+  RequestSpec,
+  RequestAs,
+  ContractClient,
+  ContractMethod,
+  IdempotencyOptions,
+  IdempotencyReport,
+  TenantSeed,
+  ForbiddenProbe,
+  TenantIsolationOptions,
+  TenantIsolationReport
+} from './contracts';

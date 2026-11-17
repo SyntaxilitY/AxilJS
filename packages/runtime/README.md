@@ -94,6 +94,12 @@ configureIntent({ mode: 'enforce' })   // 'enforce' | 'warn' | 'off'
 
 **Modes.** `enforce` throws `IntentViolationError` (default outside production). `warn` records the violation, emits `runtime.intent.violation` and prints one warning per target (default when `NODE_ENV=production`). `off` disables the checks. `getIntentViolations()` returns the recorded violations and `getSloReport()` the SLO status of every `tSlo` method.
 
+**Choosing the mode without code.** Set `AXIL_INTENT_MODE=enforce|warn|off` in the environment; `axil verify` uses this to run your tests in enforce mode.
+
+**Infrastructure writes.** Writes made by the framework on behalf of a decorator (a cache entry or idempotency record stored in a database, a lock row) are not the method's own side effects. Wrap such code in `runWithoutSideEffectReports(fn)`; the SQL stores in `@axiljs/stores` and the SQL queue backend already do.
+
+**Status for tools.** `runtimeReport()` returns the mode, enforced decorators, recorded violations, SLO status and circuit states. It is also published on `globalThis[Symbol.for('axiljs.runtime.report')]`, which AxilJS Studio reads for its Intent view.
+
 **Reporting side effects from your own code.** Call `reportSideEffect('payments.write')` before performing an effect the runtime cannot see. Packages that must not depend on `@axiljs/runtime` can call `globalThis[Symbol.for('axiljs.intent.report')]?.(kind, detail)`.
 
 **Keys.** Keyed decorators accept a function of the arguments or a string: `'request.id'`, `'header:<name>'`, `'user'`, `'tenant'`, `'ip'`, `'args.0.id'`, a template such as `'order:{0.id}'`, or `'global'`.
@@ -113,7 +119,7 @@ configureIntent({ mode: 'enforce' })   // 'enforce' | 'warn' | 'off'
 | `tDedupe({ key, window })` | Concurrent calls with the same key share one execution |
 | `tHedge({ delay, maxAttempts })` | Starts another attempt when the first is slower than `delay`; the first success wins |
 | `tCache({ key, ttl, tags, condition })` | Memoizes results; `tCachePut`, `tCacheEvict`, `tCacheInvalidate(...tags)` keep it fresh; `setCacheStore()` for a shared cache |
-| `tRateLimit({ limit, window, key })` | Fixed-window limit per key (`'ip'`, `'user'`, `'tenant'`, custom); `RateLimitExceededError` (429) |
+| `tRateLimit({ limit, window, key })` | Fixed-window limit per key (`'ip'`, `'user'`, `'tenant'`, custom); `RateLimitExceededError` (429); `setRateLimitStore()` shares counters across processes |
 | `tThrottle(calls, periodMs)` | At most `calls` executions per period for the method |
 | `tDebounce(ms)` | A burst of calls runs once, with the last arguments; every caller receives that result |
 

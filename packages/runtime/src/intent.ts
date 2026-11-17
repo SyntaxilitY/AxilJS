@@ -53,7 +53,14 @@ export class IntentViolationError extends axilError {
   }
 }
 
-let mode: IntentMode = process.env.NODE_ENV === 'production' ? 'warn' : 'enforce';
+function initialMode(): IntentMode {
+  // AXIL_INTENT_MODE lets tooling (axil verify, CI) pick the mode without code changes
+  const fromEnv = process.env.AXIL_INTENT_MODE;
+  if (fromEnv === 'enforce' || fromEnv === 'warn' || fromEnv === 'off') return fromEnv;
+  return process.env.NODE_ENV === 'production' ? 'warn' : 'enforce';
+}
+
+let mode: IntentMode = initialMode();
 const MAX_VIOLATIONS = 500;
 const violations: IntentViolation[] = [];
 const warned = new Set<string>();
@@ -123,6 +130,7 @@ const READ_KINDS = new Set(['db.read', 'network.read', 'fs.read', 'cache.read'])
  * Call it before performing the effect so 'enforce' mode can prevent it.
  */
 export function reportSideEffect(kind: string, detail?: string): void {
+  if (unreported.getStore()) return;
   for (let scope = scopes.getStore(); scope; scope = scope.parent) {
     const forbidden = scope.decorator === 'tPure' || !READ_KINDS.has(kind);
     if (forbidden) {
@@ -131,6 +139,21 @@ export function reportSideEffect(kind: string, detail?: string): void {
     }
   }
 }
+
+const unreported = new AsyncLocalStorage<boolean>();
+
+/**
+ * Run `fn` without reporting its side effects. For framework infrastructure
+ * whose writes are not the business method's own (a tCache entry stored in
+ * a database table, an idempotency record, a lock row). Published on
+ * `globalThis[Symbol.for('axiljs.intent.unreported')]` for packages that
+ * must not depend on this one.
+ */
+export function runWithoutSideEffectReports<T>(fn: () => T): T {
+  return unreported.run(true, fn);
+}
+
+(globalThis as any)[Symbol.for('axiljs.intent.unreported')] = runWithoutSideEffectReports;
 
 /** The innermost tPure / tReadOnly scope, if any. */
 export function currentIntentScope(): { decorator: string; target: string } | undefined {

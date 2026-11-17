@@ -3,7 +3,7 @@
  * @axiljs/testing - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTestClient = exports.TestRequest = exports.TestClient = exports.isMockFunction = exports.spyOn = exports.fn = exports.AssertionError = exports.expect = exports.DEFAULT_TIMEOUT = exports.resetTests = exports.runTestsWithResults = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fdescribe = exports.xdescribe = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
+exports.RUNTIME_REPORT_KEY = exports.DEFAULT_IDEMPOTENCY_IGNORE = exports.ContractViolationError = exports.extractRows = exports.expectNoIntentViolations = exports.expectTenantIsolated = exports.expectIdempotent = exports.createTestClient = exports.TestRequest = exports.TestClient = exports.isMockFunction = exports.spyOn = exports.fn = exports.AssertionError = exports.expect = exports.DEFAULT_TIMEOUT = exports.resetTests = exports.runTestsWithResults = exports.runTests = exports.afterEach = exports.beforeEach = exports.afterAll = exports.beforeAll = exports.fdescribe = exports.xdescribe = exports.fit = exports.xit = exports.test = exports.it = exports.describe = void 0;
 // Test runner
 var test_runner_1 = require("./runner/test-runner");
 Object.defineProperty(exports, "describe", { enumerable: true, get: function () { return test_runner_1.describe; } });
@@ -35,4 +35,13 @@ var test_client_1 = require("./http/test-client");
 Object.defineProperty(exports, "TestClient", { enumerable: true, get: function () { return test_client_1.TestClient; } });
 Object.defineProperty(exports, "TestRequest", { enumerable: true, get: function () { return test_client_1.TestRequest; } });
 Object.defineProperty(exports, "createTestClient", { enumerable: true, get: function () { return test_client_1.createTestClient; } });
+// Contract testing (idempotency, tenant isolation, runtime intent)
+var contracts_1 = require("./contracts");
+Object.defineProperty(exports, "expectIdempotent", { enumerable: true, get: function () { return contracts_1.expectIdempotent; } });
+Object.defineProperty(exports, "expectTenantIsolated", { enumerable: true, get: function () { return contracts_1.expectTenantIsolated; } });
+Object.defineProperty(exports, "expectNoIntentViolations", { enumerable: true, get: function () { return contracts_1.expectNoIntentViolations; } });
+Object.defineProperty(exports, "extractRows", { enumerable: true, get: function () { return contracts_1.extractRows; } });
+Object.defineProperty(exports, "ContractViolationError", { enumerable: true, get: function () { return contracts_1.ContractViolationError; } });
+Object.defineProperty(exports, "DEFAULT_IDEMPOTENCY_IGNORE", { enumerable: true, get: function () { return contracts_1.DEFAULT_IDEMPOTENCY_IGNORE; } });
+Object.defineProperty(exports, "RUNTIME_REPORT_KEY", { enumerable: true, get: function () { return contracts_1.RUNTIME_REPORT_KEY; } });
 //# sourceMappingURL=index.js.map

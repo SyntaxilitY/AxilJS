@@ -10,6 +10,7 @@
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests
+ *   axil verify                  Check decorator enforcement + run tests in enforce mode
  *   axil deploy                  Generate Docker + K8s files
  *   axil install                 Install packages
  *   axil doctor                  Diagnose project
@@ -45,6 +46,7 @@ import { runTests }        from './commands/test'
 import { deploy }          from './commands/deploy'
 import { capacity }        from './commands/capacity'
 import { runDecorator }    from './commands/decorator'
+import { verify }          from './commands/verify'
 import * as ui             from './ui'
 import { canPrompt }       from './prompts'
 import { TEMPLATES }       from './templates'
@@ -310,6 +312,20 @@ async function runCommand(name: string, parsed: ParsedArgs): Promise<void> {
       break
     }
 
+    case 'verify': {
+      if (pos.length > 1) {
+        fail(`Unexpected argument '${pos[1]}'.`, 'axil verify [pattern] [--static] [--json] [--strict]')
+      }
+
+      await verify({
+        pattern: pos[0],
+        static:  flagBool(parsed, 'static'),
+        json:    flagBool(parsed, 'json'),
+        strict:  flagBool(parsed, 'strict')
+      })
+      break
+    }
+
     case 'deploy': {
       await deploy({
         port:     flagString(parsed, 'port'),
@@ -376,7 +392,7 @@ const HELP_GROUPS: Array<{ title: string; commands: Array<[string, string]> }> =
   { title: 'Develop',  commands: [['run', 'run'], ['test', 'test [pattern]'], ['doctor', 'doctor']] },
   { title: 'Database', commands: [['migrate', 'migrate [up|down|status]']] },
   { title: 'Ship',     commands: [['build', 'build'], ['capacity', 'capacity'], ['deploy', 'deploy']] },
-  { title: 'Inspect',  commands: [['decorator', 'decorator <sub>']] }
+  { title: 'Inspect',  commands: [['decorator', 'decorator <sub>'], ['verify', 'verify [pattern]']] }
 ]
 
 function printHelp(): void {

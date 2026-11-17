@@ -12,4 +12,8 @@ export { InMemoryQueueStore } from './store';
 export type { QueueStore } from './store';
 export { FileQueueStore } from './file-store';
 export type { FileQueueStoreOptions } from './file-store';
+export { InMemoryQueueBackend } from './backend';
+export type { QueueBackend, JobFilter, JobCounts } from './backend';
+export { SqlQueueBackend } from './sql-backend';
+export type { SqlQueueBackendOptions, SqlExecutor, SqlQueryable, SqlQueryResult, SqlDialect } from './sql-backend';
 //# sourceMappingURL=index.d.ts.map

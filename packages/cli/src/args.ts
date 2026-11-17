@@ -314,6 +314,31 @@ export const COMMANDS: CommandSpec[] = [
     examples: ['axil test', 'axil test users']
   },
   {
+    name:    'verify',
+    usage:   'axil verify [pattern] [options]',
+    summary: 'Check that decorators are enforced and run tests with intent enforcement',
+    flags: [
+      { name: 'static', type: 'boolean', description: 'Scan only; do not run the tests' },
+      { name: 'json',   type: 'boolean', description: 'Print the report as JSON on stdout (no other output)' },
+      { name: 'strict', type: 'boolean', description: 'Also exit 1 on unenforced behavioural decorators or classes that look unwired' }
+    ],
+    details: [
+      'Scans src/**/*.ts for t* decorators and classifies each one as enforced at runtime',
+      '(an @axiljs/runtime interceptor exists) or metadata only. The enforced set comes from',
+      "the project's @axiljs/runtime (enforcedDecorators()), else a bundled list.",
+      'Flags classes with enforced decorators that never reach wire()/wireAll() (heuristic).',
+      'Then runs the tests like `axil test [pattern]` with AXIL_INTENT_MODE=enforce, so a broken',
+      'contract throws IntentViolationError; those failures are listed as intent violations.',
+      'Exit code 1 when tests fail (and, with --strict, on the static findings above).'
+    ],
+    examples: [
+      'axil verify',
+      'axil verify --static',
+      'axil verify payments --strict',
+      'axil verify --json > verify.json'
+    ]
+  },
+  {
     name:    'deploy',
     usage:   'axil deploy [options]',
     summary: 'Generate Docker + Kubernetes manifests (deploy/) and .dockerignore',

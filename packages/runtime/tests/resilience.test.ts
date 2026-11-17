@@ -257,3 +257,25 @@ describe('tRateLimit / tThrottle / tDebounce', () => {
     expect(results).toEqual(['results:abc', 'results:abc', 'results:abc']);
   });
 });
+
+describe('setRateLimitStore', () => {
+  it('uses a pluggable async counter store', async () => {
+    const { setRateLimitStore } = await import('../src');
+    const counts = new Map<string, number>();
+    setRateLimitStore({
+      async increment(key: string, windowMs: number) {
+        const n = (counts.get(key) ?? 0) + 1;
+        counts.set(key, n);
+        return { count: n, resetAt: Date.now() + windowMs };
+      }
+    });
+    class Api {
+      @tRateLimit({ limit: 1, window: '1m' })
+      async call() { return 'ok'; }
+    }
+    wire(Api);
+    await expect(new Api().call()).resolves.toBe('ok');
+    await expect(new Api().call()).rejects.toBeInstanceOf(RateLimitExceededError);
+    expect([...counts.keys()]).toEqual(['rl:Api.call:global']);
+  });
+});

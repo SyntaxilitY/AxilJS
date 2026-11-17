@@ -13,7 +13,7 @@ const fs   = require('fs')
 // Dependency order: every package after the @axiljs packages it depends on.
 // runtime needs common, decorator, circuit, events; cli needs scale.
 const ORDER = [
-  'common', 'config', 'security', 'pm', 'orm', 'auth',
+  'common', 'config', 'security', 'pm', 'orm', 'stores', 'auth',
   'validation', 'core', 'testing', 'events', 'websocket',
   'queue', 'circuit', 'decorator', 'runtime', 'observability', 'ai', 'cloud',
   'memory', 'scale', 'cli', 'studio'

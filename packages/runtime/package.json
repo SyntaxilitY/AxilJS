@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/runtime",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "AxilJS runtime: request context and interceptors that execute decorator metadata",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,14 +10,14 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.4",
-    "@axiljs/decorator": "^0.3.4",
-    "@axiljs/circuit": "^0.3.4",
-    "@axiljs/events": "^0.3.4"
+    "@axiljs/common": "^0.3.5",
+    "@axiljs/decorator": "^0.3.5",
+    "@axiljs/circuit": "^0.3.5",
+    "@axiljs/events": "^0.3.5"
   },
   "devDependencies": {
-    "@axiljs/core": "^0.3.4",
-    "@axiljs/testing": "^0.3.4",
+    "@axiljs/core": "^0.3.5",
+    "@axiljs/testing": "^0.3.5",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   },

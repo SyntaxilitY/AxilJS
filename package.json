@@ -1,6 +1,6 @@
 {
   "name": "axiljs",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -13,6 +13,7 @@
     "build:security": "cd packages/security     && npm run build",
     "build:pm": "cd packages/pm           && npm run build",
     "build:orm": "cd packages/orm          && npm run build",
+    "build:stores": "cd packages/stores       && npm run build",
     "build:auth": "cd packages/auth         && npm run build",
     "build:validation": "cd packages/validation   && npm run build",
     "build:core": "cd packages/core         && npm run build",
@@ -30,12 +31,13 @@
     "build:decorator": "cd packages/decorator       && npm run build",
     "build:runtime": "cd packages/runtime         && npm run build",
     "build:scale": "cd packages/scale           && npm run build",
-    "build:all": "npm run build:common && npm run build:scale && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory && npm run build:studio && npm run build:decorator && npm run build:runtime",
+    "build:all": "npm run build:common && npm run build:scale && npm run build:config && npm run build:security && npm run build:pm && npm run build:orm && npm run build:stores && npm run build:auth && npm run build:validation && npm run build:core && npm run build:testing && npm run build:events && npm run build:websocket && npm run build:queue && npm run build:circuit && npm run build:observability && npm run build:ai && npm run build:cloud && npm run build:cli && npm run build:memory && npm run build:studio && npm run build:decorator && npm run build:runtime",
     "dev": "npm run dev  --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "axil": "node packages/cli/dist/cli.js"
+    "axil": "node packages/cli/dist/cli.js",
+    "publish": "node scripts/publish-all.js"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

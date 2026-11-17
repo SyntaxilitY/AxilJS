@@ -4,7 +4,7 @@
  * Exports CLI utilities for programmatic use.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.formatCommandHelp = exports.COMMANDS = exports.parseArgs = exports.migrate = exports.generate = exports.deploy = exports.runDoctor = exports.runTests = exports.installPackages = exports.buildProject = exports.runDev = exports.createProject = void 0;
+exports.formatCommandHelp = exports.COMMANDS = exports.parseArgs = exports.verify = exports.migrate = exports.generate = exports.deploy = exports.runDoctor = exports.runTests = exports.installPackages = exports.buildProject = exports.runDev = exports.createProject = void 0;
 var create_1 = require("./commands/create");
 Object.defineProperty(exports, "createProject", { enumerable: true, get: function () { return create_1.createProject; } });
 var run_1 = require("./commands/run");
@@ -23,6 +23,8 @@ var generate_1 = require("./commands/generate");
 Object.defineProperty(exports, "generate", { enumerable: true, get: function () { return generate_1.generate; } });
 var migrate_1 = require("./commands/migrate");
 Object.defineProperty(exports, "migrate", { enumerable: true, get: function () { return migrate_1.migrate; } });
+var verify_1 = require("./commands/verify");
+Object.defineProperty(exports, "verify", { enumerable: true, get: function () { return verify_1.verify; } });
 var args_1 = require("./args");
 Object.defineProperty(exports, "parseArgs", { enumerable: true, get: function () { return args_1.parseArgs; } });
 Object.defineProperty(exports, "COMMANDS", { enumerable: true, get: function () { return args_1.COMMANDS; } });

@@ -17,6 +17,7 @@ Part of the [AxilJS](https://github.com/SyntaxilitY/AxilJS) ecosystem.
 - **WebSocket & SSE Monitor** — View detected WebSocket paths and SSE streams
 - **QR Code** — Scan to open your app on any device on the same network
 - **Export Collections** — Download Postman, Insomnia, and OpenAPI 3.0 specs instantly
+- **Intent** — Live view of whether the running app keeps the contracts its `@axiljs/runtime` decorators declare
 - **Auto-refresh** — Data refreshes every 30 seconds automatically
 
 ## How it works
@@ -72,8 +73,33 @@ Optional settings:
 | `maxBodyBytes`  | `1048576`        | Max POST body size; larger requests get `413` |
 | `openBrowser`   | `true`           | Open Studio in the default browser on start |
 | `cwd`           | `process.cwd()`  | Project directory scanned for routes and used to resolve `dbFile` |
+| `intentPath`    | `/__axil/studio/intent` | Path on the app that serves the runtime report (must match `intentEndpoint({ path })`) |
 
 `studio.getPort()` returns the bound port (useful with `port: 0`).
+
+## Intent view
+
+The Intent view shows, live, whether the app keeps the contracts declared by its decorators. It reads the report that `@axiljs/runtime` publishes and refreshes every 2 seconds while the view is open:
+
+- intent mode (`enforce`, `warn` or `off`) and summary counters
+- contract violations, newest first, with decorator, target, detail, request id and tenant id
+- SLOs per `tSlo` target: percentile, observed vs. target latency, error rate vs. budget, status
+- circuit breaker states and the list of enforced decorators (interceptor order, outermost first)
+
+Under `axil run` the app runs in a child process, so it has to expose the report to Studio. Add the development-only endpoint next to the runtime:
+
+```typescript
+import '@axiljs/runtime'
+import { wire } from '@axiljs/runtime'
+import { intentEndpoint } from '@axiljs/studio'
+
+wire(OrderService)          // executes the t* decorators on its methods
+app.use(intentEndpoint())   // serves GET /__axil/studio/intent to Studio
+```
+
+`intentEndpoint()` answers only `GET`/`HEAD` on its path from loopback addresses and is a no-op when `NODE_ENV` is `production` (override with `{ enabled }`). It also works as a plain `node:http` handler, returning `true` when it answered. The module has no imports, so an app that keeps Studio as a dev dependency can load it alone from `@axiljs/studio/dist/intent` behind a development check.
+
+When Studio runs in the same process as the runtime (programmatic use), it reads the report directly and no endpoint is needed. The data is available as JSON at `GET /api/studio/intent`, which returns the report with `available: true`, or `{ available: false, reason }` when the runtime is not loaded or the app cannot be reached.
 
 ## Security
 

@@ -57,6 +57,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
     section: 'Tools',
     items: [
       { id: 'realtime',  label: 'Realtime',    icon: 'realtime',  count: 'cnt-realtime' },
+      { id: 'intent',    label: 'Intent',      icon: 'shield' },
       { id: 'export',    label: 'Export',      icon: 'export' },
       { id: 'qr',        label: 'QR access',   icon: 'qr' },
     ],

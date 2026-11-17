@@ -2,6 +2,46 @@
 
 All notable changes to AxilJS are documented here. Versions apply to every `@axiljs/*` package; the packages are released together.
 
+## 0.3.5
+
+### Added
+
+**`@axiljs/stores` (new package): shared state across servers without Redis**
+
+SQL-backed implementations for PostgreSQL, MySQL 8 and SQLite, with no dependencies: `SqlRateLimitStore` (atomic upsert counters), `SqlIdempotencyStore`, `SqlCacheStore` (with tags), `SqlLockProvider` (lease rows with takeover after expiry) and `PgAdvisoryLockProvider`. `fromConnection(conn)` adapts an `@axiljs/orm` connection. Plug them into `setRateLimitStore`, `setIdempotencyStore`, `setCacheStore` and `setLockProvider` from `@axiljs/runtime`, or `rateLimit({ store })` from `@axiljs/security`.
+
+**Multi-server job queue (`@axiljs/queue`)**
+
+`Queue` accepts a `backend`. `SqlQueueBackend` lets several servers share one table: jobs are claimed with `FOR UPDATE SKIP LOCKED` on PostgreSQL and MySQL, locks are renewed while a job runs, stale jobs return to the queue, and results from a server that lost its claim are discarded. Async accessors (`getJobsAsync`, `getStatsAsync`, `cancelAsync`, …) work in both modes.
+
+**Migration safety (`@axiljs/orm`)**
+
+`analyzeMigration(sql, { dialect })` and `MigrationRunner#check()` find statements that take heavy locks or break running code (non-concurrent index builds, NOT NULL without default, column type rewrites, constraints without NOT VALID, renames, drops, unbounded updates and deletes, MySQL table copies, …) and suggest the safe alternative. The runner option `safety: 'warn' | 'block'` checks migrations before running them; `-- axil:allow <rule>` acknowledges an intended change; a migration can export `transaction = false` so `CREATE INDEX CONCURRENTLY` is possible.
+
+**AI governance (`@axiljs/ai`)**
+
+`withBudget` (token, cost and request limits per tenant and time window, checked before the provider is called), `withRedaction` (masks, tokenizes or blocks e-mail addresses, phone numbers, card numbers, IBANs, API keys, JWTs and custom patterns before they reach the model, and restores them in the answer), and `recordingProvider` / `replayProvider` for deterministic, offline tests. AI middleware now returns budget and policy errors with their own status codes.
+
+**Contract testing (`@axiljs/testing`)**
+
+`expectIdempotent`, `expectTenantIsolated` and `expectNoIntentViolations` turn declared intent into HTTP-level tests.
+
+**`axil verify` (`@axiljs/cli`)**
+
+Lists the decorators used in `src/`, separates the ones the runtime enforces from metadata-only ones, flags classes that are never wired, and runs the tests with `AXIL_INTENT_MODE=enforce`. Supports `--static`, `--json` and `--strict`.
+
+**Studio Intent view (`@axiljs/studio`)**
+
+A live view of the intent mode, violations, SLO status, circuit states and enforced decorators. Apps expose the data in development with `app.use(intentEndpoint())`.
+
+**`@axiljs/runtime`**
+
+`AXIL_INTENT_MODE` environment variable, `runWithoutSideEffectReports()` for infrastructure writes, `setRateLimitStore()` for `tRateLimit` / `tThrottle`, and `runtimeReport()` (also published on a global symbol for tools).
+
+### Fixed
+
+- Three regular expressions that could take super-linear time on crafted input (SQL comment stripping in `@axiljs/orm`, key templates and duration parsing in `@axiljs/runtime`), reported by CodeQL.
+
 ## 0.3.4
 
 ### Added

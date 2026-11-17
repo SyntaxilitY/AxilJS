@@ -11,7 +11,7 @@ function inlineScripts(doc: string): string[] {
 
 describe('studio template', () => {
   it('registers every view with a nav entry and a client renderer', () => {
-    expect(STUDIO_VIEWS).toEqual(['overview', 'endpoints', 'database', 'schema', 'sql', 'realtime', 'export', 'qr']);
+    expect(STUDIO_VIEWS).toEqual(['overview', 'endpoints', 'database', 'schema', 'sql', 'realtime', 'intent', 'export', 'qr']);
     for (const view of STUDIO_VIEWS) {
       expect(html, view).toContain(`data-view="${view}"`);
       expect(html, view).toContain(`href="#/${view}"`);

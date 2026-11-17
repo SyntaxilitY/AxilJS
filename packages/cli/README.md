@@ -34,6 +34,8 @@ axil build                  # Compile TypeScript for production
 
 axil test [pattern]         # Run test files
 
+axil verify [pattern]       # Check decorator enforcement, then run tests in intent-enforce mode
+
 axil deploy                 # Generate Docker + Kubernetes files
 
 axil install [package]      # Install an AxilJS package
@@ -209,6 +211,40 @@ axil decorator graph <file>
 
 axil decorator categories   # Show all decorator categories
 ```
+
+### Verify Command
+
+`axil verify` answers "does my code keep the promises its decorators declare?".
+
+```bash
+axil verify                 # Static scan + tests with AXIL_INTENT_MODE=enforce
+axil verify payments        # Only test files matching "payments"
+axil verify --static        # Scan only, do not run the tests
+axil verify --strict        # Also fail on unenforced behavioural decorators / unwired classes
+axil verify --json          # Pure JSON report on stdout (for CI)
+```
+
+1. **Static scan** of `src/**/*.ts` (tests and `.d.ts` excluded; comments and
+   strings ignored). Every `t*` decorator is listed with its `file:line`
+   locations and classified as **enforced at runtime** (an `@axiljs/runtime`
+   interceptor exists) or **metadata only**. The enforced set is read from the
+   project's installed `@axiljs/runtime` (`enforcedDecorators()`), or from a
+   bundled list matching runtime 0.3.4+ when it is not installed. Metadata-only
+   decorators whose catalog category promises call-time behaviour (Security,
+   Reliability, Concurrency, Caching, Data, …) are called out as *not enforced*.
+2. **Wiring (heuristic)**: classes that use enforced decorators but are never
+   reached by `wire(Class)`, `wire(new Class())`, `wire(this)` or `wireAll()`
+   are flagged; interceptors only run on wired classes. A `wire(instance)`
+   through a variable is not visible to this check.
+3. **Tests**: runs the suite exactly like `axil test [pattern]`, with
+   `AXIL_INTENT_MODE=enforce` so a broken contract throws `IntentViolationError`.
+   Failures caused by one are listed in an *Intent violations* section
+   (target, decorator, detail, test name).
+
+Exit code is 1 when the tests fail, and with `--strict` also when a
+not-enforced behavioural decorator is used or a class looks unwired. The
+`--json` report has `project`, `enforced`, `files`, `summary`, `decorators`,
+`unenforced`, `wiring`, `tests` (`null` with `--static`), `strict` and `ok`.
 
 ### CLI Information
 

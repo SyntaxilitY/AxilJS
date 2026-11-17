@@ -4,7 +4,8 @@
  * The interface is synchronous on purpose: the queue's scheduling loop is
  * synchronous, so a store must answer immediately (in-memory, embedded DB
  * with a sync driver, etc.). Remote/async stores (Redis, SQL over the network)
- * would need an async queue loop and are not supported by this interface.
+ * use the asynchronous QueueBackend interface instead (see backend.ts and
+ * SqlQueueBackend), passed to Queue as `backend`.
  */
 
 import { Job } from './job';

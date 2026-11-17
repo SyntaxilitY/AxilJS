@@ -13,6 +13,8 @@ import { DbCollector, StudioInputError } from './collectors/db-collector.js'
 import { generatePostmanCollection }   from './generators/postman.js'
 import { generateInsomniaCollection }  from './generators/insomnia.js'
 import { generateHTML }                from './ui/template.js'
+import { INTENT_ENDPOINT_PATH, normalizeIntentReport, readIntentReport } from './intent.js'
+import type { IntentStatus }           from './intent.js'
 import type { StudioConfig, StudioData, RowFilter, RowQuery } from './types.js'
 
 const PROXY_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
@@ -509,6 +511,12 @@ export class StudioServer {
         return
       }
 
+      // ── Intent: runtime contract report (mode, violations, SLOs, circuits) ──
+      if (path === '/api/studio/intent') {
+        this.json(res, await this.intentReport())
+        return
+      }
+
       // ── Request proxy: try-it calls to the app (no CORS, full response headers) ──
       if (path === '/api/studio/proxy' && method === 'POST') {
         await this.handleProxy(req, res)
@@ -691,6 +699,50 @@ export class StudioServer {
         ? 'The app did not answer within 30 s'
         : `Could not reach the app at ${this.appOrigin()} (${err?.cause?.code ?? err?.message ?? 'error'}). Is it running?`
       this.json(res, { error: reason, timeMs: Math.round(performance.now() - started) }, 502)
+    }
+  }
+
+  /**
+   * Runtime intent report. Read from this process when @axiljs/runtime is
+   * loaded here (Studio embedded in the app); otherwise fetched from the
+   * app's intentEndpoint() — under `axil run` the app is a child process.
+   */
+  private async intentReport(): Promise<IntentStatus> {
+    const local = readIntentReport()
+    if (local.available) return local
+
+    const path = this.config.intentPath ?? INTENT_ENDPOINT_PATH
+    const target = new URL(path.startsWith('/') ? path : `/${path}`, this.appOrigin())
+    let response: Response
+    try {
+      response = await fetch(target, {
+        headers:  { Accept: 'application/json' },
+        redirect: 'manual',
+        signal:   AbortSignal.timeout(1500)
+      })
+    } catch (err: any) {
+      return {
+        available: false,
+        reason: err?.name === 'TimeoutError'
+          ? `The app at ${this.appOrigin()} did not answer ${target.pathname} within 1.5 s`
+          : `Could not reach the app at ${this.appOrigin()}. Is it running?`
+      }
+    }
+    if (response.status === 404) {
+      await response.body?.cancel().catch(() => {})
+      return {
+        available: false,
+        reason: `The app does not serve ${target.pathname}. Add app.use(intentEndpoint()) from @axiljs/studio in development.`
+      }
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {})
+      return { available: false, reason: `The app answered ${target.pathname} with HTTP ${response.status}` }
+    }
+    try {
+      return normalizeIntentReport(await response.json(), 'app')
+    } catch {
+      return { available: false, reason: `The app answered ${target.pathname} with something other than JSON` }
     }
   }
 

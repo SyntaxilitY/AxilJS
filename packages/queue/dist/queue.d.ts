@@ -24,6 +24,7 @@
 import { EventEmitter } from 'events';
 import { Job, JobOptions, JobHandler, JobStatus } from './job';
 import { QueueStore } from './store';
+import { QueueBackend } from './backend';
 import { QueueLoggerOption } from './logger';
 export interface QueueOptions {
     concurrency?: number;
@@ -33,8 +34,19 @@ export interface QueueOptions {
         delay: number;
     };
     store?: QueueStore;
+    backend?: QueueBackend;
+    workerId?: string;
+    visibilityTimeoutMs?: number;
     logger?: QueueLoggerOption;
 }
+type JobStats = {
+    pending: number;
+    active: number;
+    completed: number;
+    failed: number;
+    delayed: number;
+    cancelled: number;
+};
 export declare class Queue extends EventEmitter {
     readonly name: string;
     private store;
@@ -45,6 +57,14 @@ export declare class Queue extends EventEmitter {
     private running;
     private options;
     private log;
+    private backend?;
+    readonly workerId: string;
+    private readonly visibilityTimeoutMs;
+    private backendTimer?;
+    private tickInFlight?;
+    private tickAgain;
+    private lastRecoveryAt;
+    private backendFailing;
     constructor(name: string, options?: QueueOptions);
     /**
      * Register a handler for a specific job name.
@@ -91,18 +111,51 @@ export declare class Queue extends EventEmitter {
     /**
      * Get queue statistics.
      */
-    getStats(): {
-        pending: number;
-        active: number;
-        completed: number;
-        failed: number;
-        delayed: number;
-        cancelled: number;
-    };
+    getStats(): JobStats;
     /**
      * Remove completed, failed and cancelled jobs (cleanup).
      */
     purge(): void;
+    /**
+     * Get jobs by status. Required with a `backend`; equals getJobs() otherwise.
+     */
+    getJobsAsync(status?: JobStatus): Promise<Job[]>;
+    /**
+     * Get a job by ID. Required with a `backend`; equals getJob() otherwise.
+     */
+    getJobAsync(id: string): Promise<Job | undefined>;
+    /**
+     * Queue statistics. Required with a `backend`; equals getStats() otherwise.
+     */
+    getStatsAsync(): Promise<JobStats>;
+    /**
+     * Remove completed, failed and cancelled jobs. Required with a `backend`;
+     * equals purge() otherwise.
+     */
+    purgeAsync(): Promise<void>;
+    /**
+     * Cancel a job (see cancel()). Required with a `backend`; equals cancel()
+     * otherwise. With a backend, a job that is active on another server is
+     * marked cancelled at once; that server aborts it on its next poll.
+     */
+    cancelAsync(jobId: string): Promise<boolean>;
+    private assertSync;
+    private wake;
+    private scheduleTick;
+    /**
+     * One poll: renew the locks of running jobs (aborting any this worker
+     * lost), recover abandoned jobs, then claim jobs for the free slots.
+     * Never rejects; backend errors are reported through the 'error' event.
+     */
+    private backendTick;
+    private startClaimed;
+    /**
+     * Backend counterpart of runJob(): the same outcome rules, but every state
+     * change is a fenced write. If this worker no longer owns the job (it was
+     * cancelled or recovered elsewhere) the outcome is discarded silently.
+     */
+    private runBackendJob;
+    private reportBackendError;
     /**
      * Pick the next ready job and process it.
      */
@@ -134,4 +187,5 @@ export declare class Queue extends EventEmitter {
      */
     private calculateBackoff;
 }
+export {};
 //# sourceMappingURL=queue.d.ts.map

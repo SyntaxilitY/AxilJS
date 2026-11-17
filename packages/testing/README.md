@@ -122,4 +122,79 @@ type is exported as `TestRequest`, so helpers like
 `export const createUser = (body: object) => client.post('/users').send(body)`
 work with `declaration: true`.
 
+## Contract testing
+
+Contract helpers turn declared intent into executable checks. They work over
+HTTP through `createTestClient(app)`, so they test the same pipeline your users
+hit. Requests are described as data (`{ method?, path, headers?, body? }`) so the
+helpers can replay them. Every helper returns a report object and, on failure,
+throws a `ContractViolationError` (a subclass of `AssertionError`) whose message
+explains what diverged; the report is attached as `error.report`.
+
+### Idempotency
+
+```typescript
+import { createTestClient, expectIdempotent } from '@axiljs/testing'
+
+const client = createTestClient(app)
+
+await expectIdempotent(client, { method: 'POST', path: '/orders', body: { sku: 'A1' } }, {
+  times: 3,                                  // default 2
+  concurrent: true,                          // first call alone, the rest in parallel
+  ignore: ['timestamp', 'data.*.updatedAt'], // volatile fields
+  snapshot: () => db.query('SELECT count(*) AS n FROM orders')
+})
+```
+
+The same request is sent `times` times with one generated `Idempotency-Key`
+header (pass `idempotencyKey: 'fixed'` to choose it, `false` to omit it, or set
+the header yourself). Every response must have the status and body of the first
+call. Body comparison ignores the dotted paths in `ignore` (default
+`['timestamp', 'requestId', 'meta.timestamp']`; `*` matches any key or index);
+for an AxilJS envelope the paths also match inside `data`. With `snapshot`, the
+state observed after the first call must equal the state after the last.
+
+```text
+AssertionError: Expected POST /counter (2x, sequential) to be idempotent:
+call #2 body differs from call #1 (ignoring timestamp, requestId, meta.timestamp):
+  - data.count: 1 != 2
+```
+
+### Tenant isolation
+
+```typescript
+await expectTenantIsolated(client, {
+  seed: [
+    { tenant: 'acme',   as: { authorization: `Bearer ${acmeToken}` } },
+    { tenant: 'globex', as: { headers: { authorization: `Bearer ${globexToken}` } } }
+  ],
+  read: { path: '/invoices' },
+  tenantOf: row => row.tenantId,
+  forbidden: [{ path: `/invoices/${globexInvoiceId}`, as: { authorization: `Bearer ${acmeToken}` } }]
+})
+```
+
+`read` is performed once per tenant with that tenant's credentials (`as` is a
+header map or a partial request merged over `read`). The read must succeed with
+a 2xx status, and every returned row must belong to the calling tenant. Rows are
+found in a plain array, `{ data: [...] }`, or the paginated
+`{ data: { metadata: [...] } }` shape; pass `rows: body => ...` for anything
+else. Each `forbidden` probe must be refused with 403 or 404 (override with
+`expect: [...]`).
+
+### Runtime intent violations
+
+```typescript
+await expectNoIntentViolations(async () => {
+  await client.post('/reports').send({ range: 'month' })
+})
+```
+
+When `@axiljs/runtime` is loaded it publishes its report on
+`globalThis[Symbol.for('axiljs.runtime.report')]`. The helper runs the
+function, compares the runtime's violations before and after, and fails with a
+list of any new ones (also when the function itself threw). Without the
+runtime it simply runs the function and returns its result. This package does
+not depend on `@axiljs/runtime`.
+
 Full docs: [github.com/SyntaxilitY/AxilJS](https://github.com/SyntaxilitY/AxilJS)

@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/common",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "AxilJS shared types, interfaces, and error classes",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

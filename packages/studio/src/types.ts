@@ -95,6 +95,12 @@ export interface StudioConfig {
   openBrowser?:  boolean
   /** Project directory scanned for routes / used to resolve dbFile (default process.cwd()). */
   cwd?:          string
+  /**
+   * Path on the app that serves the runtime intent report (default
+   * '/__axil/studio/intent', see intentEndpoint()). Used when Studio and the
+   * app run in separate processes.
+   */
+  intentPath?:   string
 }
 
 export interface StudioData {

@@ -18,7 +18,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.eagerLoad = exports.UnsafeIdentifierError = exports.assertSortDirection = exports.isSafeIdentifier = exports.assertSafeIdentifier = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.classifyStatement = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
+exports.DEFAULT_LARGE_TABLE_THRESHOLD = exports.isSafeTypeChange = exports.splitStatements = exports.analyzeMigration = exports.checkMigrations = exports.MigrationSafetyError = exports.MigrationRunner = exports.ProcedureManager = exports.ViewManager = exports.TransactionScope = exports.Transaction = exports.TableBuilder = exports.Schema = exports.getOrCreateMeta = exports.getEntityMeta = exports.BaseModel = exports.BaseRepository = exports.eagerLoad = exports.UnsafeIdentifierError = exports.assertSortDirection = exports.isSafeIdentifier = exports.assertSafeIdentifier = exports.QueryBuilder = exports.ModelQueryBuilder = exports.entityRegistry = exports.getAllEntities = exports.getEntityMetadata = exports.CompositeIndex = exports.Index = exports.ManyToMany = exports.BelongsTo = exports.HasMany = exports.HasOne = exports.DeletedAt = exports.UpdatedAt = exports.CreatedAt = exports.Column = exports.PrimaryKey = exports.Entity = exports.MySQLDriver = exports.PostgresDriver = exports.SQLiteDriver = exports.classifyStatement = exports.BaseDriver = exports.createConnection = exports.ConnectionManager = void 0;
 // ── Connection ────────────────────────────────────────────────────────────
 var connection_manager_1 = require("./connection/connection-manager");
 Object.defineProperty(exports, "ConnectionManager", { enumerable: true, get: function () { return connection_manager_1.ConnectionManager; } });
@@ -92,6 +92,14 @@ Object.defineProperty(exports, "ProcedureManager", { enumerable: true, get: func
 // ── Migrations ────────────────────────────────────────────────────────────
 var migration_runner_1 = require("./migrations/migration-runner");
 Object.defineProperty(exports, "MigrationRunner", { enumerable: true, get: function () { return migration_runner_1.MigrationRunner; } });
+Object.defineProperty(exports, "MigrationSafetyError", { enumerable: true, get: function () { return migration_runner_1.MigrationSafetyError; } });
+Object.defineProperty(exports, "checkMigrations", { enumerable: true, get: function () { return migration_runner_1.checkMigrations; } });
+// ── Migration safety ──────────────────────────────────────────────────────
+var safety_1 = require("./migrations/safety");
+Object.defineProperty(exports, "analyzeMigration", { enumerable: true, get: function () { return safety_1.analyzeMigration; } });
+Object.defineProperty(exports, "splitStatements", { enumerable: true, get: function () { return safety_1.splitStatements; } });
+Object.defineProperty(exports, "isSafeTypeChange", { enumerable: true, get: function () { return safety_1.isSafeTypeChange; } });
+Object.defineProperty(exports, "DEFAULT_LARGE_TABLE_THRESHOLD", { enumerable: true, get: function () { return safety_1.DEFAULT_LARGE_TABLE_THRESHOLD; } });
 // ── Types ─────────────────────────────────────────────────────────────────
 __exportStar(require("./types"), exports);
 //# sourceMappingURL=index.js.map

@@ -8,11 +8,36 @@
  *   app.post('/embed', aiEmbed({ provider }))
  */
 
-import { RouteHandler } from '@axiljs/common';
+import { RouteHandler, axilResponse } from '@axiljs/common';
 import { createSSE } from '@axiljs/core';
 import { AIProvider, Message } from '../types';
 import { Agent } from '../agents/agent';
 import { Tool } from '../agents/tool';
+
+// ─── Error mapping ────────────────────────────────────────────────────────────
+
+/**
+ * Map an error to an HTTP status + code. 4xx axilErrors (e.g.
+ * AIBudgetExceededError -> 429, AIPolicyViolationError -> 422) keep their
+ * status and code; anything else is a 500 'AI_ERROR'.
+ */
+function errorReply(error: unknown): { status: number; code: string; retryAfterMs?: number } {
+  const e = error as { statusCode?: unknown; code?: unknown; retryAfterMs?: unknown };
+  if (typeof e?.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 500 && typeof e.code === 'string') {
+    return {
+      status: e.statusCode,
+      code: e.code,
+      retryAfterMs: typeof e.retryAfterMs === 'number' ? e.retryAfterMs : undefined
+    };
+  }
+  return { status: 500, code: 'AI_ERROR' };
+}
+
+function sendError(res: axilResponse, error: unknown): void {
+  const { status, code, retryAfterMs } = errorReply(error);
+  if (status === 429 && retryAfterMs !== undefined) res.header('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+  res.status(status).json({ error: { code, message: (error as Error).message } });
+}
 
 // ─── Chat Handler ─────────────────────────────────────────────────────────────
 
@@ -59,12 +84,7 @@ export function aiChat(options: AIChatOptions): RouteHandler {
         model:        response.model
       });
     } catch (error) {
-      res.status(500).json({
-        error: {
-          code: 'AI_ERROR',
-          message: (error as Error).message
-        }
-      });
+      sendError(res, error);
     }
   };
 }
@@ -118,7 +138,7 @@ export function aiChatStream(options: AIChatOptions): RouteHandler {
       if (sse.isOpen) {
         sse.send({
           error: {
-            code:    'AI_ERROR',
+            code:    errorReply(error).code,
             message: (error as Error).message
           }
         }, 'error');
@@ -160,9 +180,7 @@ export function aiEmbed(options: { provider: AIProvider; model?: string }): Rout
         dimensions: response.embeddings[0]?.length || 0
       });
     } catch (error) {
-      res.status(500).json({
-        error: { code: 'AI_ERROR', message: (error as Error).message }
-      });
+      sendError(res, error);
     }
   };
 }
@@ -237,9 +255,7 @@ export function aiAgent(options: {
       const result = await agent.run(body.task, body.context || []);
       res.json(result);
     } catch (error) {
-      res.status(500).json({
-        error: { code: 'AI_ERROR', message: (error as Error).message }
-      });
+      sendError(res, error);
     }
   };
 }

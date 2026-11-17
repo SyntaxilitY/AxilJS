@@ -677,6 +677,14 @@ a.stat:hover{text-decoration:none;border-color:var(--border-2);box-shadow:var(--
 .toast.success .i{color:var(--ok)}.toast.error .i{color:var(--err)}.toast.warn .i{color:var(--warn)}.toast.info .i{color:var(--accent-text)}
 .toast span{flex:1;min-width:0;word-break:break-word}
 
+/* ── Intent ──────────────────────────────────────────── */
+.intent-tbl td{vertical-align:top}
+.intent-detail{min-width:220px;max-width:520px;white-space:normal;word-break:break-word;color:var(--text-2)}
+.intent-bad{color:var(--err);font-weight:600}
+.stat.intent-warn{border-color:var(--err-border)}
+.stat.intent-warn .stat-ico{background:var(--err-soft);color:var(--err)}
+.stat.intent-warn::before{content:"";position:absolute;left:0;top:0;right:0;height:2px;background:var(--brand-grad)}
+
 /* ── Responsive ────────────────────────────────────────── */
 .mobile-back{display:none !important}
 @media (max-width:1180px){

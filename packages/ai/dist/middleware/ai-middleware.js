@@ -15,6 +15,29 @@ exports.aiEmbed = aiEmbed;
 exports.aiAgent = aiAgent;
 const core_1 = require("@axiljs/core");
 const agent_1 = require("../agents/agent");
+// ─── Error mapping ────────────────────────────────────────────────────────────
+/**
+ * Map an error to an HTTP status + code. 4xx axilErrors (e.g.
+ * AIBudgetExceededError -> 429, AIPolicyViolationError -> 422) keep their
+ * status and code; anything else is a 500 'AI_ERROR'.
+ */
+function errorReply(error) {
+    const e = error;
+    if (typeof e?.statusCode === 'number' && e.statusCode >= 400 && e.statusCode < 500 && typeof e.code === 'string') {
+        return {
+            status: e.statusCode,
+            code: e.code,
+            retryAfterMs: typeof e.retryAfterMs === 'number' ? e.retryAfterMs : undefined
+        };
+    }
+    return { status: 500, code: 'AI_ERROR' };
+}
+function sendError(res, error) {
+    const { status, code, retryAfterMs } = errorReply(error);
+    if (status === 429 && retryAfterMs !== undefined)
+        res.header('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
+    res.status(status).json({ error: { code, message: error.message } });
+}
 /**
  * Create a chat completion route handler.
  * Accepts: POST body { messages: Message[], model?: string }
@@ -48,12 +71,7 @@ function aiChat(options) {
             });
         }
         catch (error) {
-            res.status(500).json({
-                error: {
-                    code: 'AI_ERROR',
-                    message: error.message
-                }
-            });
+            sendError(res, error);
         }
     };
 }
@@ -101,7 +119,7 @@ function aiChatStream(options) {
             if (sse.isOpen) {
                 sse.send({
                     error: {
-                        code: 'AI_ERROR',
+                        code: errorReply(error).code,
                         message: error.message
                     }
                 }, 'error');
@@ -140,9 +158,7 @@ function aiEmbed(options) {
             });
         }
         catch (error) {
-            res.status(500).json({
-                error: { code: 'AI_ERROR', message: error.message }
-            });
+            sendError(res, error);
         }
     };
 }
@@ -206,9 +222,7 @@ function aiAgent(options) {
             res.json(result);
         }
         catch (error) {
-            res.status(500).json({
-                error: { code: 'AI_ERROR', message: error.message }
-            });
+            sendError(res, error);
         }
     };
 }

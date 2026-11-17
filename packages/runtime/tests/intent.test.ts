@@ -234,3 +234,21 @@ describe('enforcedDecorators', () => {
     }
   });
 });
+
+describe('runWithoutSideEffectReports / runtimeReport', () => {
+  it('suppresses reports for infrastructure writes', async () => {
+    const { runWithoutSideEffectReports, runtimeReport } = await import('../src');
+    class Repo {
+      @tReadOnly()
+      async cached() {
+        await runWithoutSideEffectReports(async () => reportSideEffect('db.write', 'INSERT INTO axil_cache'));
+        return 'ok';
+      }
+    }
+    wire(Repo);
+    await expect(new Repo().cached()).resolves.toBe('ok');
+    const report = (globalThis as any)[Symbol.for('axiljs.runtime.report')]();
+    expect(report.mode).toBe('enforce');
+    expect(report.enforced.length).toBe(runtimeReport().enforced.length);
+  });
+});

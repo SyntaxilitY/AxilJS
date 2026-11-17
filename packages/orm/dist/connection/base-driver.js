@@ -36,9 +36,30 @@ exports.BaseDriver = BaseDriver;
 // Transaction control and session settings change no data; count them as reads
 const READ_STATEMENT = /^\s*(?:\(\s*)?(?:select|show|explain|describe|desc|pragma|values|begin|start\s+transaction|commit|rollback|savepoint|release|set)\b/i;
 const WRITE_KEYWORD = /\b(?:insert|update|delete|merge|upsert|replace|create|alter|drop|truncate|grant|revoke)\b/i;
+/** Replace line (--) and block comments with spaces in one linear pass (no regex backtracking). */
+function stripComments(sql) {
+    let out = '';
+    let i = 0;
+    while (i < sql.length) {
+        if (sql[i] === '-' && sql[i + 1] === '-') {
+            const end = sql.indexOf('\n', i + 2);
+            out += ' ';
+            i = end === -1 ? sql.length : end;
+        }
+        else if (sql[i] === '/' && sql[i + 1] === '*') {
+            const end = sql.indexOf('*/', i + 2);
+            out += ' ';
+            i = end === -1 ? sql.length : end + 2;
+        }
+        else {
+            out += sql[i++];
+        }
+    }
+    return out;
+}
 /** Classify a statement as 'db.read' or 'db.write'. */
 function classifyStatement(sql) {
-    const text = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, ' ');
+    const text = stripComments(sql);
     if (READ_STATEMENT.test(text))
         return /\bfor\s+update\b/i.test(text) ? 'db.write' : 'db.read';
     // WITH ... SELECT is a read unless a CTE writes (WITH x AS (DELETE ... RETURNING *))

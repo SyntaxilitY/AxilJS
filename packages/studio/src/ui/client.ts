@@ -10,9 +10,10 @@ import { DATABASE }  from './client/database.js'
 import { SCHEMA }    from './client/schema.js'
 import { SQL }       from './client/sql.js'
 import { REALTIME }  from './client/realtime.js'
+import { INTENT }    from './client/intent.js'
 
 export function buildClientScript(): string {
-  const body = [CORE, SHELL, OVERVIEW, ENDPOINTS, DATABASE, SCHEMA, SQL, REALTIME].join('\n')
+  const body = [CORE, SHELL, OVERVIEW, ENDPOINTS, DATABASE, SCHEMA, SQL, REALTIME, INTENT].join('\n')
   // Views are registered in nav order; boot runs once the DOM is parsed
   return `(function () {\n"use strict";\n${body}\nif (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();\n})();`
 }

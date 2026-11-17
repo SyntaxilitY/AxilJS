@@ -57,6 +57,7 @@ describe('axil binary', () => {
     expect(axil('g', '--help').out).toContain('axil generate')
     expect(axil('migrate', '--help').out).toContain('DATABASE_URL')
     expect(axil('help', 'create').out).toContain('--skip-install')
+    expect(axil('verify', '--help').out).toContain('AXIL_INTENT_MODE=enforce')
     expect(existsSync(join(cwd, 'deploy'))).toBe(false)
   })
 

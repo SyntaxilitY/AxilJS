@@ -5,7 +5,7 @@
 export const SHELL = String.raw`
 var VIEWS = {};
 var VIEW_ORDER = [];
-var NAV_ORDER = ["overview", "endpoints", "database", "schema", "sql", "realtime", "export", "qr"];
+var NAV_ORDER = ["overview", "endpoints", "database", "schema", "sql", "realtime", "intent", "export", "qr"];
 function defineView(id, def) {
   VIEWS[id] = def; VIEW_ORDER.push(id);
   VIEW_ORDER.sort(function (a, b) { return NAV_ORDER.indexOf(a) - NAV_ORDER.indexOf(b) });
@@ -287,6 +287,7 @@ function showShortcuts() {
     row("Overview", ["g", "o"]), row("Endpoints", ["g", "e"]),
     row("Database", ["g", "d"]), row("Schema diagram", ["g", "s"]),
     row("SQL console", ["g", "q"]), row("Realtime", ["g", "r"]),
+    row("Intent", ["g", "i"]),
     row("Export", ["g", "x"]), row("QR access", ["g", "c"]),
     h("h4", { text: "Editors" }),
     row("Send request / run query", [mod, "Enter"]), row("Send WebSocket message", [mod, "Enter"]),

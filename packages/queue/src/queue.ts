@@ -23,8 +23,11 @@
  */
 
 import { EventEmitter } from 'events';
+import { randomUUID } from 'node:crypto';
+import { hostname } from 'node:os';
 import { Job, JobOptions, JobHandler, JobStatus, createJob } from './job';
 import { QueueStore, InMemoryQueueStore } from './store';
+import { QueueBackend } from './backend';
 import { QueueLoggerOption, LogSink, createLogSink } from './logger';
 
 // ─── Queue Options ────────────────────────────────────────────────────────────
@@ -45,6 +48,21 @@ export interface QueueOptions {
   // Job storage (default: InMemoryQueueStore)
   store?: QueueStore;
 
+  // Asynchronous, claim-based storage shared by several processes/servers
+  // (e.g. SqlQueueBackend). Mutually exclusive with `store`. With a backend
+  // the sync query methods (getJobs, getJob, getStats, purge, cancel) throw;
+  // use their *Async variants.
+  backend?: QueueBackend;
+
+  // Backend mode: this worker's lock owner ID
+  // (default: `${hostname}:${pid}:${random}`)
+  workerId?: string;
+
+  // Backend mode: an active job whose lock has not been renewed for this long
+  // is considered abandoned (its worker crashed) and is returned to pending.
+  // Running jobs renew their lock on every poll. (default: 30000)
+  visibilityTimeoutMs?: number;
+
   // Where start/stop and listener-error messages go.
   // Default: console (unchanged). false: silent. { info, warn }: your logger
   // (plain text, no ANSI; errors are reported via warn).
@@ -56,6 +74,15 @@ export interface QueueOptions {
 type Interrupt =
   | { kind: 'timeout'; error: Error }
   | { kind: 'cancelled' };
+
+type JobStats = {
+  pending: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+  cancelled: number;
+};
 
 type AttemptOutcome =
   | { kind: 'ok'; result: unknown }
@@ -76,8 +103,18 @@ export class Queue extends EventEmitter {
   private activeRuns = new Map<string, ActiveRun>();
   private pollTimer?: ReturnType<typeof setInterval>;
   private running = false;
-  private options: Required<Omit<QueueOptions, 'store' | 'logger'>>;
+  private options: Required<Omit<QueueOptions, 'store' | 'logger' | 'backend' | 'workerId' | 'visibilityTimeoutMs'>>;
   private log: LogSink;
+
+  // Backend mode only
+  private backend?: QueueBackend;
+  readonly workerId: string;
+  private readonly visibilityTimeoutMs: number;
+  private backendTimer?: ReturnType<typeof setTimeout>;
+  private tickInFlight?: Promise<void>;
+  private tickAgain = false;
+  private lastRecoveryAt = 0;
+  private backendFailing = false;
 
   constructor(
     public readonly name: string,
@@ -90,7 +127,13 @@ export class Queue extends EventEmitter {
       pollIntervalMs: options.pollIntervalMs ?? 500,
       backoff: options.backoff ?? { type: 'exponential', delay: 1000 }
     };
+    if (options.store && options.backend) {
+      throw new Error(`Queue '${name}': pass either 'store' or 'backend', not both`);
+    }
     this.store = options.store ?? new InMemoryQueueStore();
+    this.backend = options.backend;
+    this.workerId = options.workerId ?? `${hostname()}:${process.pid}:${randomUUID().slice(0, 8)}`;
+    this.visibilityTimeoutMs = Math.max(1, options.visibilityTimeoutMs ?? 30000);
     this.log = createLogSink(options.logger, '[AxilJS Queue]');
   }
 
@@ -121,6 +164,13 @@ export class Queue extends EventEmitter {
   ): Promise<Job<T>> {
     const job = createJob<T>(this.name, jobName, data, options);
 
+    if (this.backend) {
+      await this.backend.enqueue(job as Job);
+      this.safeEmit('added', job);
+      if (job.status === 'pending') this.wake();
+      return job;
+    }
+
     this.store.add(job as Job);
 
     this.safeEmit('added', job);
@@ -147,6 +197,7 @@ export class Queue extends EventEmitter {
    * Emits 'cancelled'. Returns false if the job doesn't exist or already finished.
    */
   cancel(jobId: string): boolean {
+    this.assertSync('cancel');
     const job = this.store.get(jobId);
     if (!job) return false;
 
@@ -183,6 +234,12 @@ export class Queue extends EventEmitter {
     if (this.running) return;
     this.running = true;
 
+    if (this.backend) {
+      this.scheduleTick(0);
+      this.log('info', `'${this.name}' started (concurrency: ${this.options.concurrency}, worker: ${this.workerId})`);
+      return;
+    }
+
     this.pollTimer = setInterval(() => {
       this.processNext();
     }, this.options.pollIntervalMs);
@@ -201,6 +258,13 @@ export class Queue extends EventEmitter {
       clearInterval(this.pollTimer);
     }
 
+    if (this.backend) {
+      if (this.backendTimer) clearTimeout(this.backendTimer);
+      this.backendTimer = undefined;
+      // Jobs claimed by a tick that is still in flight run to completion too
+      if (this.tickInFlight) await this.tickInFlight;
+    }
+
     // Wait for active jobs to finish
     while (this.activeCount > 0) {
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -215,6 +279,7 @@ export class Queue extends EventEmitter {
    * Get jobs by status.
    */
   getJobs(status?: JobStatus): Job[] {
+    this.assertSync('getJobs');
     const jobs = this.store.list();
     if (!status) return jobs;
     return jobs.filter(j => j.status === status);
@@ -224,20 +289,15 @@ export class Queue extends EventEmitter {
    * Get a specific job by ID.
    */
   getJob(id: string): Job | undefined {
+    this.assertSync('getJob');
     return this.store.get(id);
   }
 
   /**
    * Get queue statistics.
    */
-  getStats(): {
-    pending: number;
-    active: number;
-    completed: number;
-    failed: number;
-    delayed: number;
-    cancelled: number;
-  } {
+  getStats(): JobStats {
+    this.assertSync('getStats');
     const jobs = this.store.list();
     return {
       pending:   jobs.filter(j => j.status === 'pending').length,
@@ -253,6 +313,7 @@ export class Queue extends EventEmitter {
    * Remove completed, failed and cancelled jobs (cleanup).
    */
   purge(): void {
+    this.assertSync('purge');
     for (const job of this.store.list()) {
       if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
         // Keep cancelled jobs whose handler is still winding down tracked until it settles
@@ -260,6 +321,213 @@ export class Queue extends EventEmitter {
         this.store.remove(job.id);
       }
     }
+  }
+
+  // ─── Async API (works with a store or a backend) ──────────────────────────────
+
+  /**
+   * Get jobs by status. Required with a `backend`; equals getJobs() otherwise.
+   */
+  async getJobsAsync(status?: JobStatus): Promise<Job[]> {
+    if (!this.backend) return this.getJobs(status);
+    return this.backend.list({ queue: this.name, status });
+  }
+
+  /**
+   * Get a job by ID. Required with a `backend`; equals getJob() otherwise.
+   */
+  async getJobAsync(id: string): Promise<Job | undefined> {
+    if (!this.backend) return this.getJob(id);
+    const job = await this.backend.get(id);
+    return job && job.queue === this.name ? job : undefined;
+  }
+
+  /**
+   * Queue statistics. Required with a `backend`; equals getStats() otherwise.
+   */
+  async getStatsAsync(): Promise<JobStats> {
+    if (!this.backend) return this.getStats();
+    return this.backend.counts(this.name);
+  }
+
+  /**
+   * Remove completed, failed and cancelled jobs. Required with a `backend`;
+   * equals purge() otherwise.
+   */
+  async purgeAsync(): Promise<void> {
+    if (!this.backend) return this.purge();
+    await this.backend.purge(this.name, [...this.activeRuns.keys()]);
+  }
+
+  /**
+   * Cancel a job (see cancel()). Required with a `backend`; equals cancel()
+   * otherwise. With a backend, a job that is active on another server is
+   * marked cancelled at once; that server aborts it on its next poll.
+   */
+  async cancelAsync(jobId: string): Promise<boolean> {
+    if (!this.backend) return this.cancel(jobId);
+    const job = await this.backend.cancel(jobId, new Date());
+    if (!job) return false;
+    const run = this.activeRuns.get(job.id);
+    if (run) {
+      run.controller.abort(new Error(`Job '${job.name}' was cancelled`));
+      run.interrupt({ kind: 'cancelled' });
+    }
+    this.safeEmit('cancelled', job);
+    return true;
+  }
+
+  private assertSync(method: string): void {
+    if (this.backend) {
+      throw new Error(
+        `Queue '${this.name}' uses an async backend; use ${method}Async() instead of ${method}()`
+      );
+    }
+  }
+
+  // ─── Backend processing ───────────────────────────────────────────────────────
+
+  // Run a tick as soon as possible (a job was added or a slot was freed)
+  private wake(): void {
+    if (this.running && this.backend) this.scheduleTick(0);
+  }
+
+  private scheduleTick(delay: number): void {
+    if (!this.running) return;
+    if (this.tickInFlight) {
+      this.tickAgain = true;
+      return;
+    }
+    if (this.backendTimer) clearTimeout(this.backendTimer);
+    this.backendTimer = setTimeout(() => {
+      this.backendTimer = undefined;
+      this.tickInFlight = this.backendTick().finally(() => {
+        this.tickInFlight = undefined;
+        const again = this.tickAgain;
+        this.tickAgain = false;
+        this.scheduleTick(again ? 0 : this.options.pollIntervalMs);
+      });
+    }, delay);
+  }
+
+  /**
+   * One poll: renew the locks of running jobs (aborting any this worker
+   * lost), recover abandoned jobs, then claim jobs for the free slots.
+   * Never rejects; backend errors are reported through the 'error' event.
+   */
+  private async backendTick(): Promise<void> {
+    const backend = this.backend!;
+    try {
+      const now = new Date();
+
+      const running = [...this.activeRuns.keys()];
+      if (running.length > 0) {
+        const owned = new Set(await backend.heartbeat(this.workerId, running, now));
+        for (const id of running) {
+          const run = this.activeRuns.get(id);
+          // Cancelled elsewhere or recovered as stale: stop and discard it
+          if (run && !owned.has(id)) {
+            run.controller.abort(new Error(`Job '${id}' is no longer owned by this worker`));
+            run.interrupt({ kind: 'cancelled' });
+          }
+        }
+      }
+
+      if (now.getTime() - this.lastRecoveryAt >= this.visibilityTimeoutMs / 2) {
+        this.lastRecoveryAt = now.getTime();
+        await backend.recoverStale(this.visibilityTimeoutMs, now, this.name);
+      }
+
+      const free = this.options.concurrency - this.activeCount;
+      if (this.running && free > 0) {
+        const jobs = await backend.claim(this.name, this.workerId, free, new Date());
+        for (const job of jobs) this.startClaimed(job);
+      }
+
+      if (this.backendFailing) {
+        this.backendFailing = false;
+        this.log('info', `'${this.name}' backend recovered`);
+      }
+    } catch (err) {
+      this.reportBackendError(err);
+    }
+  }
+
+  private startClaimed(job: Job): void {
+    const handler = this.handlers.get(job.name);
+    if (!handler) {
+      job.status = 'failed';
+      job.attempts = Math.max(0, job.attempts - 1); // not an attempt
+      job.finishedAt = new Date();
+      job.error = `No handler registered for job '${job.name}'`;
+      this.backend!.fail(job, this.workerId).then(
+        owned => { if (owned) this.safeEmit('failed', job, new Error(job.error)); },
+        err => this.reportBackendError(err)
+      );
+      return;
+    }
+
+    this.activeCount++;
+    this.runBackendJob(job, handler).finally(() => {
+      this.activeCount--;
+      this.wake();
+    });
+  }
+
+  /**
+   * Backend counterpart of runJob(): the same outcome rules, but every state
+   * change is a fenced write. If this worker no longer owns the job (it was
+   * cancelled or recovered elsewhere) the outcome is discarded silently.
+   */
+  private async runBackendJob(job: Job, handler: JobHandler): Promise<void> {
+    const backend = this.backend!;
+    const outcome = await this.runAttempt(job, handler);
+
+    if (outcome.kind === 'cancelled') return;
+
+    try {
+      if (outcome.kind === 'ok') {
+        job.status = 'completed';
+        job.finishedAt = new Date();
+        job.result = outcome.result;
+        if (await backend.complete(job, this.workerId)) {
+          this.safeEmit('completed', job, outcome.result);
+        }
+        return;
+      }
+
+      const err = outcome.error instanceof Error ? outcome.error : new Error(String(outcome.error));
+
+      if (job.attempts < job.maxAttempts) {
+        job.status = 'delayed';
+        job.runAt = new Date(Date.now() + this.calculateBackoff(job.attempts));
+        job.error = err.message;
+        if (await backend.retry(job, this.workerId)) {
+          this.safeEmit('retry', job, err);
+        }
+      } else {
+        job.status = 'failed';
+        job.finishedAt = new Date();
+        job.error = err.message;
+        job.stack = err.stack;
+        if (await backend.fail(job, this.workerId)) {
+          this.safeEmit('failed', job, err);
+        }
+      }
+    } catch (err) {
+      // The job stays active in the backend and is recovered once its lock expires
+      this.reportBackendError(err);
+    }
+  }
+
+  private reportBackendError(err: unknown): void {
+    const error = err instanceof Error ? err : new Error(String(err));
+    // Log the first error of a failure streak, not one per poll
+    if (!this.backendFailing) {
+      this.backendFailing = true;
+      this.log('warn', `'${this.name}' backend error: ${error.message}`, '\x1b[33m');
+    }
+    this.safeEmit('error', error);
   }
 
   // ─── Processing ───────────────────────────────────────────────────────────────

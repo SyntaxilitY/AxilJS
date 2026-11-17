@@ -170,18 +170,47 @@ function hit(key: string, limit: number, periodMs: number): number {
   return w.count > limit ? w.resetAt - now : 0;
 }
 
+/**
+ * Counter backend for tRateLimit and tThrottle. Same shape as
+ * @axiljs/security's RateLimitStore, so its ClusterStore and the SQL store
+ * from @axiljs/stores can be used directly. Default: in-process counters.
+ */
+export interface RateLimitCounterStore {
+  increment(key: string, windowMs: number): { count: number; resetAt: number } | Promise<{ count: number; resetAt: number }>;
+}
+
+let counterStore: RateLimitCounterStore | undefined;
+
+export function setRateLimitStore(store: RateLimitCounterStore | undefined): void {
+  counterStore = store;
+}
+
+/** Returns ms until the window resets when over the limit, else 0. */
+function count(key: string, limit: number, periodMs: number): number | Promise<number> {
+  if (!counterStore) return hit(key, limit, periodMs);
+  return Promise.resolve(counterStore.increment(key, periodMs)).then(r =>
+    r.count > limit ? Math.max(1, r.resetAt - Date.now()) : 0
+  );
+}
+
+function limited(target: string, key: string, retryAfter: number, proceed: () => Promise<unknown>): Promise<unknown> {
+  if (retryAfter > 0) {
+    emitSafe('runtime.rate_limited', { target, key, retryAfterMs: retryAfter });
+    return Promise.reject(new RateLimitExceededError(target, retryAfter));
+  }
+  return proceed();
+}
+
 export const rateLimitInterceptor: Interceptor<{ limit: number; window: string; key?: KeySpec }> = {
   decorator: 'tRateLimit',
   order: 110,
   intercept(inv, options, proceed) {
     const target = label(inv);
     const who = options.key === undefined ? 'global' : resolveKey(options.key, inv) ?? 'anonymous';
-    const retryAfter = hit(`rl:${target}:${who}`, options.limit, parseDuration(options.window));
-    if (retryAfter > 0) {
-      emitSafe('runtime.rate_limited', { target, key: who, retryAfterMs: retryAfter });
-      return Promise.reject(new RateLimitExceededError(target, retryAfter));
-    }
-    return proceed();
+    const result = count(`rl:${target}:${who}`, options.limit, parseDuration(options.window));
+    return typeof result === 'number'
+      ? limited(target, who, result, proceed)
+      : result.then(r => limited(target, who, r, proceed));
   }
 };
 
@@ -190,9 +219,10 @@ export const throttleInterceptor: Interceptor<{ calls: number; periodMs: number 
   order: 115,
   intercept(inv, { calls, periodMs }, proceed) {
     const target = label(inv);
-    const retryAfter = hit(`th:${target}`, calls, periodMs);
-    if (retryAfter > 0) return Promise.reject(new RateLimitExceededError(target, retryAfter));
-    return proceed();
+    const result = count(`th:${target}`, calls, periodMs);
+    return typeof result === 'number'
+      ? limited(target, 'global', result, proceed)
+      : result.then(r => limited(target, 'global', r, proceed));
   }
 };
 
@@ -675,4 +705,5 @@ export function resetResilienceState(): void {
   mutexes.clear();
   lockProvider = new LocalLockProvider();
   cacheStore = new MemoryCacheStore();
+  counterStore = undefined;
 }

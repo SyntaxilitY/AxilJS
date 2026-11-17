@@ -10,6 +10,7 @@
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests
+ *   axil verify                  Check decorator enforcement + run tests in enforce mode
  *   axil deploy                  Generate Docker + K8s files
  *   axil install                 Install packages
  *   axil doctor                  Diagnose project

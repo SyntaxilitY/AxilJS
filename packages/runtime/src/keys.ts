@@ -66,7 +66,8 @@ export function resolveKey(spec: KeySpec | undefined, inv: Invocation): string |
 
   if (spec.includes('{')) {
     let missing = false;
-    const out = spec.replace(/\{([^}]+)\}/g, (_, p: string) => {
+    // Placeholders cannot contain braces, which keeps matching linear
+    const out = spec.replace(/\{([^{}]+)\}/g, (_, p: string) => {
       const v = stringify(path(inv.args, p.trim()));
       if (v === undefined) missing = true;
       return v ?? '';
@@ -85,7 +86,8 @@ export function label(inv: Invocation): string {
 /** Parse '10s', '5m', '1h', '1d', '250ms' or a number of milliseconds. */
 export function parseDuration(value: string | number): number {
   if (typeof value === 'number') return value;
-  const match = /^\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?\s*$/.exec(value);
+  // Trim first so the pattern has no adjacent optional whitespace to backtrack over
+  const match = /^(\d{1,15}(?:\.\d{1,15})?) ?(ms|s|m|h|d)?$/.exec(value.trim());
   if (!match) throw new Error(`Invalid duration '${value}' (expected e.g. '500ms', '10s', '1m', '1h')`);
   const n = Number(match[1]);
   const unit = match[2] ?? 'ms';

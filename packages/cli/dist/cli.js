@@ -11,6 +11,7 @@
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests
+ *   axil verify                  Check decorator enforcement + run tests in enforce mode
  *   axil deploy                  Generate Docker + K8s files
  *   axil install                 Install packages
  *   axil doctor                  Diagnose project
@@ -69,6 +70,7 @@ const test_1 = require("./commands/test");
 const deploy_1 = require("./commands/deploy");
 const capacity_1 = require("./commands/capacity");
 const decorator_1 = require("./commands/decorator");
+const verify_1 = require("./commands/verify");
 const ui = __importStar(require("./ui"));
 const prompts_1 = require("./prompts");
 const templates_1 = require("./templates");
@@ -254,6 +256,18 @@ async function runCommand(name, parsed) {
             await (0, test_1.runTests)(pos[0]);
             break;
         }
+        case 'verify': {
+            if (pos.length > 1) {
+                fail(`Unexpected argument '${pos[1]}'.`, 'axil verify [pattern] [--static] [--json] [--strict]');
+            }
+            await (0, verify_1.verify)({
+                pattern: pos[0],
+                static: flagBool(parsed, 'static'),
+                json: flagBool(parsed, 'json'),
+                strict: flagBool(parsed, 'strict')
+            });
+            break;
+        }
         case 'deploy': {
             await (0, deploy_1.deploy)({
                 port: flagString(parsed, 'port'),
@@ -310,7 +324,7 @@ const HELP_GROUPS = [
     { title: 'Develop', commands: [['run', 'run'], ['test', 'test [pattern]'], ['doctor', 'doctor']] },
     { title: 'Database', commands: [['migrate', 'migrate [up|down|status]']] },
     { title: 'Ship', commands: [['build', 'build'], ['capacity', 'capacity'], ['deploy', 'deploy']] },
-    { title: 'Inspect', commands: [['decorator', 'decorator <sub>']] }
+    { title: 'Inspect', commands: [['decorator', 'decorator <sub>'], ['verify', 'verify [pattern]']] }
 ];
 function printHelp() {
     ui.banner(CLI_VERSION, CLI_TAGLINE);

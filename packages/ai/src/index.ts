@@ -73,3 +73,37 @@ export type {
 
 export { aiChat, aiChatStream, aiEmbed, aiAgent } from './middleware/ai-middleware';
 export type { AIChatOptions } from './middleware/ai-middleware';
+
+// ─── Governance ───────────────────────────────────────────────────────────────
+
+export { withBudget, InMemoryBudgetStore, estimateTokens, windowFor } from './governance/budget';
+export type {
+  BudgetOptions,
+  BudgetLimit,
+  BudgetAmounts,
+  BudgetStore,
+  BudgetWindowRef,
+  BudgetUsage,
+  BudgetedProvider,
+  ModelPricing
+} from './governance/budget';
+
+export { withRedaction, redactText, luhnValid, ibanValid } from './governance/redaction';
+export type {
+  RedactionOptions,
+  RedactionDetector,
+  RedactionMode,
+  RedactionEvent,
+  RedactionFinding
+} from './governance/redaction';
+
+export { recordingProvider, replayProvider, requestKey } from './governance/recording';
+export type { RecordingOptions, ReplayOptions, RecordingFile, RecordedEntry, RecordedKind } from './governance/recording';
+
+export { AIBudgetExceededError, AIPolicyViolationError, AIReplayMissError } from './governance/errors';
+export type {
+  BudgetWindow,
+  BudgetMetric,
+  AIBudgetExceededDetails,
+  AIPolicyViolationDetails
+} from './governance/errors';

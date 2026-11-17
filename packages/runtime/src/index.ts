@@ -35,6 +35,7 @@ export {
   clearIntentViolations,
   violate,
   reportSideEffect,
+  runWithoutSideEffectReports,
   currentIntentScope,
   installSideEffectProbes,
   setIdempotencyStore,
@@ -60,6 +61,7 @@ export {
   setCacheStore,
   getCacheStore,
   setLockProvider,
+  setRateLimitStore,
   getCircuitStates,
   resetResilienceState,
   RateLimitExceededError,
@@ -82,12 +84,13 @@ export {
   lockInterceptor,
   hedgeInterceptor
 } from './resilience';
-export type { CacheStore, LockProvider } from './resilience';
+export type { CacheStore, LockProvider, RateLimitCounterStore } from './resilience';
 
 export { resolveKey, parseDuration } from './keys';
 export type { KeySpec } from './keys';
 
-export { enforcedDecorators } from './report';
+export { enforcedDecorators, runtimeReport } from './report';
+export type { RuntimeReport } from './report';
 
 import { registerBuiltins } from './builtins';
 registerBuiltins();
