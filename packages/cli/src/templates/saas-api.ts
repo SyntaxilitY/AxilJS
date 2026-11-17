@@ -6,9 +6,13 @@
  * plan-gated feature flags, per-plan quotas, a per-tenant rate limit and an
  * audit trail of sensitive actions. Persistence is in memory to keep the
  * focus on the tenancy model; the stores are small classes to swap out.
+ * Runtime state (@axiljs/runtime's rate-limit, idempotency, cache and lock
+ * stores) lives in DATABASE_URL via @axiljs/stores, so several instances
+ * share it; Studio's intent endpoint is loaded in development only.
  */
 
 import type { ProjectTemplate, TemplateContext } from './types'
+import { SHARED_STATE_DEFAULT_URL, sharedStateDependencies, sharedStateFiles } from './shared-state'
 
 export const saasApiTemplate: ProjectTemplate = {
   id:       'saas-api',
@@ -22,7 +26,7 @@ export const saasApiTemplate: ProjectTemplate = {
     'Audit trail of sensitive actions on the event bus',
     'Tests prove isolation, 403 flags and 429 quotas'
   ],
-  packages: ['@axiljs/cloud', '@axiljs/auth', '@axiljs/core', '@axiljs/events', '@axiljs/validation', '@axiljs/config', '@axiljs/testing'],
+  packages: ['@axiljs/cloud', '@axiljs/auth', '@axiljs/core', '@axiljs/events', '@axiljs/validation', '@axiljs/stores', '@axiljs/runtime', '@axiljs/config', '@axiljs/testing'],
   port:     3005,
 
   dependencies: ctx => ({
@@ -31,10 +35,13 @@ export const saasApiTemplate: ProjectTemplate = {
     '@axiljs/config':     ctx.axilRange,
     '@axiljs/core':       ctx.axilRange,
     '@axiljs/events':     ctx.axilRange,
-    '@axiljs/validation': ctx.axilRange
+    '@axiljs/validation': ctx.axilRange,
+    ...sharedStateDependencies(ctx)
   }),
 
   files: (ctx: TemplateContext) => ({
+    ...sharedStateFiles(),
+
     'README.md': `# ${ctx.name}
 
 A multi-tenant SaaS backend built on [AxilJS](https://github.com/SyntaxilitY/AxilJS), created with
@@ -52,6 +59,8 @@ that decides its **features** and **quotas**, users with **roles**, and an **aud
 - **@axiljs/auth**: scrypt passwords, JWTs carrying \`tenantId\`, \`role\` and \`permissions\`; \`requirePermission\` / \`requireRole\`
 - **@axiljs/events**: the audit trail is a bus subscriber; add your own to persist events
 - **@axiljs/validation**, **@axiljs/config**, **@axiljs/core**: validated bodies, typed \`.env\`, routers and one JSON error shape
+- **@axiljs/stores** + **@axiljs/runtime**: the runtime's rate-limit, idempotency, cache and lock state lives in
+  \`DATABASE_URL\` (SQLite by default), so several instances share it (see *Running several instances*)
 - **@axiljs/testing**: tests that prove isolation, plan gating, quotas, rate limits and auditing
 
 Storage is in memory (\`src/data/*\`) so the tenancy model stays in focus; every store method takes
@@ -221,15 +230,40 @@ Invoke-RestMethod http://localhost:3005/api/projects -Method Post -Headers $head
 | \`TENANT_HEADER\`         | \`x-tenant-id\` | Header read by the \`header\` strategy                    |
 | \`RATE_LIMIT_PER_MINUTE\` | \`120\`         | Requests per minute per tenant across \`/api\`            |
 | \`AUDIT_LOG_TO_CONSOLE\`  | \`true\`        | Also print audit events to stdout                       |
+| \`DATABASE_URL\`          | \`${SHARED_STATE_DEFAULT_URL}\` | Shared runtime state: SQLite file, \`postgres://\` or \`mysql://\` |
 
 On startup \`@axiljs/cloud\` may print a \`SecretsManager: no encryption key provided\` warning. It comes
 from the package's built-in \`secrets\` instance, which this app does not use.
+
+## Running several instances
+
+Start more than one copy of the app (several containers behind a load balancer) and in-memory
+state splits: each instance counts, caches and locks on its own. On startup \`src/main.ts\` opens
+\`DATABASE_URL\` and moves @axiljs/runtime's state there (\`src/shared-state.ts\`):
+
+\`\`\`ts
+const db     = await createConnection(connectionConfig(config.DATABASE_URL))
+const stores = createSqlStores(fromConnection(db))   // @axiljs/stores
+await stores.ensureSchema()                          // axil_rate_limits, axil_idempotency, axil_cache, axil_locks, ...
+useStores(stores)                                    // tRateLimit, tIdempotent, tCache*, tLock share these
+\`\`\`
+
+- **One machine**: the default SQLite file is shared by several processes on one host.
+- **Several servers**: use PostgreSQL: \`npm install pg\` and \`DATABASE_URL=postgres://user:pass@db:5432/app\`.
+- Still per process in this template: the stores in \`src/data/*\`, \`QuotaManager\` and
+  \`tenantRateLimiter()\` (its counters are internal). Move the data to a database; for a shared
+  per-tenant limit use \`rateLimit({ store: stores.rateLimit, keyGenerator: req => 'tenant:' + req.locals?.tenant?.id })\`
+  from \`@axiljs/security\`.
+- \`src/dev/studio-intent.ts\` serves the runtime report to Studio's Intent view under \`axil run\`. It is
+  required only when \`NODE_ENV\` is not \`production\`, so a production install without dev dependencies works.
 
 ## Project structure
 
 \`\`\`
 src/
-  main.ts                      entry point: config, services, listen, graceful shutdown
+  main.ts                      entry point: config, shared state, services, listen, graceful shutdown
+  shared-state.ts              DATABASE_URL -> @axiljs/stores tables, installed with useStores()
+  dev/studio-intent.ts         Studio intent endpoint, development only
   app.ts                       createApp(config, services): tenant pipeline, routers, error handler
   config.ts                    typed config (defineConfig)
   services.ts                  createServices(): stores, JWT, quotas, flags, audit trail
@@ -255,7 +289,8 @@ src/
 - Persist audit events: add an \`audit.log\` subscriber that writes to a table or append-only storage
 - Drive \`PUT /api/tenant/plan\` from your billing provider's webhook instead of an admin call
 - Different rate limits per plan: pass \`tenantRules\` to \`tenantRateLimiter()\` in \`src/app.ts\`
-- Move quotas and rate-limit counters to a shared store before running several instances
+- Move quotas and the per-tenant rate limit to shared storage before running several instances
+  (see *Running several instances*)
 `,
 
     '.env.example': `# Server
@@ -277,6 +312,10 @@ RATE_LIMIT_PER_MINUTE=120
 
 # Print audit events to stdout
 AUDIT_LOG_TO_CONSOLE=true
+
+# Shared runtime state (rate limits, idempotency, cache, locks) for several instances.
+# A SQLite file for one machine; postgres://user:pass@host:5432/db for several servers (npm install pg).
+DATABASE_URL=${SHARED_STATE_DEFAULT_URL}
 `,
 
     'src/app.ts': `/**
@@ -297,6 +336,7 @@ AUDIT_LOG_TO_CONSOLE=true
 import { Application, Router } from '@axiljs/core'
 import { multiTenancy, tenantRateLimiter } from './lib/cloud.js'
 import type { Config } from './config.js'
+import { studioIntentEndpoint } from './dev/studio-intent.js'
 import { errorHandler } from './middleware/errors.js'
 import { apiCallQuota } from './middleware/tenancy.js'
 import { authRoutes } from './routes/auth.js'
@@ -314,6 +354,10 @@ export function createApp(config: Config, services: Services = createServices(co
     env:     config.NODE_ENV,
     logging: config.NODE_ENV !== 'test'
   })
+
+  // Development only: Studio's Intent view reads the runtime report here
+  const intent = studioIntentEndpoint()
+  if (intent) app.use(intent)
 
   // One instance of each, shared by every tenant-scoped router
   const resolveTenant = multiTenancy({
@@ -490,7 +534,9 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     // Requests per minute per tenant, across all /api routes
     RATE_LIMIT_PER_MINUTE: { type: 'number', default: 120, min: 1 },
     // Print audit events to stdout (they are always kept in the in-memory trail)
-    AUDIT_LOG_TO_CONSOLE:  { type: 'boolean', default: true }
+    AUDIT_LOG_TO_CONSOLE:  { type: 'boolean', default: true },
+    // Shared runtime state: SQLite file, postgres:// or mysql:// (see src/shared-state.ts)
+    DATABASE_URL:          { type: 'string', default: '${SHARED_STATE_DEFAULT_URL}' }
   }, source)
 }
 
@@ -676,19 +722,30 @@ export type QuotaManager  = InstanceType<typeof QuotaManager>
 
     'src/main.ts': `/**
  * ${ctx.name}
- * Entry point: load .env, build the services and the app, listen.
+ * Entry point: load .env, open the shared state, build the services and
+ * the app, listen.
  */
 
 import { loadEnv } from '@axiljs/config'
+import { wireAll } from '@axiljs/runtime'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { createServices } from './services.js'
+import { openSharedState } from './shared-state.js'
 
 loadEnv()
 
-const config   = loadConfig()
+const config = loadConfig()
+
+// Rate-limit, idempotency, cache and lock state in DATABASE_URL, shared by
+// every instance: createSqlStores(fromConnection(db)), then useStores()
+const state = await openSharedState(config.DATABASE_URL)
+
 const services = createServices(config)
 const app      = createApp(config, services)
+
+// Every module is imported by now: execute the t* decorators on their classes
+wireAll()
 
 await app.listen()
 
@@ -698,6 +755,7 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, async () => {
     await app.close()
     services.close()
+    await state.close()
     process.exit(0)
   })
 }
@@ -1719,6 +1777,7 @@ export function useTestApp(env: Record<string, string> = {}): TestApp {
 
   nextSteps: () => [
     ['Edit .env', 'Set JWT_SECRET to 32+ random characters'],
-    ['npm test', 'Isolation, plan, quota, rate-limit and audit tests']
+    ['npm test', 'Isolation, plan, quota, rate-limit and audit tests'],
+    ['Set DATABASE_URL in .env', 'Shared runtime state; postgres:// for several servers']
   ]
 }

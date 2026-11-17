@@ -490,6 +490,40 @@ kubectl apply -f deploy/deployment.yaml
 
 The generated Kubernetes manifest includes a Deployment, a Service and a HorizontalPodAutoscaler. Replica counts and resources can be sized from `axil.scaling.json`; see [`@axiljs/scale`](packages/scale).
 
+## Running several instances
+
+By default, idempotency records, cache entries, locks, rate-limit counters, AI budgets and queued jobs live in the memory of one process. That is correct for a single instance and wrong behind a load balancer: a retried payment reaches a server that has not seen its idempotency key, a lock is held twice, a limit of 100 becomes 100 per instance.
+
+AxilJS keeps this state in the database you already have, so no Redis is required:
+
+```typescript
+import { createConnection } from '@axiljs/orm'
+import { createSqlStores, fromConnection } from '@axiljs/stores'
+import { useStores } from '@axiljs/runtime'
+import { Queue, SqlQueueBackend } from '@axiljs/queue'
+import { withBudget } from '@axiljs/ai'
+
+const db = await createConnection({ driver: 'postgres', url: process.env.DATABASE_URL })
+const sql = fromConnection(db)
+
+const stores = createSqlStores(sql)
+await stores.ensureSchema()
+useStores(stores)                                     // tIdempotent, tCache, tLock, tRateLimit
+
+const jobs = new Queue('jobs', { backend: new SqlQueueBackend({ executor: sql }) })   // each job runs on one server
+const ai = withBudget(provider, { limits: { window: 'month', costUsd: 50 }, store: stores.budget })
+```
+
+| State | Package | Shared implementation |
+|---|---|---|
+| Idempotency, cache, locks, rate limits | `@axiljs/runtime` | `createSqlStores` + `useStores` (`@axiljs/stores`) |
+| HTTP rate limiting | `@axiljs/security` | `rateLimit({ store: stores.rateLimit })`, or `ClusterStore` within one host |
+| Jobs | `@axiljs/queue` | `SqlQueueBackend` (`FOR UPDATE SKIP LOCKED`) |
+| AI budgets | `@axiljs/ai` | `withBudget({ store: stores.budget })` |
+| Events between workers | `@axiljs/events` | `ClusterTransport` within one host |
+
+PostgreSQL is recommended for multi-server deployments. MySQL 8 is supported; SQLite suits several processes on one machine. The `saas-api` and `high-scale-api` templates are set up this way.
+
 ## Building from source
 
 ```bash

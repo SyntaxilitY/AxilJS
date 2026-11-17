@@ -73,6 +73,82 @@ describe('template registry', () => {
   }
 })
 
+describe('shared state in multi-instance templates', () => {
+  for (const id of ['saas-api', 'high-scale-api']) {
+    describe(id, () => {
+      const t = findTemplate(id)!
+      const files = t.files(ctx)
+      const main = files['src/main.ts']
+
+      it('depends on @axiljs/stores, runtime, orm and a SQLite driver', () => {
+        const deps = t.dependencies(ctx)
+        for (const pkg of ['@axiljs/stores', '@axiljs/runtime', '@axiljs/orm']) expect(deps[pkg], pkg).toBe('^0.3.0')
+        expect(deps['better-sqlite3']).toBeDefined()
+        expect(t.packages).toContain('@axiljs/stores')
+      })
+
+      it('creates the stores from the connection and installs them in the runtime', () => {
+        const state = files['src/shared-state.ts']
+        expect(state).toContain("import { createSqlStores, fromConnection } from '@axiljs/stores'")
+        expect(state).toContain("import { useStores } from '@axiljs/runtime'")
+        const create = state.indexOf('createConnection(connectionConfig(url))')
+        const stores = state.indexOf('const stores = createSqlStores(fromConnection(db))')
+        const schema = state.indexOf('await stores.ensureSchema()')
+        const use    = state.indexOf('useStores(stores)')
+        expect(create).toBeGreaterThan(-1)
+        expect(stores).toBeGreaterThan(create)
+        expect(schema).toBeGreaterThan(stores)
+        expect(use).toBeGreaterThan(schema)
+        expect(state).toMatch(/stores\.close\(\)[\s\S]*await db\.disconnect\(\)/)
+        expect(files['src/shared-state.test.ts']).toContain("openSharedState('sqlite::memory:', { install: false })")
+      })
+
+      it('opens the shared state at startup, wires decorators after the imports and closes on shutdown', () => {
+        expect(main).toContain("import { openSharedState } from './shared-state.js'")
+        expect(main).toContain('await openSharedState(config.DATABASE_URL)')
+        const lastImport = main.lastIndexOf('\nimport ')
+        const wire = main.indexOf('wireAll()')
+        expect(wire).toBeGreaterThan(lastImport)
+        expect(wire).toBeGreaterThan(main.indexOf('openSharedState(config.DATABASE_URL)'))
+        expect(main).toContain('await state.close()')
+      })
+
+      it('configures DATABASE_URL with a SQLite default and documents several instances', () => {
+        expect(files['.env.example']).toMatch(/^DATABASE_URL=sqlite:\.\/shared-state\.db$/m)
+        expect(files['src/config.ts']).toContain("DATABASE_URL:")
+        expect(files['README.md']).toContain('## Running several instances')
+        expect(files['README.md']).toMatch(/PostgreSQL/)
+        expect(t.nextSteps(ctx).map(([c]) => c).join('\n')).toContain('DATABASE_URL')
+      })
+
+      it('loads the Studio intent endpoint only outside production, with a dynamic require', () => {
+        const dev = files['src/dev/studio-intent.ts']
+        expect(dev).toContain("if (process.env.NODE_ENV !== 'production')")
+        expect(dev).toContain("require('@axiljs/studio/dist/intent')")
+        expect(dev).toMatch(/createRequire\(import\.meta\.url\)/)
+        expect(files['src/app.ts']).toContain("import { studioIntentEndpoint } from './dev/studio-intent.js'")
+        expect(files['src/app.ts']).toMatch(/const intent = studioIntentEndpoint\(\)\s+if \(intent\) app\.use\(intent\)/)
+      })
+    })
+  }
+
+  it('high-scale-api relays cluster events from the primary', () => {
+    const main = findTemplate('high-scale-api')!.files(ctx)['src/main.ts']
+    expect(main).toContain("import { installClusterEventRelay } from '@axiljs/events'")
+    expect(main).toContain('onPrimary: () => installClusterEventRelay()')
+    // The factory opens the state per worker and closes it when serve() drains the worker
+    expect(main).toMatch(/await serve\(async \(\) => \{\s+[\s\S]*openSharedState[\s\S]*async close\(\) \{\s+await app\.close\(\)\s+await state\.close\(\)/)
+  })
+
+  it('no template imports @axiljs/studio statically (it is a devDependency)', () => {
+    for (const t of TEMPLATES) {
+      for (const [f, content] of Object.entries(t.files(ctx))) {
+        if (f.endsWith('.ts')) expect(content, `${t.id}/${f}`).not.toMatch(/from '@axiljs\/studio/)
+      }
+    }
+  })
+})
+
 describe('axil create --template', () => {
   it('writes the template files plus the shared scaffolding', async () => {
     const t = TEMPLATES[0]

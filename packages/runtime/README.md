@@ -104,7 +104,18 @@ configureIntent({ mode: 'enforce' })   // 'enforce' | 'warn' | 'off'
 
 **Keys.** Keyed decorators accept a function of the arguments or a string: `'request.id'`, `'header:<name>'`, `'user'`, `'tenant'`, `'ip'`, `'args.0.id'`, a template such as `'order:{0.id}'`, or `'global'`.
 
-**Shared stores.** Results of `tIdempotent` are kept in memory by default; call `setIdempotencyStore()` with a shared implementation for multi-instance deployments.
+**Shared stores.** Idempotency results, cache entries, locks and rate-limit counters are kept in memory by default, which is correct only for a single process. For several instances, install shared stores in one call:
+
+```typescript
+import { createSqlStores, fromConnection } from '@axiljs/stores'
+import { useStores } from '@axiljs/runtime'
+
+const stores = createSqlStores(fromConnection(db))
+await stores.ensureSchema()
+useStores(stores)
+```
+
+`useStores({ rateLimit, idempotency, cache, lock })` accepts any object with the matching members, so other backends (Redis, a custom service) plug in the same way. The individual setters `setIdempotencyStore()`, `setCacheStore()`, `setLockProvider()` and `setRateLimitStore()` remain available.
 
 ## Resilience and concurrency
 
@@ -125,7 +136,7 @@ configureIntent({ mode: 'enforce' })   // 'enforce' | 'warn' | 'off'
 
 Interceptors run in a fixed order (lower is outer): deprecation and SLO measurement first, then intent scopes, idempotency, audit, rate limits, cache, deduplication, fallback, retry, circuit breaker, bulkhead and concurrency, locks, hedging and finally the per-attempt timeout. `enforcedDecorators()` lists every decorator the runtime enforces, in that order.
 
-All runtime errors extend `axilError`, so `@axiljs/core` returns them with the right HTTP status.
+The errors above extend `axilError`, so `@axiljs/core` returns them with the right HTTP status. `TimeoutError` from `tTimeout` is a plain `Error` with `code: 'ETIMEDOUT'`; map it in your error middleware (for example to 504).
 
 ## Redaction
 

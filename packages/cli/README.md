@@ -93,16 +93,18 @@ On a terminal, `axil create` walks through four steps:
 | --- | --- | --- |
 | `minimal` | Start | Routes, validation, CORS and tests; nothing else |
 | `rest-api` | APIs | CRUD on SQLite (ORM + migrations), JWT auth, pagination, filtering |
-| `saas-api` | APIs | Multi-tenant: tenant isolation, roles, feature flags, quotas, audit log |
+| `saas-api` | APIs | Multi-tenant: tenant isolation, roles, feature flags, quotas, audit log, shared runtime state |
 | `realtime-chat` | Realtime | WebSocket rooms, presence, history, JWT on connect, browser demo |
 | `live-dashboard` | Realtime | SSE live metrics, Prometheus `/metrics`, health checks, HTML dashboard |
 | `background-jobs` | Background | Queue workers with retries, job status API, cron scheduler, events |
 | `webhook-receiver` | Background | HMAC-verified webhooks, replay protection, idempotency, async processing |
 | `ai-assistant` | AI | Chat + streaming, RAG over your documents, tool-using agent, any provider |
 | `microservice` | Production | Circuit breaker, retries, timeouts, tracing, metrics, readiness |
-| `high-scale-api` | Production | Cluster mode, `axil.scaling.json`, request context, redaction, audit |
+| `high-scale-api` | Production | Cluster mode, `axil.scaling.json`, request context, redaction, audit, shared runtime state |
 
 Every template's generated project type-checks under `strict` and ships with its own passing tests (`npm test`).
+
+`saas-api` and `high-scale-api` are set up for several instances: on startup they open `DATABASE_URL` (a SQLite file by default; PostgreSQL for several servers) and install `@axiljs/stores`' SQL stores into `@axiljs/runtime` with `useStores()`, then call `wireAll()`. `high-scale-api` also relays cluster events from the primary (`onPrimary`). Both load Studio's intent endpoint only when `NODE_ENV` is not `production`, via a dynamic `require`, so a production install without dev dependencies works. Their READMEs have a *Running several instances* section.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |

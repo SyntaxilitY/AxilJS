@@ -5,11 +5,15 @@
  * serve() (one worker per core, crash restart, graceful drain) sized by
  * axil.scaling.json, plus @axiljs/runtime executing @axiljs/decorator
  * metadata: request context (AsyncLocalStorage), tRetry / tTimeout / tAudit
- * interceptors and tRedact / tSensitive response redaction. Tests build the
- * app in a single process; they never fork the cluster.
+ * interceptors and tRedact / tSensitive response redaction. Runtime state
+ * (rate-limit, idempotency, cache, lock stores) lives in DATABASE_URL via
+ * @axiljs/stores so every worker and instance shares it; the primary relays
+ * cluster events. Tests build the app in a single process; they never fork
+ * the cluster.
  */
 
 import type { ProjectTemplate, TemplateContext } from './types'
+import { SHARED_STATE_DEFAULT_URL, sharedStateDependencies, sharedStateFiles } from './shared-state'
 
 export const highScaleApiTemplate: ProjectTemplate = {
   id:       'high-scale-api',
@@ -23,7 +27,7 @@ export const highScaleApiTemplate: ProjectTemplate = {
     'Request context and request ids without passing req',
     'tRedact fields never leave the API'
   ],
-  packages: ['@axiljs/core', '@axiljs/scale', '@axiljs/runtime', '@axiljs/decorator', '@axiljs/events', '@axiljs/config', '@axiljs/testing'],
+  packages: ['@axiljs/core', '@axiljs/scale', '@axiljs/runtime', '@axiljs/stores', '@axiljs/decorator', '@axiljs/events', '@axiljs/config', '@axiljs/testing'],
   port:     3009,
 
   dependencies: ctx => ({
@@ -32,10 +36,13 @@ export const highScaleApiTemplate: ProjectTemplate = {
     '@axiljs/decorator': ctx.axilRange,
     '@axiljs/events':    ctx.axilRange,
     '@axiljs/runtime':   ctx.axilRange,
-    '@axiljs/scale':     ctx.axilRange
+    '@axiljs/scale':     ctx.axilRange,
+    ...sharedStateDependencies(ctx)
   }),
 
   files: (ctx: TemplateContext) => ({
+    ...sharedStateFiles(),
+
     'README.md': `# ${ctx.name}
 
 A high-scale [AxilJS](https://github.com/SyntaxilitY/AxilJS) API, created with
@@ -54,6 +61,8 @@ needs for a target, and how decorators turn into real behaviour at runtime:
   - \`redactResponses()\` applies \`@tRedact\` (remove, mask, hash) to every response body, so
     password hashes and API keys never leave the API
 - **@axiljs/decorator**: the \`t*\` decorators only record metadata; the runtime decides what they do
+- **@axiljs/stores**: the runtime's rate-limit, idempotency, cache and lock state lives in \`DATABASE_URL\`
+  (SQLite by default), shared by every worker and instance (see *Running several instances*)
 - **@axiljs/events**: audit events arrive on the global event bus (\`audit.log\`)
 - **@axiljs/testing**: tests drive \`createApp()\` in one process; the cluster is never forked in tests
 
@@ -239,7 +248,34 @@ covers \`shutdownTimeoutMs\`. Probes hit \`/health/live\` and \`/health/ready\`.
 The generated \`deploy/Dockerfile\` copies only \`dist/\` into the image. Add
 \`COPY axil.scaling.json ./\` next to it so \`serve()\` in the container also applies
 \`maxConnectionsPerWorker\`, \`keepAliveTimeoutMs\` and \`shutdownTimeoutMs\`, and set \`HOST=0.0.0.0\`
-in the manifest's \`env:\` list.
+and a PostgreSQL \`DATABASE_URL\` (from a Secret) in the manifest's \`env:\` list: with several pods the
+default SQLite file would be one per pod.
+
+## Running several instances
+
+Every worker (and every server) opens \`DATABASE_URL\` in the \`serve()\` factory and installs the
+shared stores before it listens (\`src/main.ts\`, \`src/shared-state.ts\`):
+
+\`\`\`ts
+const db     = await createConnection(connectionConfig(config.DATABASE_URL))
+const stores = createSqlStores(fromConnection(db))   // @axiljs/stores
+await stores.ensureSchema()                          // axil_rate_limits, axil_idempotency, axil_cache, axil_locks, ...
+useStores(stores)                                    // tRateLimit, tIdempotent, tCache*, tLock share these
+wireAll()                                            // after every module with t* decorators is imported
+\`\`\`
+
+so a \`@tRateLimit\`, \`@tIdempotent\`, \`@tCache\` or \`@tLock\` you add counts, caches and locks once across
+all workers instead of once per process. The drain on SIGTERM closes the app, then the stores and the connection.
+
+- **One machine**: the default SQLite file is shared by the workers of one host.
+- **Several servers**: use PostgreSQL: \`npm install pg\` and \`DATABASE_URL=postgres://user:pass@db:5432/app\`.
+- The primary runs \`installClusterEventRelay()\` (\`onPrimary\` in \`src/main.ts\`), so a bus created with
+  \`new EventBus({ transport: new ClusterTransport() })\` reaches every worker of the machine. The audit log
+  stays on the per-worker global bus on purpose: each event is written once, by the worker that handled it.
+- Adding \`rateLimit()\` from \`@axiljs/security\`? Give it \`store: new ClusterStore()\` and call
+  \`installClusterRateLimitPrimary()\` in \`onPrimary\` (one machine), or \`store: stores.rateLimit\` (every server).
+- \`src/dev/studio-intent.ts\` serves the runtime report to Studio's Intent view under \`axil run\`. It is
+  required only when \`NODE_ENV\` is not \`production\`, so a production install without dev dependencies works.
 
 ## Multi-process caveats
 
@@ -250,12 +286,13 @@ With N workers per instance and M instances there are N × M copies of everythin
 |-------------------------------------------|--------------------------------------------------------|-----------------------------------------------|
 | \`InMemoryUserStore\` (this demo)           | each worker has its own copy; writes would diverge     | a real database (PostgreSQL / MySQL)          |
 | \`getGlobalEventBus()\` in \`audit-log.ts\`   | subscribers only see events from their own worker      | fine for per-worker logging (flagged anyway); use a broker for cross-process events |
-| \`rateLimit()\` without a \`store\`           | the real limit becomes limit × workers × instances     | a shared (Redis/DB) store                     |
+| \`rateLimit()\` without a \`store\`           | the real limit becomes limit × workers × instances     | \`ClusterStore\` (one machine) or \`stores.rateLimit\` |
 | \`new Scheduler()\` (cron)                  | every job fires once per worker per instance           | one scheduler process (\`AXIL_ROLE=scheduler\`) or a distributed lock |
 | in-memory \`Queue\`, caches, WebSocket rooms | jobs, invalidations and broadcasts stay in one process | a shared broker / cache, sticky sessions     |
 | SQLite                                    | a local file; instances cannot share it                | PostgreSQL / MySQL                            |
 
 The request context, retries, timeouts and redaction are per request and need nothing shared.
+The runtime's rate-limit, idempotency, cache and lock state is already shared (see above).
 
 ## Configuration
 
@@ -266,15 +303,18 @@ The request context, retries, timeouts and redaction are per request and need no
 | \`NODE_ENV\`     | \`development\` | \`development\` (access log on), \`production\` or \`test\`             |
 | \`AXIL_WORKERS\` | from \`axil.scaling.json\` | \`auto\` (one per core) or a number; read by \`serve()\`  |
 | \`AUDIT_LOG\`    | \`true\`        | Write \`audit.log\` events to stdout as JSON lines                  |
+| \`DATABASE_URL\` | \`${SHARED_STATE_DEFAULT_URL}\` | Shared runtime state: SQLite file, \`postgres://\` or \`mysql://\` |
 
 ## Project structure
 
 \`\`\`
 axil.scaling.json             target, workers, instances: read by serve(), axil capacity, axil deploy
 src/
-  main.ts                     serve(() => createApp(config)): cluster, restarts, drain
+  main.ts                     serve(): shared state + createApp per worker; event relay on the primary
   app.ts                      createApp(config, deps): request context, routes, redaction
   config.ts                   typed config (defineConfig)
+  shared-state.ts             DATABASE_URL -> @axiljs/stores tables, installed with useStores()
+  dev/studio-intent.ts        Studio intent endpoint, development only
   audit-log.ts                audit.log events -> JSON lines on stdout
   users/user.entity.ts        User with @tRedact / @tSensitive fields
   users/user-store.ts         UserStore interface + in-memory demo store
@@ -282,6 +322,7 @@ src/
   middleware/error-handler.ts TimeoutError -> 504, transient errors -> 503, one JSON shape
   app.test.ts                 request context, redaction, retry, timeout, audit
   scaling.test.ts             axil.scaling.json is valid and can carry its target
+  shared-state.test.ts        DATABASE_URL parsing, store tables on SQLite :memory:
 \`\`\`
 
 ## Next steps
@@ -303,6 +344,10 @@ AXIL_WORKERS=1
 
 # Write audit.log events to stdout as JSON lines
 AUDIT_LOG=true
+
+# Shared runtime state (rate limits, idempotency, cache, locks) for every worker and instance.
+# A SQLite file for one machine; postgres://user:pass@host:5432/db for several servers (npm install pg).
+DATABASE_URL=${SHARED_STATE_DEFAULT_URL}
 `,
 
     'axil.scaling.json': JSON.stringify({
@@ -325,7 +370,9 @@ export function loadConfig(source: Record<string, string | undefined> = process.
     PORT:      { type: 'number',  default: 3009, min: 0, max: 65535 },
     HOST:      { type: 'string',  default: '127.0.0.1' },
     NODE_ENV:  { type: 'string',  default: 'development', enum: ['development', 'production', 'test'] },
-    AUDIT_LOG: { type: 'boolean', default: true }
+    AUDIT_LOG: { type: 'boolean', default: true },
+    // Shared runtime state: SQLite file, postgres:// or mysql:// (see src/shared-state.ts)
+    DATABASE_URL: { type: 'string', default: '${SHARED_STATE_DEFAULT_URL}' }
   }, source)
 }
 
@@ -338,25 +385,53 @@ export type Config = ReturnType<typeof loadConfig>
  *
  * - Primary process: forks one worker per core (AXIL_WORKERS / axil.scaling.json),
  *   restarts crashed workers with backoff, drains them all on SIGTERM/SIGINT.
- *   It never calls the factory below.
+ *   It never calls the factory below; onPrimary runs there instead.
  * - Each worker (or the only process when workers = 1): runs the factory and
  *   listens; all workers share the port.
  */
 
 import { loadEnv } from '@axiljs/config'
+import { installClusterEventRelay } from '@axiljs/events'
+import { wireAll } from '@axiljs/runtime'
 import { serve } from '@axiljs/scale'
 import { createApp } from './app.js'
 import { logAuditEvents } from './audit-log.js'
 import { loadConfig } from './config.js'
+import { openSharedState } from './shared-state.js'
 
 loadEnv()
 
 const config = loadConfig()
 
-await serve(() => {
+await serve(async () => {
+  // Rate-limit, idempotency, cache and lock state in DATABASE_URL, shared by
+  // every worker and instance: createSqlStores(fromConnection(db)), then useStores()
+  const state = await openSharedState(config.DATABASE_URL)
+
+  // Every module is imported by now: execute the t* decorators on their classes
+  wireAll()
+
   if (config.AUDIT_LOG) logAuditEvents()
-  return createApp(config)
-}, { port: config.PORT, host: config.HOST })
+  const app = createApp(config)
+
+  return {
+    listen:    (port?: number, host?: string) => app.listen(port, host),
+    getServer: () => app.getServer(),
+    // serve() calls this when it drains the worker (SIGTERM, Ctrl+C)
+    async close() {
+      await app.close()
+      await state.close()
+    }
+  }
+}, {
+  port: config.PORT,
+  host: config.HOST,
+  // Cluster mode only, once in the primary before the workers fork: relay
+  // events between workers for buses created with ClusterTransport. Add
+  // installClusterRateLimitPrimary() from @axiljs/security here if you use
+  // rateLimit({ store: new ClusterStore() }).
+  onPrimary: () => installClusterEventRelay()
+})
 `,
 
     'src/app.ts': `/**
@@ -368,6 +443,7 @@ await serve(() => {
 import { Application, NotFoundError } from '@axiljs/core'
 import { redactResponses, requestContext } from '@axiljs/runtime'
 import type { Config } from './config.js'
+import { studioIntentEndpoint } from './dev/studio-intent.js'
 import { errorHandler } from './middleware/error-handler.js'
 import { InMemoryUserStore } from './users/user-store.js'
 import type { UserStore } from './users/user-store.js'
@@ -398,6 +474,11 @@ export function createApp(config: Config, deps: AppDeps = {}): Application {
   // One AsyncLocalStorage context per request: request id (x-request-id in
   // and out), user and tenant, readable anywhere via getContext()
   app.use(requestContext())
+
+  // Development only: Studio's Intent view reads the runtime report here.
+  // Absent in production, so it costs the hot path nothing there.
+  const intent = studioIntentEndpoint()
+  if (intent) app.use(intent)
 
   app.get('/', (_req, res) => {
     res.success({ service: SERVICE, version: VERSION, servedBy: process.pid }, 'Service info')
@@ -899,6 +980,7 @@ describe('axil.scaling.json', () => {
 
   nextSteps: () => [
     ['npm test', 'Context, redaction, retry, timeout, audit'],
-    ['axil capacity', 'Plan instances for axil.scaling.json']
+    ['axil capacity', 'Plan instances for axil.scaling.json'],
+    ['Set DATABASE_URL in .env', 'Shared runtime state; postgres:// for several servers']
   ]
 }

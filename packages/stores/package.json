@@ -1,7 +1,7 @@
 {
   "name": "@axiljs/stores",
-  "version": "0.3.5",
-  "description": "AxilJS SQL-backed shared stores (rate limit, idempotency, cache, locks) for multi-server apps without Redis",
+  "version": "0.3.6",
+  "description": "AxilJS SQL-backed shared stores for PostgreSQL, MySQL and SQLite: rate limits, idempotency, cache, locks and AI budgets across servers",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -11,7 +11,7 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@axiljs/decorator": "^0.3.5",
+    "@axiljs/decorator": "^0.3.6",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   },

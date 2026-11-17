@@ -86,6 +86,9 @@ export {
 } from './resilience';
 export type { CacheStore, LockProvider, RateLimitCounterStore } from './resilience';
 
+export { useStores } from './stores';
+export type { RuntimeStores } from './stores';
+
 export { resolveKey, parseDuration } from './keys';
 export type { KeySpec } from './keys';
 

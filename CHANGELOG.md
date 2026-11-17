@@ -2,6 +2,18 @@
 
 All notable changes to AxilJS are documented here. Versions apply to every `@axiljs/*` package; the packages are released together.
 
+## 0.3.6
+
+Shared state is now part of the standard setup: one call makes idempotency, cache, locks, rate limits and AI budgets work correctly across several servers.
+
+### Added
+
+- **`useStores()` (`@axiljs/runtime`)** installs the rate-limit, idempotency, cache and lock stores in one call. Any object with the matching members works, so Redis or custom backends plug in the same way.
+- **`createSqlStores(executor, options)` (`@axiljs/stores`)** builds every SQL store at once with a common table prefix, `ensureSchema()` to create all tables at startup and `close()`. Use `lock: 'advisory'` for PostgreSQL advisory locks.
+- **`SqlBudgetStore` (`@axiljs/stores`)** keeps `withBudget` usage from `@axiljs/ai` in the database, so token, cost and request limits hold across servers. Additions are atomic, and reservations release exactly.
+- **Templates:** `saas-api` and `high-scale-api` open a `DATABASE_URL` connection (SQLite by default, PostgreSQL or MySQL by URL), install the SQL stores with `useStores`, call `wireAll()`, expose the Studio Intent view in development only and close everything on shutdown. `high-scale-api` also installs the cluster event relay in the primary.
+- **Documentation:** a "Running several instances" section in the root README explains which state is per process by default and how to share it.
+
 ## 0.3.5
 
 ### Added

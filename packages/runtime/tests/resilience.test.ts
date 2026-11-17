@@ -279,3 +279,22 @@ describe('setRateLimitStore', () => {
     expect([...counts.keys()]).toEqual(['rl:Api.call:global']);
   });
 });
+
+describe('useStores', () => {
+  it('installs only the stores that are given', async () => {
+    const { useStores, getCacheStore, setRateLimitStore } = await import('../src');
+    const cache = { get: () => undefined, set() {}, delete() {}, deleteByTag() {}, clear() {} };
+    const counted: string[] = [];
+    const rateLimit = { increment(key: string, windowMs: number) { counted.push(key); return { count: 1, resetAt: Date.now() + windowMs }; } };
+    expect(useStores({ cache, rateLimit })).toEqual(['rateLimit', 'cache']);
+    expect(getCacheStore()).toBe(cache);
+    class Api {
+      @tRateLimit({ limit: 5, window: '1m' })
+      async call() { return 'ok'; }
+    }
+    wire(Api);
+    await new Api().call();
+    expect(counted).toEqual(['rl:Api.call:global']);
+    setRateLimitStore(undefined);
+  });
+});
