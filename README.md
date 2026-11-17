@@ -50,24 +50,6 @@ No dependency hell.
 
 ---
 
-## The Name
-
-```
-Synt  +  axil  +  itY  +  JS
-         ────
-         agility through syntax
-         the axil — where natural growth begins
-         the Y — the SyntaxilitY signature
-```
-
-| Part | Meaning |
-|---|---|
-| `axil` | Extracted from SyntaxilitY — agility, natural growth point |
-| `itY` | The SyntaxilitY signature |
-| `JS` | JavaScript |
-
----
-
 ## Prerequisites
 
 | Requirement | Version |

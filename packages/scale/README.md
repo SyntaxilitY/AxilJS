@@ -13,7 +13,7 @@ npm install @axiljs/scale
 No Node.js framework (or any other) serves millions of requests per second from one process or one machine. One `@axiljs/core` worker does roughly 15–25k req/s on a hello-world route, and real routes with DB calls do less. Large targets are reached by **more cores** (vertical: one worker per core) and **more machines** (horizontal: instances behind a load balancer):
 
 ```
-1,500,000 req/s × 1.3 headroom ÷ (17k req/s × 8 cores × 0.85) ≈ 18 instances of 8 CPU
+1,500,000 req/s × 1.3 headroom ÷ (17k req/s × 8 cores × 0.85) ≈ 17 instances of 8 CPU
 ```
 
 This package does that arithmetic with *your* numbers and tells you whether your configuration can carry the target.
