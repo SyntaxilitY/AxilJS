@@ -39,10 +39,15 @@ export declare abstract class BaseDriver {
      */
     isConnected(): boolean;
     /**
-     * Log a query if logging is enabled.
+     * Log a query if logging is enabled. Every driver calls this before it
+     * executes a statement, so it also reports the statement to
+     * @axiljs/runtime's intent checks (tReadOnly / tPure) when that package is
+     * loaded. In enforce mode the report throws and the statement never runs.
      */
     protected log(sql: string, params?: unknown[]): void;
 }
+/** Classify a statement as 'db.read' or 'db.write'. */
+export declare function classifyStatement(sql: string): 'db.read' | 'db.write';
 /**
  * Transaction context passed to the transaction work function.
  * Has the same query interface as the driver but is scoped to the transaction.

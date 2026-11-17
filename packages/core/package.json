@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/core",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "AxilJS HTTP server, router, middleware, and built-in response manager",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.3",
+    "@axiljs/common": "^0.3.4",
     "syntaxility-api-response-manager": "^1.0.4"
   },
   "devDependencies": {

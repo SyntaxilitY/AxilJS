@@ -13,7 +13,7 @@ npm install @axiljs/scale
 No Node.js framework (or any other) serves millions of requests per second from one process or one machine. One `@axiljs/core` worker does roughly 15–25k req/s on a hello-world route, and real routes with DB calls do less. Large targets are reached by **more cores** (vertical: one worker per core) and **more machines** (horizontal: instances behind a load balancer):
 
 ```
-1,500,000 req/s × 1.3 headroom ÷ (17k req/s × 8 cores × 0.85) ≈ 18 instances of 8 CPU
+1,500,000 req/s × 1.3 headroom ÷ (17k req/s × 8 cores × 0.85) ≈ 17 instances of 8 CPU
 ```
 
 This package does that arithmetic with *your* numbers and tells you whether your configuration can carry the target.
@@ -67,6 +67,27 @@ serve(() => {
 - `workers = 1`: same graceful shutdown, in-process.
 - Each worker gets `--max-old-space-size=memoryPerWorkerMb`, `server.maxConnections = maxConnectionsPerWorker`, and `keepAliveTimeoutMs` when set. Behind a load balancer, set `keepAliveTimeoutMs` above the balancer's idle timeout (AWS ALB: 60 s) to avoid sporadic 502s.
 - At startup the primary prints host-check warnings (oversubscription, container quota, memory, `ulimit -n`).
+
+### Shared state across workers
+
+Each worker is a separate process, so in-memory state is per worker. `onPrimary` runs once in the primary before the workers start; use it to install the primary-side services that share rate-limit counters and events between workers:
+
+```typescript
+import { serve } from '@axiljs/scale'
+import { installClusterRateLimitPrimary } from '@axiljs/security'
+import { installClusterEventRelay } from '@axiljs/events'
+
+serve(createApp, {
+  port: 3000,
+  onPrimary: () => {
+    const stopRateLimits = installClusterRateLimitPrimary()
+    const stopRelay = installClusterEventRelay()
+    return () => { stopRateLimits(); stopRelay() }
+  }
+})
+```
+
+Inside the app, use `rateLimit({ store: new ClusterStore() })` and `new EventBus({ transport: new ClusterTransport() })`. Both behave like their in-process versions when there is only one worker.
 
 ## Programmatic API
 

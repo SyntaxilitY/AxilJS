@@ -3,7 +3,7 @@
  * @axiljs/queue - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.InMemoryQueueStore = exports.createJob = exports.validateCron = exports.isValidCron = exports.matchesCron = exports.parseCron = exports.Scheduler = exports.Queue = void 0;
+exports.FileQueueStore = exports.InMemoryQueueStore = exports.createJob = exports.validateCron = exports.isValidCron = exports.matchesCron = exports.parseCron = exports.Scheduler = exports.Queue = void 0;
 var queue_1 = require("./queue");
 Object.defineProperty(exports, "Queue", { enumerable: true, get: function () { return queue_1.Queue; } });
 var scheduler_1 = require("./scheduler");
@@ -16,4 +16,6 @@ var job_1 = require("./job");
 Object.defineProperty(exports, "createJob", { enumerable: true, get: function () { return job_1.createJob; } });
 var store_1 = require("./store");
 Object.defineProperty(exports, "InMemoryQueueStore", { enumerable: true, get: function () { return store_1.InMemoryQueueStore; } });
+var file_store_1 = require("./file-store");
+Object.defineProperty(exports, "FileQueueStore", { enumerable: true, get: function () { return file_store_1.FileQueueStore; } });
 //# sourceMappingURL=index.js.map

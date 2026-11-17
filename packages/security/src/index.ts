@@ -12,6 +12,22 @@ export type {
   RateLimitRecord
 } from './rate-limit';
 
+export {
+  ClusterStore,
+  installClusterRateLimitPrimary,
+  CLUSTER_RATE_LIMIT_TAG
+} from './cluster-store';
+export type {
+  ClusterStoreOptions,
+  ClusterRateLimitPrimaryOptions,
+  ClusterWorkerChannel,
+  ClusterWorkerHandle,
+  ClusterPrimaryTransport,
+  ClusterRateLimitRequest,
+  ClusterRateLimitReply,
+  ClusterRateLimitMessage
+} from './cluster-store';
+
 export { csrf } from './csrf';
 export type { CsrfOptions } from './csrf';
 

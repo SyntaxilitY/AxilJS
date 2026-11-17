@@ -100,9 +100,15 @@ function wireHolder(holder: object, className: string): number {
           return Promise.reject(err);
         }
       };
+      // An interceptor that throws synchronously still yields a rejected promise
       const chain = active.reduceRight<() => Promise<unknown>>(
-        (proceed, interceptor) => () =>
-          interceptor.intercept(invocation, metadata[interceptor.decorator], proceed),
+        (proceed, interceptor) => () => {
+          try {
+            return interceptor.intercept(invocation, metadata[interceptor.decorator], proceed);
+          } catch (err) {
+            return Promise.reject(err);
+          }
+        },
         innermost
       );
       return chain();

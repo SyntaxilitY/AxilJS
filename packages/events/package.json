@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/events",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "AxilJS in-process event bus with pub/sub and wildcard support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.3"
+    "@axiljs/common": "^0.3.4"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

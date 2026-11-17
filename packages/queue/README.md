@@ -71,6 +71,43 @@ Jobs live in a `QueueStore` (default `InMemoryQueueStore`). Pass your own with
 `new Queue('name', { store })`. The interface (`add/get/update/list/remove`) is
 synchronous, so it fits in-memory or sync embedded stores, not network stores.
 
+## Durable storage
+
+`InMemoryQueueStore` loses every job when the process exits. `FileQueueStore`
+persists jobs to disk with synchronous `node:fs` calls and needs no extra
+dependencies:
+
+```typescript
+import { Queue, FileQueueStore } from '@axiljs/queue'
+
+const store = new FileQueueStore({ path: './data/emails.queue', compactEvery: 1000 })
+const queue = new Queue('emails', { store })
+
+process.on('SIGTERM', async () => {
+  await queue.stop()
+  store.close() // writes a final snapshot
+})
+```
+
+- Layout: every change is appended to `<path>.journal` (JSON lines). Every
+  `compactEvery` entries (default 1000; `0` disables), on open and on
+  `close()`, the full state is written to `<path>.tmp` and atomically renamed
+  to `<path>`, then the journal is emptied. `compact()` can also be called
+  directly.
+- Recovery: on open, the snapshot is loaded and the journal replayed. Jobs
+  that were `active` when the process died return to `pending` with their
+  attempt count kept, so they are retried within `maxAttempts`. Handlers
+  should therefore be idempotent. A truncated final journal line (crash
+  mid-write) is ignored; corruption elsewhere throws.
+- Ordering is the same as the in-memory store: priority, then FIFO.
+- Job `data` must be JSON-serializable (Dates in `data` come back as strings).
+  A handler result that cannot be serialized is not persisted.
+- Durability covers process crashes, not power loss: writes are not
+  `fsync`ed, so the most recent changes can be lost if the machine itself
+  goes down.
+- Use one store per file, owned by a single process. Two processes sharing a
+  file would overwrite each other's snapshots.
+
 ## Scheduler
 
 - Standard cron day matching: if both day-of-month and day-of-week are

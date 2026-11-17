@@ -66,6 +66,14 @@ export interface EventBusOptions {
 
   // Middleware applied to all events before handlers
   middleware?: EventMiddleware[];
+
+  // Cross-process transport. When unset the bus is purely in-process.
+  transport?: EventTransport;
+
+  // Broadcast every emit through the transport unless the emit passes
+  // { broadcast: false }. Default false: only { broadcast: true } emits leave
+  // the process.
+  broadcast?: boolean;
 }
 
 // ─── Event Middleware ─────────────────────────────────────────────────────────
@@ -74,3 +82,42 @@ export type EventMiddleware = (
   event: axilEvent,
   next: () => Promise<void>
 ) => Promise<void>;
+
+// ─── Cross-process Transport ──────────────────────────────────────────────────
+
+/**
+ * What a bus hands to (and receives from) a transport.
+ * `origin` is the sending bus's random per-instance id; a bus drops messages
+ * carrying its own origin, so a transport may echo publishes back safely.
+ * `event` is a JSON-safe copy of the emitted event.
+ */
+export interface EventTransportMessage {
+  origin: string;
+  event: axilEvent;
+}
+
+/**
+ * Pluggable carrier that moves events between buses in other processes
+ * (or other bus instances). Implementations must deliver a message to the
+ * subscribers of every *other* participant; delivering it back to the sender
+ * is allowed (the bus ignores its own origin) but not required.
+ */
+export interface EventTransport {
+  // Send a message to the other participants
+  publish(message: EventTransportMessage): void | Promise<void>;
+
+  // Receive messages from the other participants; returns an unsubscribe fn
+  subscribe(handler: (message: EventTransportMessage) => void): () => void;
+
+  // Release resources (listeners, sockets). Optional.
+  close?(): void | Promise<void>;
+}
+
+/**
+ * Per-emit options: the event metadata plus `broadcast`.
+ * `broadcast: true` also publishes the event through the bus's transport;
+ * `broadcast: false` keeps it local even when the bus broadcasts by default.
+ */
+export type EmitOptions = Partial<Pick<axilEvent, 'source' | 'correlationId' | 'causationId' | 'version'>> & {
+  broadcast?: boolean;
+};

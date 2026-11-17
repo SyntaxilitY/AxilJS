@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/decorator",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "AxilJS semantic t-prefixed decorators that record intent as metadata",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

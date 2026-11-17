@@ -57,3 +57,5 @@ scripts
 documentation
 orm-source.txt
 examples/node_modules
+/CLAUDE.md
+/.claude

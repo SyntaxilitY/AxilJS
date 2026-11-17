@@ -5,7 +5,7 @@
 
 // ── Connection ────────────────────────────────────────────────────────────
 export { ConnectionManager, createConnection } from './connection/connection-manager'
-export { BaseDriver }                          from './connection/base-driver'
+export { BaseDriver, classifyStatement }       from './connection/base-driver'
 export type { TransactionContext }             from './connection/base-driver'
 
 // ── Drivers ───────────────────────────────────────────────────────────────
