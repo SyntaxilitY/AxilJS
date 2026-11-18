@@ -145,7 +145,9 @@ All packages are published under the `@axiljs` scope and are versioned together.
 | `axil create <name> --template <id>` | Create a project from a template (see below) |
 | `axil run` | Start the development server with hot reload and Studio |
 | `axil generate <kind> <name>` | Generate a `module`, `controller`, `service`, `entity` or `migration` (alias `axil g`) |
-| `axil migrate [up\|down\|status]` | Run database migrations from `src/migrations` |
+| `axil generate client` | Generate a typed, dependency-free TypeScript API client from an OpenAPI 3.x document (`--from`, `--out`, `--name`) |
+| `axil migrate [up\|down\|status]` | Run database migrations from `src/migrations` (`up --safety=warn\|block` checks them first) |
+| `axil migrate --check` | Report pending migrations that lock or rewrite tables or break deployed code, without running them; exit code 1 on errors (`--all`, `--json`, `--large-table`) |
 | `axil build` | Compile the project for production |
 | `axil test [pattern]` | Run the test suite |
 | `axil deploy` | Generate a Dockerfile and Kubernetes manifests |

@@ -7,6 +7,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.BaseDriver = void 0;
 exports.classifyStatement = classifyStatement;
+exports.observeLoaded = observeLoaded;
 class BaseDriver {
     config;
     connected = false;
@@ -72,5 +73,20 @@ function reportQuery(sql) {
     const report = globalThis[Symbol.for('axiljs.intent.report')];
     if (typeof report === 'function')
         report(classifyStatement(sql), sql.trim().slice(0, 120));
+}
+/**
+ * Hand loaded rows or entities to @axiljs/runtime's sensitive data lineage
+ * (tSensitive / tRedact values are tracked for the rest of the request)
+ * without depending on it. No-op when the runtime is not loaded.
+ */
+function observeLoaded(value, entity, columns) {
+    const observe = globalThis[Symbol.for('axiljs.sensitive.observe')];
+    if (typeof observe !== 'function' || value === null || value === undefined)
+        return;
+    const names = {};
+    if (columns)
+        for (const [prop, col] of columns)
+            names[prop] = col.columnName;
+    observe(value, { entity, columns: names });
 }
 //# sourceMappingURL=base-driver.js.map

@@ -10,7 +10,8 @@
  */
 import { Server } from 'http';
 import { AppConfig, MiddlewareFn, ErrorMiddlewareFn, RouteHandler } from '@axiljs/common';
-import { Router } from './router/router';
+import { Router, RouteInfo } from './router/router';
+import { OpenAPIOptions, OpenAPIDocument } from './openapi';
 /**
  * The installed @axiljs/core version, read from its package.json.
  * Resolved relative to this file (src/ or dist/ are both one level below the
@@ -23,6 +24,13 @@ export declare function coreVersion(): string;
  * @internal
  */
 export declare function parseByteSize(size: string | number): number;
+/**
+ * The URL path of a mounted router's route, mirroring findRoute(): the
+ * mount prefix is prepended unless the route path already starts with it
+ * (prefix baked into the Router, matched via the full-path fallback).
+ * @internal
+ */
+export declare function mountedPath(prefix: string, routePath: string): string;
 export declare class Application {
     private config;
     private router;
@@ -67,6 +75,38 @@ export declare class Application {
      *   // Creates routes: GET /users, GET /users/:id
      */
     mount(prefix: string, router: Router): Application;
+    /**
+     * Every registered route, in matching order: the app's own routes, then
+     * each mounted router's (in mount order). A method + path that an
+     * earlier source already serves is reported once, as the runtime does.
+     *
+     * - path: the URL a client requests. App routes include config.prefix;
+     *   mounted routes get the mount prefix + the router's own prefix (the
+     *   app prefix does not apply to mounted routers at runtime). A router
+     *   whose prefix already starts with the mount prefix (new Router('/users')
+     *   mounted at '/users') is reported without doubling it.
+     * - middleware: global middleware, router middleware, route middleware -
+     *   the order they run in (error handlers excluded).
+     * - method: 'GET', 'POST', … or '*' for all() routes.
+     */
+    routes(): RouteInfo[];
+    /**
+     * Generate an OpenAPI 3.1 document for the current routes.
+     * See generateOpenAPI() in openapi.ts for what is emitted.
+     */
+    openapi(options: OpenAPIOptions): OpenAPIDocument;
+    /**
+     * Serve the OpenAPI document as JSON with a GET route
+     * (default path '/openapi.json'; config.prefix applies like any app route).
+     * The document is generated on the first request and cached, so register
+     * this after - or at least before the first request reaches - your routes.
+     * The route itself is left out of the document.
+     *
+     *   app.serveOpenAPI({ title: 'Shop API', version: '1.0.0' })
+     *   app.serveOpenAPI('/docs/openapi.json', { title: 'Shop API', version: '1.0.0' })
+     */
+    serveOpenAPI(options: OpenAPIOptions): Application;
+    serveOpenAPI(path: string, options: OpenAPIOptions): Application;
     /**
      * Handle an incoming HTTP request.
      * This is the core request processing pipeline.

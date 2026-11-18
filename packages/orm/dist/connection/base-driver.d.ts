@@ -49,6 +49,14 @@ export declare abstract class BaseDriver {
 /** Classify a statement as 'db.read' or 'db.write'. */
 export declare function classifyStatement(sql: string): 'db.read' | 'db.write';
 /**
+ * Hand loaded rows or entities to @axiljs/runtime's sensitive data lineage
+ * (tSensitive / tRedact values are tracked for the rest of the request)
+ * without depending on it. No-op when the runtime is not loaded.
+ */
+export declare function observeLoaded(value: unknown, entity?: Function, columns?: Map<string, {
+    columnName: string;
+}>): void;
+/**
  * Transaction context passed to the transaction work function.
  * Has the same query interface as the driver but is scoped to the transaction.
  */

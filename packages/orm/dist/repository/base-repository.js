@@ -26,6 +26,7 @@ const query_builder_1 = require("../query-builder/query-builder");
 const entity_1 = require("../decorators/entity");
 const eager_loader_1 = require("../relations/eager-loader");
 const common_1 = require("@axiljs/common");
+const base_driver_1 = require("../connection/base-driver");
 class BaseRepository {
     EntityClass;
     tableName;
@@ -94,6 +95,7 @@ class BaseRepository {
                 driverType: this.driverType
             });
         }
+        (0, base_driver_1.observeLoaded)(rows, this.EntityClass, (0, entity_1.getEntityMetadata)(this.EntityClass)?.columns);
         return rows;
     }
     // ─── Find ─────────────────────────────────────────────────────────────────────

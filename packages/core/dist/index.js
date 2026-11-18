@@ -18,13 +18,22 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sseHeartbeat = exports.createSSE = exports.serveStatic = exports.cors = exports.requestLogger = exports.bodyParser = exports.Response = exports.Request = exports.Router = exports.Application = void 0;
+exports.sseHeartbeat = exports.createSSE = exports.serveStatic = exports.cors = exports.requestLogger = exports.bodyParser = exports.Response = exports.Request = exports.OPENAPI_EXCLUDE = exports.AUTH_MIDDLEWARE = exports.OPENAPI_SCHEMA_DIALECT = exports.OPENAPI_VERSION = exports.isAuthMiddleware = exports.excludeFromOpenAPI = exports.generateOpenAPI = exports.Router = exports.Application = void 0;
 // Main application class
 var application_1 = require("./application");
 Object.defineProperty(exports, "Application", { enumerable: true, get: function () { return application_1.Application; } });
 // Router for modular route definitions
 var router_1 = require("./router/router");
 Object.defineProperty(exports, "Router", { enumerable: true, get: function () { return router_1.Router; } });
+// OpenAPI 3.1 generation (also app.openapi() / app.serveOpenAPI())
+var openapi_1 = require("./openapi");
+Object.defineProperty(exports, "generateOpenAPI", { enumerable: true, get: function () { return openapi_1.generateOpenAPI; } });
+Object.defineProperty(exports, "excludeFromOpenAPI", { enumerable: true, get: function () { return openapi_1.excludeFromOpenAPI; } });
+Object.defineProperty(exports, "isAuthMiddleware", { enumerable: true, get: function () { return openapi_1.isAuthMiddleware; } });
+Object.defineProperty(exports, "OPENAPI_VERSION", { enumerable: true, get: function () { return openapi_1.OPENAPI_VERSION; } });
+Object.defineProperty(exports, "OPENAPI_SCHEMA_DIALECT", { enumerable: true, get: function () { return openapi_1.OPENAPI_SCHEMA_DIALECT; } });
+Object.defineProperty(exports, "AUTH_MIDDLEWARE", { enumerable: true, get: function () { return openapi_1.AUTH_MIDDLEWARE; } });
+Object.defineProperty(exports, "OPENAPI_EXCLUDE", { enumerable: true, get: function () { return openapi_1.OPENAPI_EXCLUDE; } });
 // HTTP request/response (for type usage)
 var request_1 = require("./http/request");
 Object.defineProperty(exports, "Request", { enumerable: true, get: function () { return request_1.Request; } });

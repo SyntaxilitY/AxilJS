@@ -40,6 +40,16 @@ exports.assertJsonSafe = assertJsonSafe;
 exports.getGlobalEventBus = getGlobalEventBus;
 exports.setGlobalEventBus = setGlobalEventBus;
 const crypto_1 = require("crypto");
+/**
+ * Report a payload to @axiljs/runtime's sensitive data lineage ('event'
+ * sink) without depending on it. In enforce mode the hook throws and emit()
+ * rejects before any handler runs.
+ */
+function checkSensitiveSink(payload) {
+    const sink = globalThis[Symbol.for('axiljs.sensitive.sink')];
+    if (typeof sink === 'function')
+        sink('event', payload);
+}
 class EventBus {
     // Map of event type → array of handlers
     // Supports wildcard patterns like 'user.*'
@@ -180,6 +190,7 @@ class EventBus {
      * @throws TypeError when broadcasting a payload that is not plain JSON data
      */
     async emit(type, payload, meta = {}) {
+        checkSensitiveSink(payload);
         const { broadcast, ...eventMeta } = meta;
         const shouldBroadcast = broadcast ?? this.broadcastByDefault;
         // Build the event object

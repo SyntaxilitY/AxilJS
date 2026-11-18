@@ -4,6 +4,9 @@
  */
 export { Application } from './application';
 export { Router } from './router/router';
+export type { RouteInfo } from './router/router';
+export { generateOpenAPI, excludeFromOpenAPI, isAuthMiddleware, OPENAPI_VERSION, OPENAPI_SCHEMA_DIALECT, AUTH_MIDDLEWARE, OPENAPI_EXCLUDE } from './openapi';
+export type { OpenAPIOptions, OpenAPIDocument, OpenAPIOperation, OpenAPIParameter, OpenAPIResponse, OpenAPIReference, OpenAPIServer, OpenAPISchema, OpenAPISource } from './openapi';
 export { Request } from './http/request';
 export { Response } from './http/response';
 export { bodyParser } from './middleware/body-parser';

@@ -2,6 +2,37 @@
 
 All notable changes to AxilJS are documented here. Versions apply to every `@axiljs/*` package; the packages are released together.
 
+## 0.4.0
+
+Production confidence: sensitive data is tracked to every exit, API contracts are generated from the code, and risky migrations are stopped in CI.
+
+### Added
+
+**Sensitive data lineage (`@axiljs/runtime`)**
+
+Values of fields marked `@tSensitive` (and `@tRedact`) are tracked for the rest of the request once the ORM loads them. If such a value reaches an exit that has not been allowed (an HTTP response, a log entry, an event, a queue job or an AI request), the runtime reports a `tSensitive` intent violation: in development the request fails with `INTENT_VIOLATION` before anything is sent; in production it is recorded and reported. Values masked by `redact()` pass. Allow an exit with `allowSensitive('response', fn)` (or for the rest of the request) or `configureLineage({ allow: { response: ['User.email'] } })`. Also `trackSensitive()`, `checkSink()`, `trackedSensitiveOrigins()`. The ORM, core responses, events, queue, observability loggers and AI providers report to the runtime through optional hooks; none of them depends on it.
+
+**OpenAPI 3.1 from the code (`@axiljs/core`, `@axiljs/validation`)**
+
+`generateOpenAPI(app, info)`, `app.openapi()` and `app.serveOpenAPI('/openapi.json')` build the document from the registered routes, including mount prefixes: path parameters, query parameters and request bodies come from `validate()` schemas, responses use the AxilJS envelope and error shapes, and routes protected by `@axiljs/auth` middleware get a bearer security requirement. `app.routes()` lists every route. Every validation schema has `toJSONSchema()`.
+
+**Typed API client (`@axiljs/cli`)**
+
+`axil generate client --from http://localhost:3000/openapi.json --out src/api-client.ts` writes one dependency-free TypeScript file with types for every schema and one typed method per operation, an `ApiError` class and bearer-token support. Works with any OpenAPI 3.x JSON document.
+
+**Migration safety in the CLI (`@axiljs/cli`)**
+
+`axil migrate --check` analyzes pending migrations without running them and exits with code 1 when a statement would take a heavy lock or break running code, so CI can stop it. `--all`, `--json` and `--large-table <table>=<rows>` refine the check; `axil migrate up --safety=warn|block` checks before migrating. A project default can be set in `package.json` under `"axil": { "migrationSafety": "warn" }`.
+
+**`@axiljs/auth`**
+
+Middleware returned by `authenticate()`, `requireRole()`, `requirePermission()` and `requireOwnership()` is marked with `Symbol.for('axiljs.auth')` (`AUTH_MIDDLEWARE`), so tools recognise protected routes.
+
+### Changed (upgrade notes)
+
+- Apps that use `@axiljs/runtime` and return a `@tSensitive` field in a response now get a `tSensitive` violation for that response. Allow the exit where it is intended (`allowSensitive('response', …)` or `configureLineage({ allow })`), mask the field with `redact()`, or set `AXIL_INTENT_MODE=warn` while migrating.
+- `@axiljs/*` ranges move to `^0.4.0`. In 0.x versions `^0.3.x` does not include 0.4, so update all `@axiljs/*` packages together.
+
 ## 0.3.7
 
 ### Fixed

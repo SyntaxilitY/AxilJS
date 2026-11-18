@@ -21,10 +21,13 @@ class Router {
     prefix;
     // Middleware applied to all routes on this router
     routerMiddleware;
+    // Registered routes in registration order (for introspection)
+    entries;
     constructor(prefix = '') {
         this.trie = new trie_1.Trie();
         this.prefix = prefix;
         this.routerMiddleware = [];
+        this.entries = [];
     }
     /**
      * Register middleware that runs for all routes on this router.
@@ -94,13 +97,35 @@ class Router {
         const middleware = args.slice(0, -1);
         // Combine router prefix with route path
         const fullPath = this.normalizePath(this.prefix + path);
-        this.trie.insert(method, fullPath, {
+        const entry = {
             handler,
             middleware,
             path: fullPath,
             method
-        });
+        };
+        this.trie.insert(method, fullPath, entry);
+        // Re-registering the same method + path shape replaces the route in the
+        // trie (param names don't matter there), so replace it here too
+        const shape = routeShape(method, fullPath);
+        const existing = this.entries.findIndex(e => routeShape(e.method, e.path) === shape);
+        if (existing >= 0)
+            this.entries[existing] = entry;
+        else
+            this.entries.push(entry);
         return this;
+    }
+    /**
+     * Every route registered on this router, in registration order.
+     * Paths include this router's prefix; middleware is the router-level
+     * middleware followed by the route's own (the order they run in).
+     */
+    routes() {
+        return this.entries.map(entry => ({
+            method: entry.method,
+            path: entry.path,
+            middleware: [...this.routerMiddleware, ...entry.middleware],
+            handler: entry.handler
+        }));
     }
     /**
      * Match an incoming request to a registered route.
@@ -140,4 +165,8 @@ class Router {
     }
 }
 exports.Router = Router;
+/** Method + path with param names erased ('GET /users/:') - the trie's identity for a route. */
+function routeShape(method, path) {
+    return method.toUpperCase() + ' ' + path.replace(/:[^/]+/g, ':');
+}
 //# sourceMappingURL=router.js.map

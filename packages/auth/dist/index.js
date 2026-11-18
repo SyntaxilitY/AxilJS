@@ -3,7 +3,7 @@
  * @axiljs/auth - Public API
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isHashed = exports.verifyPassword = exports.hashPassword = exports.requireOwnership = exports.requirePermission = exports.requireRole = exports.getUser = exports.authenticate = exports.JWT = void 0;
+exports.markAuth = exports.AUTH_MIDDLEWARE = exports.isHashed = exports.verifyPassword = exports.hashPassword = exports.requireOwnership = exports.requirePermission = exports.requireRole = exports.getUser = exports.authenticate = exports.JWT = void 0;
 // JWT
 var jwt_1 = require("./jwt/jwt");
 Object.defineProperty(exports, "JWT", { enumerable: true, get: function () { return jwt_1.JWT; } });
@@ -21,4 +21,7 @@ var password_1 = require("./password/password");
 Object.defineProperty(exports, "hashPassword", { enumerable: true, get: function () { return password_1.hashPassword; } });
 Object.defineProperty(exports, "verifyPassword", { enumerable: true, get: function () { return password_1.verifyPassword; } });
 Object.defineProperty(exports, "isHashed", { enumerable: true, get: function () { return password_1.isHashed; } });
+var marker_1 = require("./middleware/marker");
+Object.defineProperty(exports, "AUTH_MIDDLEWARE", { enumerable: true, get: function () { return marker_1.AUTH_MIDDLEWARE; } });
+Object.defineProperty(exports, "markAuth", { enumerable: true, get: function () { return marker_1.markAuth; } });
 //# sourceMappingURL=index.js.map

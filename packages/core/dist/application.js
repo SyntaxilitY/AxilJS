@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Application = void 0;
 exports.coreVersion = coreVersion;
 exports.parseByteSize = parseByteSize;
+exports.mountedPath = mountedPath;
 const http_1 = require("http");
 const fs_1 = require("fs");
 const path_1 = require("path");
@@ -20,6 +21,7 @@ const common_1 = require("@axiljs/common");
 const request_1 = require("./http/request");
 const response_1 = require("./http/response");
 const router_1 = require("./router/router");
+const openapi_1 = require("./openapi");
 const chain_1 = require("./middleware/chain");
 const logger_1 = require("./middleware/logger");
 const body_parser_1 = require("./middleware/body-parser");
@@ -83,6 +85,22 @@ function parseByteSize(size) {
         gb: 1024 * 1024 * 1024
     };
     return Math.floor(parseFloat(match[1]) * units[(match[2] || 'b').toLowerCase()]);
+}
+/**
+ * The URL path of a mounted router's route, mirroring findRoute(): the
+ * mount prefix is prepended unless the route path already starts with it
+ * (prefix baked into the Router, matched via the full-path fallback).
+ * @internal
+ */
+function mountedPath(prefix, routePath) {
+    let base = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+    if (!base)
+        return routePath;
+    if (!base.startsWith('/'))
+        base = '/' + base;
+    if (routePath === base || routePath.startsWith(base + '/'))
+        return routePath;
+    return routePath === '/' ? base : base + routePath;
 }
 class Application {
     // Configuration
@@ -201,6 +219,67 @@ class Application {
     mount(prefix, router) {
         this.mountedRouters.push({ prefix, router });
         return this;
+    }
+    // ─── Introspection & OpenAPI ─────────────────────────────────────────────────
+    /**
+     * Every registered route, in matching order: the app's own routes, then
+     * each mounted router's (in mount order). A method + path that an
+     * earlier source already serves is reported once, as the runtime does.
+     *
+     * - path: the URL a client requests. App routes include config.prefix;
+     *   mounted routes get the mount prefix + the router's own prefix (the
+     *   app prefix does not apply to mounted routers at runtime). A router
+     *   whose prefix already starts with the mount prefix (new Router('/users')
+     *   mounted at '/users') is reported without doubling it.
+     * - middleware: global middleware, router middleware, route middleware -
+     *   the order they run in (error handlers excluded).
+     * - method: 'GET', 'POST', … or '*' for all() routes.
+     */
+    routes() {
+        const global = this.globalMiddleware;
+        const seen = new Set();
+        const out = [];
+        const add = (route, path) => {
+            const key = route.method.toUpperCase() + ' ' + path.replace(/:[^/]+/g, ':');
+            if (seen.has(key))
+                return;
+            seen.add(key);
+            out.push({
+                method: route.method,
+                path,
+                middleware: [...global, ...route.middleware],
+                handler: route.handler
+            });
+        };
+        for (const route of this.router.routes())
+            add(route, route.path);
+        for (const { prefix, router } of this.mountedRouters) {
+            for (const route of router.routes()) {
+                add(route, mountedPath(prefix, route.path));
+            }
+        }
+        return out;
+    }
+    /**
+     * Generate an OpenAPI 3.1 document for the current routes.
+     * See generateOpenAPI() in openapi.ts for what is emitted.
+     */
+    openapi(options) {
+        return (0, openapi_1.generateOpenAPI)(this, options);
+    }
+    serveOpenAPI(pathOrOptions, maybeOptions) {
+        const path = typeof pathOrOptions === 'string' ? pathOrOptions : '/openapi.json';
+        const options = typeof pathOrOptions === 'string' ? maybeOptions : pathOrOptions;
+        if (!options || typeof options !== 'object') {
+            throw new TypeError('serveOpenAPI() needs options: { title, version }');
+        }
+        let cached;
+        const handler = (_req, res) => {
+            if (!cached)
+                cached = this.openapi(options);
+            res.json(cached);
+        };
+        return this.get(path, (0, openapi_1.excludeFromOpenAPI)(handler));
     }
     // ─── Request Handling ────────────────────────────────────────────────────────
     /**

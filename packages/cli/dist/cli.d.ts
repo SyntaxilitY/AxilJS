@@ -6,7 +6,9 @@
  * Commands:
  *   axil create [name]           Create a new project (interactive picker)
  *   axil generate <kind> <name>  Generate module/controller/service/entity/migration
+ *   axil generate client         Generate a typed API client from an OpenAPI document
  *   axil migrate [up|down|status] Run database migrations
+ *   axil migrate --check         Check pending migrations for locking/breaking changes
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests

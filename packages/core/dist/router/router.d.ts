@@ -16,10 +16,20 @@ interface RouteEntry {
     path: string;
     method: string;
 }
+/**
+ * A registered route, as reported by router.routes() / app.routes().
+ */
+export interface RouteInfo {
+    method: string;
+    path: string;
+    middleware: MiddlewareFn[];
+    handler: RouteHandler;
+}
 export declare class Router {
     private trie;
     private prefix;
     private routerMiddleware;
+    private entries;
     constructor(prefix?: string);
     /**
      * Register middleware that runs for all routes on this router.
@@ -64,6 +74,12 @@ export declare class Router {
      * Separates middleware from the final handler.
      */
     private register;
+    /**
+     * Every route registered on this router, in registration order.
+     * Paths include this router's prefix; middleware is the router-level
+     * middleware followed by the route's own (the order they run in).
+     */
+    routes(): RouteInfo[];
     /**
      * Match an incoming request to a registered route.
      * Returns the route entry and extracted params, or null if no match.

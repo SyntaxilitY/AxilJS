@@ -30,6 +30,16 @@ const node_os_1 = require("node:os");
 const job_1 = require("./job");
 const store_1 = require("./store");
 const logger_1 = require("./logger");
+/**
+ * Report a job payload to @axiljs/runtime's sensitive data lineage ('queue'
+ * sink) without depending on it. In enforce mode the hook throws and add()
+ * rejects before the job is stored.
+ */
+function checkSensitiveSink(data) {
+    const sink = globalThis[Symbol.for('axiljs.sensitive.sink')];
+    if (typeof sink === 'function')
+        sink('queue', data);
+}
 // ─── Queue ────────────────────────────────────────────────────────────────────
 class Queue extends events_1.EventEmitter {
     name;
@@ -85,6 +95,7 @@ class Queue extends events_1.EventEmitter {
      * @param options  Job options (delay, retry, priority, timeoutMs)
      */
     async add(jobName, data, options = {}) {
+        checkSensitiveSink(data);
         const job = (0, job_1.createJob)(this.name, jobName, data, options);
         if (this.backend) {
             await this.backend.enqueue(job);

@@ -17,6 +17,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authenticate = authenticate;
 exports.getUser = getUser;
+const marker_1 = require("./marker");
 const common_1 = require("@axiljs/common");
 /**
  * Extract token from request based on configured sources.
@@ -68,7 +69,7 @@ function extractToken(req, sources, cookieName = 'token', queryParam = 'token') 
 function authenticate(jwt, options = {}) {
     const { required = true, source = 'header', cookieName, queryParam, audience, issuer } = options;
     const sources = Array.isArray(source) ? source : [source];
-    return (req, res, next) => {
+    return (0, marker_1.markAuth)((req, res, next) => {
         const token = extractToken(req, sources, cookieName, queryParam);
         if (!token) {
             if (required) {
@@ -89,7 +90,7 @@ function authenticate(jwt, options = {}) {
         catch (error) {
             next(error instanceof Error ? error : new common_1.UnauthorizedError());
         }
-    };
+    }, 'authenticate');
 }
 /**
  * Get the authenticated user from request.

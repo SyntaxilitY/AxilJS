@@ -20,6 +20,17 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Response = void 0;
+/**
+ * Report a body to @axiljs/runtime's sensitive data lineage before it is
+ * sent, without depending on that package. In enforce mode the hook throws
+ * (IntentViolationError), which reaches the app's error handler through the
+ * handler's res.* call; nothing has been written yet.
+ */
+function checkSensitiveSink(body) {
+    const sink = globalThis[Symbol.for('axiljs.sensitive.sink')];
+    if (typeof sink === 'function')
+        sink('response', body);
+}
 class Response {
     raw;
     statusCode;
@@ -44,6 +55,7 @@ class Response {
     json(data) {
         if (this.sent)
             return;
+        checkSensitiveSink(data);
         // JSON.stringify(undefined) is undefined, which would crash below
         const body = JSON.stringify(data) ?? 'null';
         this.raw.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -54,6 +66,7 @@ class Response {
     text(data) {
         if (this.sent)
             return;
+        checkSensitiveSink(data);
         this.raw.setHeader('Content-Type', 'text/plain; charset=utf-8');
         this.raw.setHeader('Content-Length', Buffer.byteLength(data));
         this.raw.end(data);
@@ -62,6 +75,7 @@ class Response {
     html(data) {
         if (this.sent)
             return;
+        checkSensitiveSink(data);
         this.raw.setHeader('Content-Type', 'text/html; charset=utf-8');
         this.raw.setHeader('Content-Length', Buffer.byteLength(data));
         this.raw.end(data);
@@ -72,6 +86,7 @@ class Response {
             return;
         if (this.endWithoutBody())
             return;
+        checkSensitiveSink(data);
         const buffer = typeof data === 'string'
             ? Buffer.from(data)
             : data;
@@ -114,6 +129,7 @@ class Response {
     sendResponse(statusCode, code, message, data = {}) {
         if (this.sent)
             return;
+        checkSensitiveSink({ message, data });
         this.statusCode = statusCode;
         this.raw.statusCode = statusCode;
         if (this.endWithoutBody())

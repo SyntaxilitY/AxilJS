@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.requireRole = requireRole;
 exports.requirePermission = requirePermission;
 exports.requireOwnership = requireOwnership;
+const marker_1 = require("./marker");
 const common_1 = require("@axiljs/common");
 /**
  * Require the authenticated user to have one of the specified roles.
@@ -26,7 +27,7 @@ const common_1 = require("@axiljs/common");
  */
 function requireRole(roles) {
     const allowedRoles = Array.isArray(roles) ? roles : [roles];
-    return (req, res, next) => {
+    return (0, marker_1.markAuth)((req, res, next) => {
         const user = req.locals?.user;
         if (!user) {
             return next(new common_1.UnauthorizedError('Authentication required'));
@@ -43,7 +44,7 @@ function requireRole(roles) {
                 `Your role(s): ${userRoles.join(', ') || 'none'}`));
         }
         next();
-    };
+    }, 'requireRole');
 }
 /**
  * Require the authenticated user to have a specific permission.
@@ -52,7 +53,7 @@ function requireRole(roles) {
  * Permissions are strings like 'users:read', 'posts:create', 'admin:*'
  */
 function requirePermission(permission) {
-    return (req, res, next) => {
+    return (0, marker_1.markAuth)((req, res, next) => {
         const user = req.locals?.user;
         if (!user) {
             return next(new common_1.UnauthorizedError('Authentication required'));
@@ -76,7 +77,7 @@ function requirePermission(permission) {
             return next(new common_1.ForbiddenError(`Access denied. Required permission: ${permission}`));
         }
         next();
-    };
+    }, 'requirePermission');
 }
 /**
  * Ensure the authenticated user can only access their own resources.
@@ -86,7 +87,7 @@ function requirePermission(permission) {
  *   app.get('/users/:id/profile', authenticate(jwt), requireOwnership('id'), getProfile)
  */
 function requireOwnership(paramName = 'id') {
-    return (req, res, next) => {
+    return (0, marker_1.markAuth)((req, res, next) => {
         const user = req.locals?.user;
         if (!user) {
             return next(new common_1.UnauthorizedError('Authentication required'));
@@ -102,6 +103,6 @@ function requireOwnership(paramName = 'id') {
             return next(new common_1.ForbiddenError('You do not have permission to access this resource'));
         }
         next();
-    };
+    }, 'requireOwnership');
 }
 //# sourceMappingURL=rbac.js.map

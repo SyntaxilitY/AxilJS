@@ -542,7 +542,7 @@ function truncate(text: string, max: number): string {
 function renderCheck(summary: MigrationCheckSummary, heading = 'Migration safety'): void {
   ui.section(heading)
   if (summary.offline) {
-    ui.info('No database reachable', 'every migration is treated as pending')
+    ui.info('No database to compare against', 'every migration is treated as pending')
   }
   if (summary.migrations.length === 0) {
     ui.info(summary.scope === 'all' ? 'No migration files found' : 'No pending migrations to check')

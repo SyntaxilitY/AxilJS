@@ -83,7 +83,7 @@ describe('command specs and help', () => {
       const help = formatCommandHelp(spec).replace(/\x1b\[[0-9;]*m/g, '')
       expect(help).toContain(`axil ${spec.name}`)
       expect(help).toContain('Usage:')
-      expect(help).toContain(spec.usage)
+      for (const usage of spec.usage.split('\n')) expect(help).toContain(usage)
       expect(help).toContain('-h, --help')
       for (const f of spec.flags) expect(help).toContain(`--${f.name}`)
     }

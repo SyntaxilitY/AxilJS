@@ -7,7 +7,9 @@
  * Commands:
  *   axil create [name]           Create a new project (interactive picker)
  *   axil generate <kind> <name>  Generate module/controller/service/entity/migration
+ *   axil generate client         Generate a typed API client from an OpenAPI document
  *   axil migrate [up|down|status] Run database migrations
+ *   axil migrate --check         Check pending migrations for locking/breaking changes
  *   axil run                     Start development server
  *   axil build                   Build for production
  *   axil test                    Run tests
@@ -60,6 +62,7 @@ const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const create_1 = require("./commands/create");
 const generate_1 = require("./commands/generate");
+const generate_client_1 = require("./commands/generate-client");
 const migrate_1 = require("./commands/migrate");
 const args_1 = require("./args");
 const run_1 = require("./commands/run");
@@ -222,8 +225,24 @@ async function runCommand(name, parsed) {
         }
         case 'generate': {
             const [kind, resource] = pos;
+            if (kind === 'client') {
+                if (resource) {
+                    fail(`Unexpected argument '${resource}'.`, 'axil generate client [--from <url|file>] [--out <file>] [--name <Class>]');
+                }
+                await (0, generate_client_1.generateClient)({
+                    from: flagString(parsed, 'from'),
+                    out: flagString(parsed, 'out'),
+                    name: flagString(parsed, 'name'),
+                    force: flagBool(parsed, 'force')
+                });
+                break;
+            }
+            for (const only of ['from', 'out', 'name']) {
+                if (parsed.flags[only] !== undefined)
+                    fail(`--${only} only applies to 'axil generate client'.`);
+            }
             if (!kind || !resource) {
-                fail('Please provide what to generate and a name.', `axil generate <${generate_1.GENERATOR_KINDS.join('|')}> <name>`);
+                fail('Please provide what to generate and a name.', `axil generate <${generate_1.GENERATOR_KINDS.join('|')}> <name>  or  axil generate client`);
             }
             await (0, generate_1.generate)(kind, resource, {
                 force: flagBool(parsed, 'force'),
@@ -233,11 +252,36 @@ async function runCommand(name, parsed) {
             break;
         }
         case 'migrate': {
-            const action = pos[0] || 'up';
-            if (!migrate_1.MIGRATE_ACTIONS.includes(action)) {
-                fail(`Unknown migrate action '${action}'.`, 'axil migrate [up|down|status]');
+            let action = pos[0] || 'up';
+            const usage = 'axil migrate [up|down|status|check] [options]';
+            if (flagBool(parsed, 'check')) {
+                if (pos[0] && pos[0] !== 'check')
+                    fail(`--check cannot be combined with '${pos[0]}'.`, usage);
+                action = 'check';
             }
-            await (0, migrate_1.migrate)(action, { dir: flagString(parsed, 'dir') });
+            if (!migrate_1.MIGRATE_ACTIONS.includes(action)) {
+                fail(`Unknown migrate action '${action}'.`, usage);
+            }
+            if (pos.length > 1)
+                fail(`Unexpected argument '${pos[1]}'.`, usage);
+            if (action !== 'check') {
+                for (const only of ['all', 'json']) {
+                    if (parsed.flags[only] !== undefined)
+                        fail(`--${only} only applies to 'axil migrate --check'.`, usage);
+                }
+            }
+            if (action !== 'up' && parsed.flags.safety !== undefined) {
+                fail("--safety only applies to 'axil migrate up'.", usage);
+            }
+            const result = await (0, migrate_1.migrate)(action, {
+                dir: flagString(parsed, 'dir'),
+                safety: flagString(parsed, 'safety'),
+                all: flagBool(parsed, 'all'),
+                json: flagBool(parsed, 'json'),
+                largeTables: flagString(parsed, 'large-table')
+            });
+            if (result.exitCode !== 0)
+                process.exitCode = result.exitCode;
             break;
         }
         case 'run': {
@@ -320,9 +364,17 @@ async function runCommand(name, parsed) {
  * args.ts, so a command's summary only lives in one place.
  */
 const HELP_GROUPS = [
-    { title: 'Project', commands: [['create', 'create [name]'], ['generate', 'generate <kind> <name>'], ['install', 'install [packages…]']] },
+    { title: 'Project', commands: [
+            ['create', 'create [name]'],
+            ['generate', 'generate <kind> <name>'],
+            ['generate', 'generate client --from <url>', 'Generate a typed API client from an OpenAPI document'],
+            ['install', 'install [packages…]']
+        ] },
     { title: 'Develop', commands: [['run', 'run'], ['test', 'test [pattern]'], ['doctor', 'doctor']] },
-    { title: 'Database', commands: [['migrate', 'migrate [up|down|status]']] },
+    { title: 'Database', commands: [
+            ['migrate', 'migrate [up|down|status]'],
+            ['migrate', 'migrate --check', 'Check pending migrations for locking and breaking changes']
+        ] },
     { title: 'Ship', commands: [['build', 'build'], ['capacity', 'capacity'], ['deploy', 'deploy']] },
     { title: 'Inspect', commands: [['decorator', 'decorator <sub>'], ['verify', 'verify [pattern]']] }
 ];
@@ -350,10 +402,10 @@ function printHelp() {
     for (const group of HELP_GROUPS) {
         rows.push(['']);
         rows.push([ui.badge(group.title.toUpperCase(), 'muted')]);
-        for (const [name, label] of group.commands) {
+        for (const [name, label, summary] of group.commands) {
             const spec = (0, args_1.findCommand)(name);
-            const alias = spec?.aliases?.length ? ui.muted(`  (alias: ${spec.aliases.join(', ')})`) : '';
-            rows.push([`  ${ui.cmd(label)}`, (spec?.summary ?? '') + alias]);
+            const alias = spec?.aliases?.length && !summary ? ui.muted(`  (alias: ${spec.aliases.join(', ')})`) : '';
+            rows.push([`  ${ui.cmd(label)}`, (summary ?? spec?.summary ?? '') + alias]);
         }
     }
     ui.table(rows, { indent: 2, gap: 3 });

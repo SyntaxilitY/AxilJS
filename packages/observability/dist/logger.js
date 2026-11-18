@@ -40,6 +40,17 @@ const COLORS = {
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
 const BOLD = '\x1b[1m';
+/**
+ * Report an entry to @axiljs/runtime's sensitive data lineage ('log' sink)
+ * without depending on it. In enforce mode the hook throws before anything
+ * is written; Logger swallows transport errors, so the leaking entry is
+ * dropped and the violation recorded.
+ */
+function checkSensitiveSink(entry) {
+    const sink = globalThis[Symbol.for('axiljs.sensitive.sink')];
+    if (typeof sink === 'function')
+        sink('log', entry);
+}
 // ─── Console Transport ────────────────────────────────────────────────────────
 class ConsoleTransport {
     format;
@@ -47,6 +58,7 @@ class ConsoleTransport {
         this.format = format;
     }
     write(entry) {
+        checkSensitiveSink(entry);
         if (this.format === 'json') {
             console.log(JSON.stringify(entry));
             return;
@@ -93,6 +105,7 @@ class FileTransport {
         (0, fs_1.mkdirSync)(this.logDir, { recursive: true });
     }
     write(entry) {
+        checkSensitiveSink(entry);
         const line = JSON.stringify(entry) + '\n';
         (0, fs_1.appendFileSync)(this.logPath, line, 'utf-8');
     }
