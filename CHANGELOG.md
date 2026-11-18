@@ -2,6 +2,14 @@
 
 All notable changes to AxilJS are documented here. Versions apply to every `@axiljs/*` package; the packages are released together.
 
+## 0.4.2
+
+Maintenance release. Every `@axiljs/*` package is published at 0.4.2 with internal ranges set to `^0.4.2`, and `axil create` writes `^0.4.2` into new projects. No API changes since 0.4.0.
+
+## 0.4.1
+
+Version alignment release that completed the 0.4.0 line on npm: all packages at one version with matching internal ranges. No API changes since 0.4.0.
+
 ## 0.4.0
 
 Production confidence: sensitive data is tracked to every exit, API contracts are generated from the code, and risky migrations are stopped in CI.

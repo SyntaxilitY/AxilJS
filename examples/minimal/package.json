@@ -11,13 +11,13 @@
     "test": "axil test"
   },
   "dependencies": {
-    "@axiljs/config": "^0.4.0",
-    "@axiljs/core": "^0.4.0",
-    "@axiljs/validation": "^0.4.0"
+    "@axiljs/config": "^0.4.2",
+    "@axiljs/core": "^0.4.2",
+    "@axiljs/validation": "^0.4.2"
   },
   "devDependencies": {
-    "@axiljs/cli": "^0.4.0",
-    "@axiljs/testing": "^0.4.0",
+    "@axiljs/cli": "^0.4.2",
+    "@axiljs/testing": "^0.4.2",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   }

@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/studio",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Browser-based dev studio that opens automatically when axil run is used",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.4.1",
+    "@axiljs/common": "^0.4.2",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
