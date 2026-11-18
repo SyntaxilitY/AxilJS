@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "AxilJS CLI — axil create, run, build, test, deploy, capacity, doctor",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,8 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.4.0",
-    "@axiljs/scale": "^0.4.0"
+    "@axiljs/common": "^0.4.1",
+    "@axiljs/scale": "^0.4.1"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
