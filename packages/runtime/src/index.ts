@@ -86,6 +86,16 @@ export {
 } from './resilience';
 export type { CacheStore, LockProvider, RateLimitCounterStore } from './resilience';
 
+export {
+  trackSensitive,
+  checkSink,
+  allowSensitive,
+  configureLineage,
+  resetLineage,
+  trackedSensitiveOrigins
+} from './lineage';
+export type { SensitiveSink, SensitiveLeak, ObserveHint, LineageOptions } from './lineage';
+
 export { useStores } from './stores';
 export type { RuntimeStores } from './stores';
 

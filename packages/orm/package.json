@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/orm",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "AxilJS ORM — PostgreSQL, MySQL, SQLite with migrations and query builder",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.6"
+    "@axiljs/common": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

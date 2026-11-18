@@ -30,6 +30,16 @@ import { QueueStore, InMemoryQueueStore } from './store';
 import { QueueBackend } from './backend';
 import { QueueLoggerOption, LogSink, createLogSink } from './logger';
 
+/**
+ * Report a job payload to @axiljs/runtime's sensitive data lineage ('queue'
+ * sink) without depending on it. In enforce mode the hook throws and add()
+ * rejects before the job is stored.
+ */
+function checkSensitiveSink(data: unknown): void {
+  const sink = (globalThis as any)[Symbol.for('axiljs.sensitive.sink')];
+  if (typeof sink === 'function') sink('queue', data);
+}
+
 // ─── Queue Options ────────────────────────────────────────────────────────────
 
 export interface QueueOptions {
@@ -162,6 +172,7 @@ export class Queue extends EventEmitter {
     data: T,
     options: JobOptions = {}
   ): Promise<Job<T>> {
+    checkSensitiveSink(data);
     const job = createJob<T>(this.name, jobName, data, options);
 
     if (this.backend) {

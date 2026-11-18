@@ -11,6 +11,7 @@
 import { QueryBuilder }    from '../query/query-builder'
 import { getEntityMeta }   from './model-metadata'
 import { eagerLoad }       from '../relations/eager-loader'
+import { observeLoaded }   from '../connection/base-driver'
 import type { BaseDriver } from '../connection/base-driver'
 
 // ── Shared driver ─────────────────────────────────────────────────────────
@@ -504,6 +505,8 @@ export class BaseModel {
     ;(instance as Record<string, unknown>)['_original'] = { ...row }
     ;(instance as Record<string, unknown>)['_dirty']    = new Set<string>()
 
+    // Track tSensitive values for the request (sensitive data lineage)
+    observeLoaded(instance)
     return instance
   }
 }

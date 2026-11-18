@@ -25,6 +25,7 @@ import { QueryBuilder } from '../query-builder/query-builder';
 import { getEntityMetadata } from '../decorators/entity';
 import { eagerLoad } from '../relations/eager-loader';
 import { NotFoundError } from '@axiljs/common';
+import { observeLoaded } from '../connection/base-driver';
 
 /** Options accepted by the read methods of BaseRepository. */
 export interface FindOptions {
@@ -109,6 +110,7 @@ export class BaseRepository<T extends object> {
         driverType: this.driverType
       });
     }
+    observeLoaded(rows, this.EntityClass, getEntityMetadata(this.EntityClass)?.columns);
     return rows;
   }
 

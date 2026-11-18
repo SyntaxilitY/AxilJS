@@ -6,7 +6,7 @@ import { createProject } from '../src/commands/create'
 import { TEMPLATES, TEMPLATE_IDS, findTemplate } from '../src/templates'
 import { findCommand, formatCommandHelp } from '../src/args'
 
-const ctx = { name: 'demo', axilRange: '^0.3.0', cliVersion: '0.3.2' }
+const ctx = { name: 'demo', axilRange: '^0.3.7', cliVersion: '0.3.2' }
 
 let dir: string
 beforeEach(() => {
@@ -66,7 +66,7 @@ describe('template registry', () => {
           for (const m of content.matchAll(/from '(@axiljs\/[a-z-]+)'/g)) imported.add(m[1])
         }
         imported.delete('@axiljs/testing') // shared devDependency
-        for (const pkg of imported) expect(deps[pkg] ?? dev[pkg], `${t.id} imports ${pkg}`).toBe('^0.3.0')
+        for (const pkg of imported) expect(deps[pkg] ?? dev[pkg], `${t.id} imports ${pkg}`).toBe('^0.3.7')
         expect(files['.env.example']).not.toMatch(/sk-[A-Za-z0-9]{20,}|postgres(ql)?:\/\/[^:]+:[^@]{8,}@(?!localhost)/)
       })
     })
@@ -82,7 +82,7 @@ describe('shared state in multi-instance templates', () => {
 
       it('depends on @axiljs/stores, runtime, orm and a SQLite driver', () => {
         const deps = t.dependencies(ctx)
-        for (const pkg of ['@axiljs/stores', '@axiljs/runtime', '@axiljs/orm']) expect(deps[pkg], pkg).toBe('^0.3.0')
+        for (const pkg of ['@axiljs/stores', '@axiljs/runtime', '@axiljs/orm']) expect(deps[pkg], pkg).toBe('^0.3.7')
         expect(deps['better-sqlite3']).toBeDefined()
         expect(t.packages).toContain('@axiljs/stores')
       })

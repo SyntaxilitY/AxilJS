@@ -112,10 +112,11 @@ function getAxilJSVersion() {
     return pkg.version;
 }
 const axilVersion = getAxilJSVersion();
-// Range for sibling @axiljs/* packages. The CLI can be published at a newer
-// patch than the other packages (e.g. cli 0.3.2 vs core 0.3.2), so pin to the
-// minor line instead of the CLI's exact patch to keep `npm install` resolvable.
-const axilRange = `^${axilVersion.split('.').slice(0, 2).join('.')}.0`;
+// Range for sibling @axiljs/* packages. All packages are released together on
+// one version line, so a project gets at least the version of the CLI that
+// created it: templates use APIs (useStores, createSqlStores, …) that older
+// patches of the same minor line do not have.
+const axilRange = `^${axilVersion}`;
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------

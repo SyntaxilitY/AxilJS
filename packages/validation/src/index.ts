@@ -24,4 +24,17 @@ export type {
   Primitive
 } from './schema';
 
-export { validate } from './middleware';
+export { validate, VALIDATION_SCHEMAS } from './middleware';
+export type {
+  ValidateOptions,
+  ValidationSchemas,
+  ValidatedMiddleware
+} from './middleware';
+
+export { toJSONSchema, JSON_SCHEMA_DIALECT } from './json-schema';
+export type {
+  JSONSchema,
+  JSONSchemaType,
+  ToJSONSchemaOptions,
+  JSONSchemaConvertible
+} from './json-schema';

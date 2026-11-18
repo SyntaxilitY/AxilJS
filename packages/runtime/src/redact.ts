@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import { getMetadata } from '@axiljs/decorator';
 import type { TRedactOptions } from '@axiljs/decorator';
 import type { axilResponse, MiddlewareFn } from '@axiljs/common';
+import { checkSink, withSinkChecked } from './lineage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -148,6 +149,8 @@ export function redactResponses(options: RedactOptions = {}): MiddlewareFn {
 /**
  * Wrap any `{ write(entry) }` log transport (e.g. @axiljs/observability's
  * ConsoleTransport) so every entry is redacted before it is written.
+ * The redacted entry is then checked by sensitive data lineage ('log' sink):
+ * a tracked value that survives redaction is still reported.
  */
 export function redactingTransport<E extends object>(
   inner: { write(entry: E): void },
@@ -155,7 +158,10 @@ export function redactingTransport<E extends object>(
 ): { write(entry: E): void } {
   return {
     write(entry: E) {
-      inner.write(redact(entry, options));
+      const clean = redact(entry, options);
+      checkSink('log', clean);
+      // The inner transport may check 'log' itself; it was checked here already
+      withSinkChecked('log', () => inner.write(clean));
     }
   };
 }

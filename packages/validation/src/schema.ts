@@ -17,6 +17,8 @@
  *   }
  */
 
+import { JSONSchema, makeNullable } from './json-schema';
+
 // ─── Validation Result ────────────────────────────────────────────────────────
 
 export interface ValidationResult<T> {
@@ -186,6 +188,41 @@ export abstract class BaseValidator<T> {
     return value;
   }
 
+  /**
+   * This schema as JSON Schema 2020-12 (the dialect of OpenAPI 3.1).
+   * Describes the accepted input: optional() fields are left out of the
+   * parent object's `required`, nullable() adds 'null' to the type and
+   * default() becomes `default`. custom() and transform() are not
+   * representable and emit no constraint. See toJSONSchema() in
+   * json-schema.ts for the full mapping.
+   */
+  toJSONSchema(): JSONSchema {
+    let schema = this._jsonSchema();
+    if (this._nullable) schema = makeNullable(schema);
+    if (this._defaultValue !== undefined) {
+      schema = { ...schema, default: this._defaultValue };
+    }
+    return schema;
+  }
+
+  /**
+   * True if undefined is accepted (optional() or a default()), i.e. the
+   * field is not listed in its parent object's `required`.
+   * @internal Used by ObjectValidator.toJSONSchema()
+   */
+  _acceptsUndefined(): boolean {
+    return this._optional || this._defaultValue !== undefined;
+  }
+
+  /**
+   * Type-specific JSON Schema, before nullable/default are applied.
+   * Subclasses override this; the base emits {} (accepts anything).
+   * @internal
+   */
+  protected _jsonSchema(): JSONSchema {
+    return {};
+  }
+
   protected abstract validateType(value: unknown, path: string): ValidationError[];
 }
 
@@ -251,6 +288,17 @@ export class StringValidator extends BaseValidator<string> {
   protected _build(value: unknown): unknown {
     const out = super._build(value);
     return this._trim && typeof out === 'string' ? out.trim() : out;
+  }
+
+  protected _jsonSchema(): JSONSchema {
+    const schema: JSONSchema = { type: 'string' };
+    if (this._min !== undefined) schema.minLength = this._min;
+    if (this._max !== undefined) schema.maxLength = this._max;
+    if (this._pattern) schema.pattern = this._pattern.source;
+    // email() wins if both are set (a value has to satisfy both anyway)
+    if (this._urlMode) schema.format = 'uri';
+    if (this._emailMode) schema.format = 'email';
+    return schema;
   }
 
   protected validateType(value: unknown, path: string): ValidationError[] {
@@ -319,6 +367,18 @@ export class NumberValidator extends BaseValidator<number> {
   integer(): this { this._integer = true; return this; }
   positive(): this { this._positive = true; return this; }
 
+  /**
+   * Numeric strings are also accepted (see _coerce) but the schema keeps
+   * type number/integer - the type clients should send.
+   */
+  protected _jsonSchema(): JSONSchema {
+    const schema: JSONSchema = { type: this._integer ? 'integer' : 'number' };
+    if (this._min !== undefined) schema.minimum = this._min;
+    if (this._max !== undefined) schema.maximum = this._max;
+    if (this._positive) schema.exclusiveMinimum = 0;
+    return schema;
+  }
+
   /** Numeric strings (from query params / form data) become numbers. */
   protected _coerce(value: unknown): unknown {
     if (typeof value !== 'string' || value.trim() === '') return value;
@@ -360,6 +420,11 @@ export class NumberValidator extends BaseValidator<number> {
 // ─── Boolean Validator ────────────────────────────────────────────────────────
 
 export class BooleanValidator extends BaseValidator<boolean> {
+  /** 'true'/'false'/'1'/'0' are also accepted; the schema stays boolean. */
+  protected _jsonSchema(): JSONSchema {
+    return { type: 'boolean' };
+  }
+
   /** String booleans from query params / form data become booleans. */
   protected _coerce(value: unknown): unknown {
     if (value === 'true' || value === '1') return true;
@@ -425,6 +490,16 @@ export class ArrayValidator<T> extends BaseValidator<T[]> {
     if (!Array.isArray(value)) return value;
     return value.map(item => this.itemValidator._output(item));
   }
+
+  protected _jsonSchema(): JSONSchema {
+    const schema: JSONSchema = {
+      type: 'array',
+      items: this.itemValidator.toJSONSchema()
+    };
+    if (this._min !== undefined) schema.minItems = this._min;
+    if (this._max !== undefined) schema.maxItems = this._max;
+    return schema;
+  }
 }
 
 // ─── Object Validator ─────────────────────────────────────────────────────────
@@ -447,6 +522,22 @@ export class ObjectValidator<S extends SchemaShape> extends BaseValidator<InferS
   strip(): this {
     this._strip = true;
     return this;
+  }
+
+  /**
+   * Unknown keys are accepted in both modes (kept by default, removed by
+   * strip()), so additionalProperties is left unset (= allowed).
+   */
+  protected _jsonSchema(): JSONSchema {
+    const properties: Record<string, JSONSchema> = {};
+    const required: string[] = [];
+    for (const [key, validator] of Object.entries(this.shape)) {
+      properties[key] = validator.toJSONSchema();
+      if (!validator._acceptsUndefined()) required.push(key);
+    }
+    const schema: JSONSchema = { type: 'object', properties };
+    if (required.length > 0) schema.required = required;
+    return schema;
   }
 
   protected validateType(value: unknown, path: string): ValidationError[] {
@@ -506,6 +597,10 @@ export class EnumValidator<T extends string> extends BaseValidator<T> {
     super();
   }
 
+  protected _jsonSchema(): JSONSchema {
+    return { type: 'string', enum: [...this.values] };
+  }
+
   protected validateType(value: unknown, path: string): ValidationError[] {
     if (!this.values.includes(value as T)) {
       return [{
@@ -527,6 +622,15 @@ export class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
     super();
     // v.literal(null) must accept null
     if (expected === null) this._nullable = true;
+  }
+
+  protected _jsonSchema(): JSONSchema {
+    const value = this.expected;
+    if (value === null) return { type: 'null', const: null };
+    const type = typeof value === 'string' ? 'string'
+      : typeof value === 'boolean' ? 'boolean'
+      : Number.isInteger(value) ? 'integer' : 'number';
+    return { type, const: value };
   }
 
   protected validateType(value: unknown, path: string): ValidationError[] {
@@ -552,6 +656,10 @@ export class UnionValidator<T> extends BaseValidator<T> {
     if (options.some(option => option._validate(null, 'root').length === 0)) {
       this._nullable = true;
     }
+  }
+
+  protected _jsonSchema(): JSONSchema {
+    return { anyOf: this.options.map(option => option.toJSONSchema()) };
   }
 
   /** The first option that accepts value, or undefined. */
@@ -582,6 +690,13 @@ export class UnionValidator<T> extends BaseValidator<T> {
 export class RecordValidator<T> extends BaseValidator<Record<string, T>> {
   constructor(private valueValidator: BaseValidator<T>) {
     super();
+  }
+
+  protected _jsonSchema(): JSONSchema {
+    return {
+      type: 'object',
+      additionalProperties: this.valueValidator.toJSONSchema()
+    };
   }
 
   protected validateType(value: unknown, path: string): ValidationError[] {

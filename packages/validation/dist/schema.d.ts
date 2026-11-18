@@ -16,6 +16,7 @@
  *     res.status(422).json({ errors: result.errors })
  *   }
  */
+import { JSONSchema } from './json-schema';
 export interface ValidationResult<T> {
     success: boolean;
     data?: T;
@@ -84,6 +85,27 @@ export declare abstract class BaseValidator<T> {
      * @internal
      */
     protected _coerce(value: unknown): unknown;
+    /**
+     * This schema as JSON Schema 2020-12 (the dialect of OpenAPI 3.1).
+     * Describes the accepted input: optional() fields are left out of the
+     * parent object's `required`, nullable() adds 'null' to the type and
+     * default() becomes `default`. custom() and transform() are not
+     * representable and emit no constraint. See toJSONSchema() in
+     * json-schema.ts for the full mapping.
+     */
+    toJSONSchema(): JSONSchema;
+    /**
+     * True if undefined is accepted (optional() or a default()), i.e. the
+     * field is not listed in its parent object's `required`.
+     * @internal Used by ObjectValidator.toJSONSchema()
+     */
+    _acceptsUndefined(): boolean;
+    /**
+     * Type-specific JSON Schema, before nullable/default are applied.
+     * Subclasses override this; the base emits {} (accepts anything).
+     * @internal
+     */
+    protected _jsonSchema(): JSONSchema;
     protected abstract validateType(value: unknown, path: string): ValidationError[];
 }
 export declare class StringValidator extends BaseValidator<string> {
@@ -103,6 +125,7 @@ export declare class StringValidator extends BaseValidator<string> {
      */
     trim(): this;
     protected _build(value: unknown): unknown;
+    protected _jsonSchema(): JSONSchema;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
 export declare class NumberValidator extends BaseValidator<number> {
@@ -114,11 +137,18 @@ export declare class NumberValidator extends BaseValidator<number> {
     max(value: number): this;
     integer(): this;
     positive(): this;
+    /**
+     * Numeric strings are also accepted (see _coerce) but the schema keeps
+     * type number/integer - the type clients should send.
+     */
+    protected _jsonSchema(): JSONSchema;
     /** Numeric strings (from query params / form data) become numbers. */
     protected _coerce(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
 export declare class BooleanValidator extends BaseValidator<boolean> {
+    /** 'true'/'false'/'1'/'0' are also accepted; the schema stays boolean. */
+    protected _jsonSchema(): JSONSchema;
     /** String booleans from query params / form data become booleans. */
     protected _coerce(value: unknown): unknown;
     protected validateType(value: unknown, path: string): ValidationError[];
@@ -132,6 +162,7 @@ export declare class ArrayValidator<T> extends BaseValidator<T[]> {
     max(length: number): this;
     protected validateType(value: unknown, path: string): ValidationError[];
     protected _build(value: unknown): unknown;
+    protected _jsonSchema(): JSONSchema;
 }
 export type SchemaShape = Record<string, BaseValidator<any>>;
 export type InferShape<S extends SchemaShape> = {
@@ -145,6 +176,11 @@ export declare class ObjectValidator<S extends SchemaShape> extends BaseValidato
      * Remove fields not defined in the schema.
      */
     strip(): this;
+    /**
+     * Unknown keys are accepted in both modes (kept by default, removed by
+     * strip()), so additionalProperties is left unset (= allowed).
+     */
+    protected _jsonSchema(): JSONSchema;
     protected validateType(value: unknown, path: string): ValidationError[];
     parse(value: unknown): ValidationResult<InferShape<S>>;
     protected _build(value: unknown): unknown;
@@ -152,18 +188,21 @@ export declare class ObjectValidator<S extends SchemaShape> extends BaseValidato
 export declare class EnumValidator<T extends string> extends BaseValidator<T> {
     private values;
     constructor(values: T[]);
+    protected _jsonSchema(): JSONSchema;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
 export type Primitive = string | number | boolean | null;
 export declare class LiteralValidator<T extends Primitive> extends BaseValidator<T> {
     private expected;
     constructor(expected: T);
+    protected _jsonSchema(): JSONSchema;
     protected validateType(value: unknown, path: string): ValidationError[];
 }
 export type InferValidator<V> = V extends BaseValidator<infer U> ? U : never;
 export declare class UnionValidator<T> extends BaseValidator<T> {
     private options;
     constructor(options: BaseValidator<any>[]);
+    protected _jsonSchema(): JSONSchema;
     /** The first option that accepts value, or undefined. */
     private matching;
     protected validateType(value: unknown, path: string): ValidationError[];
@@ -172,6 +211,7 @@ export declare class UnionValidator<T> extends BaseValidator<T> {
 export declare class RecordValidator<T> extends BaseValidator<Record<string, T>> {
     private valueValidator;
     constructor(valueValidator: BaseValidator<T>);
+    protected _jsonSchema(): JSONSchema;
     protected validateType(value: unknown, path: string): ValidationError[];
     protected _build(value: unknown): unknown;
 }

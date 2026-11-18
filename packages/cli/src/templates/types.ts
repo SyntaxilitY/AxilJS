@@ -14,7 +14,7 @@
 export interface TemplateContext {
   /** Project (directory and package) name. */
   name: string
-  /** Semver range for sibling @axiljs/* packages, e.g. "^0.3.0". */
+  /** Semver range for sibling @axiljs/* packages, e.g. "^0.3.7". */
   axilRange: string
   /** Version of the CLI creating the project, e.g. "0.3.2". */
   cliVersion: string

@@ -93,12 +93,24 @@ const RESET = '\x1b[0m';
 const DIM   = '\x1b[2m';
 const BOLD  = '\x1b[1m';
 
+/**
+ * Report an entry to @axiljs/runtime's sensitive data lineage ('log' sink)
+ * without depending on it. In enforce mode the hook throws before anything
+ * is written; Logger swallows transport errors, so the leaking entry is
+ * dropped and the violation recorded.
+ */
+function checkSensitiveSink(entry: LogEntry): void {
+  const sink = (globalThis as any)[Symbol.for('axiljs.sensitive.sink')];
+  if (typeof sink === 'function') sink('log', entry);
+}
+
 // ─── Console Transport ────────────────────────────────────────────────────────
 
 export class ConsoleTransport implements Transport {
   constructor(private format: 'pretty' | 'json' = 'pretty') {}
 
   write(entry: LogEntry): void {
+    checkSensitiveSink(entry);
     if (this.format === 'json') {
       console.log(JSON.stringify(entry));
       return;
@@ -149,6 +161,7 @@ export class FileTransport implements Transport {
   }
 
   write(entry: LogEntry): void {
+    checkSensitiveSink(entry);
     const line = JSON.stringify(entry) + '\n';
     appendFileSync(this.logPath, line, 'utf-8');
   }

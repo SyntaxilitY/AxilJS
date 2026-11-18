@@ -321,9 +321,20 @@ function finalError(err: unknown, opts: HttpRequestOptions): Error {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
+ * Report a request body to @axiljs/runtime's sensitive data lineage ('ai'
+ * sink) without depending on it. In enforce mode the hook throws before the
+ * request is sent.
+ */
+function checkSensitiveSink(body: unknown): void {
+  const sink = (globalThis as any)[Symbol.for('axiljs.sensitive.sink')];
+  if (typeof sink === 'function') sink('ai', body);
+}
+
+/**
  * POST JSON and parse a JSON response, retrying transient failures.
  */
 export async function requestJson(opts: HttpRequestOptions): Promise<any> {
+  checkSensitiveSink(opts.body);
   const maxRetries = Math.max(0, opts.maxRetries ?? DEFAULT_MAX_RETRIES);
   const { signal, cleanup } = linkSignal(opts.label, opts.signal, opts.timeoutMs);
 
@@ -369,6 +380,7 @@ export async function requestJson(opts: HttpRequestOptions): Promise<any> {
  * first line is yielded. Breaking out of the loop tears the request down.
  */
 export async function* requestLines(opts: HttpRequestOptions): AsyncGenerator<string, void, unknown> {
+  checkSensitiveSink(opts.body);
   const maxRetries = Math.max(0, opts.maxRetries ?? DEFAULT_MAX_RETRIES);
   const { signal, cleanup } = linkSignal(opts.label, opts.signal, opts.timeoutMs);
 

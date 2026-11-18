@@ -114,6 +114,23 @@ function reportQuery(sql: string): void {
 }
 
 /**
+ * Hand loaded rows or entities to @axiljs/runtime's sensitive data lineage
+ * (tSensitive / tRedact values are tracked for the rest of the request)
+ * without depending on it. No-op when the runtime is not loaded.
+ */
+export function observeLoaded(
+  value: unknown,
+  entity?: Function,
+  columns?: Map<string, { columnName: string }>
+): void {
+  const observe = (globalThis as any)[Symbol.for('axiljs.sensitive.observe')];
+  if (typeof observe !== 'function' || value === null || value === undefined) return;
+  const names: Record<string, string> = {};
+  if (columns) for (const [prop, col] of columns) names[prop] = col.columnName;
+  observe(value, { entity, columns: names });
+}
+
+/**
  * Transaction context passed to the transaction work function.
  * Has the same query interface as the driver but is scoped to the transaction.
  */

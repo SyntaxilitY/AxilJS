@@ -46,6 +46,16 @@ import {
   EmitOptions
 } from './types';
 
+/**
+ * Report a payload to @axiljs/runtime's sensitive data lineage ('event'
+ * sink) without depending on it. In enforce mode the hook throws and emit()
+ * rejects before any handler runs.
+ */
+function checkSensitiveSink(payload: unknown): void {
+  const sink = (globalThis as any)[Symbol.for('axiljs.sensitive.sink')];
+  if (typeof sink === 'function') sink('event', payload);
+}
+
 export class EventBus {
   // Map of event type → array of handlers
   // Supports wildcard patterns like 'user.*'
@@ -227,6 +237,7 @@ export class EventBus {
     payload: T,
     meta: EmitOptions = {}
   ): Promise<void> {
+    checkSensitiveSink(payload);
     const { broadcast, ...eventMeta } = meta;
     const shouldBroadcast = broadcast ?? this.broadcastByDefault;
 

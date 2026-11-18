@@ -339,6 +339,11 @@ export function warn(message: string, details?: string): void {
   out(marked(c.yellow(rail.warn), c.yellow(sym.warn), withDetails(c.yellow(message), details)))
 }
 
+/** A failed item that does not end the flow (the rail stays open). */
+export function problem(message: string, details?: string): void {
+  out(marked(c.red(rail.error), c.red(sym.cross), withDetails(c.red(message), details)))
+}
+
 /** An in-progress or neutral step. */
 export function step(message: string, details?: string): void {
   out(marked(muted(rail.pending), muted(sym.arrow), withDetails(message, details)))

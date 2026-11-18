@@ -37,6 +37,25 @@ interface RouteEntry {
   method: string;
 }
 
+// ─── Route Info ───────────────────────────────────────────────────────────────
+
+/**
+ * A registered route, as reported by router.routes() / app.routes().
+ */
+export interface RouteInfo {
+  // HTTP method ('GET', 'POST', …) or '*' for routes registered with all()
+  method: string;
+
+  // Route path with :params (and * wildcards), prefixes applied
+  path: string;
+
+  // Middleware that runs before the handler, in execution order
+  middleware: MiddlewareFn[];
+
+  // The final route handler
+  handler: RouteHandler;
+}
+
 // ─── Router ───────────────────────────────────────────────────────────────────
 
 export class Router {
@@ -49,10 +68,14 @@ export class Router {
   // Middleware applied to all routes on this router
   private routerMiddleware: MiddlewareFn[];
 
+  // Registered routes in registration order (for introspection)
+  private entries: RouteEntry[];
+
   constructor(prefix: string = '') {
     this.trie = new Trie<RouteEntry>();
     this.prefix = prefix;
     this.routerMiddleware = [];
+    this.entries = [];
   }
 
   /**
@@ -163,14 +186,38 @@ export class Router {
     // Combine router prefix with route path
     const fullPath = this.normalizePath(this.prefix + path);
 
-    this.trie.insert(method, fullPath, {
+    const entry: RouteEntry = {
       handler,
       middleware,
       path: fullPath,
       method
-    });
+    };
+    this.trie.insert(method, fullPath, entry);
+
+    // Re-registering the same method + path shape replaces the route in the
+    // trie (param names don't matter there), so replace it here too
+    const shape = routeShape(method, fullPath);
+    const existing = this.entries.findIndex(
+      e => routeShape(e.method, e.path) === shape
+    );
+    if (existing >= 0) this.entries[existing] = entry;
+    else this.entries.push(entry);
 
     return this;
+  }
+
+  /**
+   * Every route registered on this router, in registration order.
+   * Paths include this router's prefix; middleware is the router-level
+   * middleware followed by the route's own (the order they run in).
+   */
+  routes(): RouteInfo[] {
+    return this.entries.map(entry => ({
+      method: entry.method,
+      path: entry.path,
+      middleware: [...this.routerMiddleware, ...entry.middleware],
+      handler: entry.handler
+    }));
   }
 
   /**
@@ -217,4 +264,9 @@ export class Router {
 
     return path;
   }
+}
+
+/** Method + path with param names erased ('GET /users/:') - the trie's identity for a route. */
+function routeShape(method: string, path: string): string {
+  return method.toUpperCase() + ' ' + path.replace(/:[^/]+/g, ':');
 }

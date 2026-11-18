@@ -16,14 +16,21 @@
  *   app.post('/users', validate({ body: createUserSchema }), createUser)
  */
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.VALIDATION_SCHEMAS = void 0;
 exports.validate = validate;
 const common_1 = require("@axiljs/common");
+/**
+ * Well-known key under which validate() middleware exposes its schemas.
+ * Symbol.for() so tools can read it without importing this package
+ * (e.g. generateOpenAPI() in @axiljs/core).
+ */
+exports.VALIDATION_SCHEMAS = Symbol.for('axiljs.validation.schemas');
 /**
  * Create validation middleware.
  * Validated data replaces the original (includes transforms like trim).
  */
 function validate(options) {
-    return (req, res, next) => {
+    const middleware = (req, res, next) => {
         const allErrors = [];
         // Validate body
         if (options.body) {
@@ -61,5 +68,17 @@ function validate(options) {
         }
         next();
     };
+    // Expose the schemas (behaviour unchanged): only the locations given
+    const schemas = {};
+    if (options.body)
+        schemas.body = options.body;
+    if (options.params)
+        schemas.params = options.params;
+    if (options.query)
+        schemas.query = options.query;
+    Object.freeze(schemas);
+    Object.defineProperty(middleware, 'schemas', { value: schemas, enumerable: false });
+    Object.defineProperty(middleware, exports.VALIDATION_SCHEMAS, { value: schemas, enumerable: false });
+    return middleware;
 }
 //# sourceMappingURL=middleware.js.map

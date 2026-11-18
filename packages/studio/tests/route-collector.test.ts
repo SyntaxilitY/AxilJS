@@ -35,3 +35,93 @@ describe('route argument parsing', () => {
     expect(middlewareName('(req, res, next) => next()')).toBe('inline');
   });
 });
+
+// ─── Mount prefixes ───────────────────────────────────────────────────────────
+
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { RouteCollector, joinPath, collectMounts } from '../src/collectors/route-collector';
+
+function project(files: Record<string, string>) {
+  const dir = mkdtempSync(join(tmpdir(), 'axil-routes-'));
+  for (const [name, body] of Object.entries(files)) {
+    mkdirSync(join(dir, 'src', name, '..'), { recursive: true });
+    writeFileSync(join(dir, 'src', name), body);
+  }
+  const paths = new RouteCollector(dir).collect().routes.map(r => `${r.method} ${r.path}`);
+  rmSync(dir, { recursive: true, force: true });
+  return paths;
+}
+
+describe('mount prefixes', () => {
+  it('joins prefixes and paths', () => {
+    expect(joinPath('/auth', '/register')).toBe('/auth/register');
+    expect(joinPath('/products/', '/:id')).toBe('/products/:id');
+    expect(joinPath('/products', '/')).toBe('/products');
+    expect(joinPath('', '/health')).toBe('/health');
+  });
+
+  it('collects mounts of factories and router variables', () => {
+    const m = collectMounts([`app.mount('/auth', authRoutes({ users }))\napp.mount('/users', usersRouter)`]);
+    expect(m.get('authRoutes')).toEqual(['/auth']);
+    expect(m.get('usersRouter')).toEqual(['/users']);
+  });
+
+  it('applies app.mount prefixes to routes defined in router factories (rest-api template layout)', () => {
+    const paths = project({
+      'app.ts': `
+        app.get('/health', h)
+        app.mount('/auth', authRoutes({ users, jwt }))
+        app.mount('/products', productRoutes({ products }))`,
+      'routes/auth.ts': `
+        export function authRoutes(deps) {
+          const router = new Router()
+          router.post('/register', validate({ body: B }), async (req, res) => {})
+          router.get('/me', authenticate(jwt), async (req, res) => {})
+          return router
+        }`,
+      'routes/products.ts': `
+        export function productRoutes({ products }) {
+          const router = new Router()
+          router.get('/', list)
+          router.get('/:id', get)
+          router.delete('/:id', requireAuth, remove)
+          return router
+        }`,
+    });
+    expect(paths).toEqual(expect.arrayContaining([
+      'GET /health', 'POST /auth/register', 'GET /auth/me',
+      'GET /products', 'GET /products/:id', 'DELETE /products/:id',
+    ]));
+    expect(paths).not.toContain('POST /register');
+  });
+
+  it('handles mounted router variables, baked prefixes and unmounted routers', () => {
+    const paths = project({
+      'app.ts': `app.mount('/users', usersRouter)\napp.mount('/v1', adminRouter)`,
+      'users.ts': `export const usersRouter = new Router()\nusersRouter.get('/:id', show)`,
+      'admin.ts': `export const adminRouter = new Router('/admin')\nadminRouter.get('/stats', stats)`,
+      'loose.ts': `const router = new Router()\nrouter.get('/ping', ping)`,
+    });
+    expect(paths).toEqual(expect.arrayContaining(['GET /users/:id', 'GET /v1/admin/stats', 'GET /ping']));
+  });
+
+  it('lists a router mounted twice under both prefixes', () => {
+    const paths = project({
+      'app.ts': `app.mount('/v1', api())\napp.mount('/v2', api())`,
+      'api.ts': `export function api() { const router = new Router(); router.get('/items', items); return router }`,
+    });
+    expect(paths).toEqual(expect.arrayContaining(['GET /v1/items', 'GET /v2/items']));
+  });
+});
+
+describe('baked router prefixes', () => {
+  it('does not double a prefix that matches the mount point', () => {
+    const paths = project({
+      'app.ts': `app.mount('/users', usersRouter)`,
+      'users.ts': `export const usersRouter = new Router('/users')\nusersRouter.get('/:id', show)`,
+    });
+    expect(paths).toContain('GET /users/:id');
+  });
+});

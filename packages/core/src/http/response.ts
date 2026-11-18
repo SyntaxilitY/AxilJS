@@ -21,6 +21,17 @@
 import { ServerResponse } from 'http';
 import { axilResponse } from '@axiljs/common';
 
+/**
+ * Report a body to @axiljs/runtime's sensitive data lineage before it is
+ * sent, without depending on that package. In enforce mode the hook throws
+ * (IntentViolationError), which reaches the app's error handler through the
+ * handler's res.* call; nothing has been written yet.
+ */
+function checkSensitiveSink(body: unknown): void {
+  const sink = (globalThis as any)[Symbol.for('axiljs.sensitive.sink')];
+  if (typeof sink === 'function') sink('response', body);
+}
+
 export class Response implements axilResponse {
   public raw: ServerResponse;
   public statusCode: number;
@@ -49,6 +60,7 @@ export class Response implements axilResponse {
 
   json(data: unknown): void {
     if (this.sent) return;
+    checkSensitiveSink(data);
 
     // JSON.stringify(undefined) is undefined, which would crash below
     const body = JSON.stringify(data) ?? 'null';
@@ -69,6 +81,7 @@ export class Response implements axilResponse {
 
   text(data: string): void {
     if (this.sent) return;
+    checkSensitiveSink(data);
 
     this.raw.setHeader(
       'Content-Type',
@@ -86,6 +99,7 @@ export class Response implements axilResponse {
 
   html(data: string): void {
     if (this.sent) return;
+    checkSensitiveSink(data);
 
     this.raw.setHeader(
       'Content-Type',
@@ -105,6 +119,7 @@ export class Response implements axilResponse {
     if (this.sent) return;
 
     if (this.endWithoutBody()) return;
+    checkSensitiveSink(data);
 
     const buffer =
       typeof data === 'string'
@@ -163,6 +178,7 @@ export class Response implements axilResponse {
     data: unknown = {}
   ): void {
     if (this.sent) return;
+    checkSensitiveSink({ message, data });
 
     this.statusCode = statusCode;
     this.raw.statusCode = statusCode;

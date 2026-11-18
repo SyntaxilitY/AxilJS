@@ -1,6 +1,6 @@
 {
   "name": "@axiljs/circuit",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "AxilJS circuit breaker, retry utilities, and timeout wrapper",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@axiljs/common": "^0.3.6"
+    "@axiljs/common": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

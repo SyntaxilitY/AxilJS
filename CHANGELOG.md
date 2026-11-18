@@ -2,6 +2,13 @@
 
 All notable changes to AxilJS are documented here. Versions apply to every `@axiljs/*` package; the packages are released together.
 
+## 0.3.7
+
+### Fixed
+
+- **Studio showed mounted routes without their prefix.** Routes defined on a router that is mounted with `app.mount('/auth', authRoutes(...))` were listed as `/register` instead of `/auth/register`, so "Send" in the API explorer returned 404. Studio now applies `app.mount` prefixes to router factories and router variables, combines them with prefixes given to `new Router('/x')`, and lists a router mounted twice under both prefixes. Affects projects created from the `rest-api` template and any app that mounts routers.
+- **New projects depend on the CLI's own version.** `axil create` wrote `^0.3.0` for every `@axiljs/*` package, which allowed older patches without APIs the templates use (`useStores`, `createSqlStores`). Projects now get `^<cli version>`, for example `^0.3.7`.
+
 ## 0.3.6
 
 Shared state is now part of the standard setup: one call makes idempotency, cache, locks, rate limits and AI budgets work correctly across several servers.

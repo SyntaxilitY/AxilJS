@@ -30,7 +30,13 @@ import {
 
 import { Request } from './http/request';
 import { Response } from './http/response';
-import { Router } from './router/router';
+import { Router, RouteInfo } from './router/router';
+import {
+  generateOpenAPI,
+  excludeFromOpenAPI,
+  OpenAPIOptions,
+  OpenAPIDocument
+} from './openapi';
 import { MiddlewareChain } from './middleware/chain';
 import { requestLogger } from './middleware/logger';
 import { bodyParser } from './middleware/body-parser';
@@ -99,6 +105,20 @@ export function parseByteSize(size: string | number): number {
   };
 
   return Math.floor(parseFloat(match[1]) * units[(match[2] || 'b').toLowerCase()]);
+}
+
+/**
+ * The URL path of a mounted router's route, mirroring findRoute(): the
+ * mount prefix is prepended unless the route path already starts with it
+ * (prefix baked into the Router, matched via the full-path fallback).
+ * @internal
+ */
+export function mountedPath(prefix: string, routePath: string): string {
+  let base = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+  if (!base) return routePath;
+  if (!base.startsWith('/')) base = '/' + base;
+  if (routePath === base || routePath.startsWith(base + '/')) return routePath;
+  return routePath === '/' ? base : base + routePath;
 }
 
 export class Application {
@@ -248,6 +268,89 @@ export class Application {
   mount(prefix: string, router: Router): Application {
     this.mountedRouters.push({ prefix, router });
     return this;
+  }
+
+  // ─── Introspection & OpenAPI ─────────────────────────────────────────────────
+
+  /**
+   * Every registered route, in matching order: the app's own routes, then
+   * each mounted router's (in mount order). A method + path that an
+   * earlier source already serves is reported once, as the runtime does.
+   *
+   * - path: the URL a client requests. App routes include config.prefix;
+   *   mounted routes get the mount prefix + the router's own prefix (the
+   *   app prefix does not apply to mounted routers at runtime). A router
+   *   whose prefix already starts with the mount prefix (new Router('/users')
+   *   mounted at '/users') is reported without doubling it.
+   * - middleware: global middleware, router middleware, route middleware -
+   *   the order they run in (error handlers excluded).
+   * - method: 'GET', 'POST', … or '*' for all() routes.
+   */
+  routes(): RouteInfo[] {
+    const global = this.globalMiddleware;
+    const seen = new Set<string>();
+    const out: RouteInfo[] = [];
+
+    const add = (route: RouteInfo, path: string): void => {
+      const key = route.method.toUpperCase() + ' ' + path.replace(/:[^/]+/g, ':');
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({
+        method: route.method,
+        path,
+        middleware: [...global, ...route.middleware],
+        handler: route.handler
+      });
+    };
+
+    for (const route of this.router.routes()) add(route, route.path);
+
+    for (const { prefix, router } of this.mountedRouters) {
+      for (const route of router.routes()) {
+        add(route, mountedPath(prefix, route.path));
+      }
+    }
+
+    return out;
+  }
+
+  /**
+   * Generate an OpenAPI 3.1 document for the current routes.
+   * See generateOpenAPI() in openapi.ts for what is emitted.
+   */
+  openapi(options: OpenAPIOptions): OpenAPIDocument {
+    return generateOpenAPI(this, options);
+  }
+
+  /**
+   * Serve the OpenAPI document as JSON with a GET route
+   * (default path '/openapi.json'; config.prefix applies like any app route).
+   * The document is generated on the first request and cached, so register
+   * this after - or at least before the first request reaches - your routes.
+   * The route itself is left out of the document.
+   *
+   *   app.serveOpenAPI({ title: 'Shop API', version: '1.0.0' })
+   *   app.serveOpenAPI('/docs/openapi.json', { title: 'Shop API', version: '1.0.0' })
+   */
+  serveOpenAPI(options: OpenAPIOptions): Application;
+  serveOpenAPI(path: string, options: OpenAPIOptions): Application;
+  serveOpenAPI(
+    pathOrOptions: string | OpenAPIOptions,
+    maybeOptions?: OpenAPIOptions
+  ): Application {
+    const path = typeof pathOrOptions === 'string' ? pathOrOptions : '/openapi.json';
+    const options = typeof pathOrOptions === 'string' ? maybeOptions : pathOrOptions;
+    if (!options || typeof options !== 'object') {
+      throw new TypeError('serveOpenAPI() needs options: { title, version }');
+    }
+
+    let cached: OpenAPIDocument | undefined;
+    const handler: RouteHandler = (_req, res) => {
+      if (!cached) cached = this.openapi(options);
+      res.json(cached);
+    };
+
+    return this.get(path, excludeFromOpenAPI(handler));
   }
 
   // ─── Request Handling ────────────────────────────────────────────────────────

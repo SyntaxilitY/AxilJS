@@ -31,16 +31,23 @@ export class RouteCollector {
     }
 
     const files = this.scanFiles(srcDir)
-
+    const sources: string[] = []
     for (const file of files) {
       try {
-        const content = readFileSync(file, 'utf-8')
-        this.extractRoutes(content, routes)
-        this.extractWebSockets(content, websockets)
-        this.extractSSE(content, sse)
+        sources.push(readFileSync(file, 'utf-8'))
       } catch {
         // Skip unreadable files
       }
+    }
+
+    // app.mount('/auth', authRoutes(...)) anywhere in src/ puts every route
+    // of authRoutes / authRouter under /auth, so collect the mounts first
+    const mounts = collectMounts(sources)
+
+    for (const content of sources) {
+      this.extractRoutes(content, routes, mounts)
+      this.extractWebSockets(content, websockets)
+      this.extractSSE(content, sse)
     }
 
     // Deduplicate routes
@@ -78,19 +85,29 @@ export class RouteCollector {
     return results
   }
 
-  private extractRoutes(content: string, routes: RouteInfo[]): void {
+  private extractRoutes(content: string, routes: RouteInfo[], mounts: Map<string, string[]> = new Map()): void {
     // Match: app.get('/path', handler)
-    // Match: router.post('/path', middleware, handler)
+    // Match: router.post('/path', middleware, handler)  (also usersRouter, api, …Routes)
     // Match: this.register(app) patterns
     const pattern = new RegExp(
-      `(?:app|router|this)\\.(${HTTP_METHODS.join('|')})\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`,
-      'gi'
+      `\\b(app|this|api|(?:[A-Za-z_$][\\w$]*)?[Rr]outer|(?:[A-Za-z_$][\\w$]*)?[Rr]outes?)\\.(${HTTP_METHODS.join('|')})\\s*\\(\\s*['"\`]([^'"\`]+)['"\`]`,
+      'g'
     )
+
+    // Routers created with the prefix built in: const r = new Router('/users')
+    const baked = new Map<string, string>()
+    for (const m of content.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*new\s+Router\s*\(\s*['"`]([^'"`]+)['"`]/g)) {
+      baked.set(m[1], m[2])
+    }
+
+    // Declarations in this file that something mounts (function authRoutes / const usersRouter)
+    const owners = declarationsOf(content, mounts)
 
     let match: RegExpExecArray | null
     while ((match = pattern.exec(content)) !== null) {
-      const method = match[1].toUpperCase()
-      const path   = match[2]
+      const receiver = match[1]
+      const method   = match[2].toUpperCase()
+      const path     = match[3]
 
       // Skip obviously wrong matches
       if (path.length > 200) continue
@@ -99,12 +116,15 @@ export class RouteCollector {
       // Arguments of THIS call only: (path, ...middleware, handler)
       const args = callArguments(content, content.indexOf('(', match.index))
       const rest = args.slice(1)
-      routes.push({
+      const info = {
         method,
-        path,
         handler:    rest.length ? handlerName(rest[rest.length - 1]) : 'anonymous',
         middleware: rest.slice(0, -1).map(middlewareName).filter((m): m is string => m !== null)
-      })
+      }
+
+      for (const prefix of prefixesFor(receiver, match.index, baked, mounts, owners)) {
+        routes.push({ ...info, path: joinPath(prefix, path) })
+      }
     }
   }
 
@@ -158,6 +178,76 @@ export class RouteCollector {
     }
   }
 
+}
+
+// ─── Mount prefixes ───────────────────────────────────────────────────────────
+
+/**
+ * `app.mount('/auth', authRoutes(deps))` and `app.mount('/users', usersRouter)`
+ * across all sources → { authRoutes: ['/auth'], usersRouter: ['/users'] }.
+ * A router mounted twice gets both prefixes.
+ */
+export function collectMounts(sources: string[]): Map<string, string[]> {
+  const mounts = new Map<string, string[]>()
+  const pattern = /\.mount\s*\(\s*['"`]([^'"`]*)['"`]\s*,\s*([A-Za-z_$][\w$]*)/g
+  for (const src of sources) {
+    for (const m of src.matchAll(pattern)) {
+      const list = mounts.get(m[2]) ?? []
+      if (!list.includes(m[1])) list.push(m[1])
+      mounts.set(m[2], list)
+    }
+  }
+  return mounts
+}
+
+/** Positions of declarations in `src` whose names are mounted somewhere. */
+function declarationsOf(src: string, mounts: Map<string, string[]>): Array<{ name: string; at: number }> {
+  const found: Array<{ name: string; at: number }> = []
+  const pattern = /(?:function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*[:=])/g
+  for (const m of src.matchAll(pattern)) {
+    const name = m[1] ?? m[2]
+    if (mounts.has(name)) found.push({ name, at: m.index ?? 0 })
+  }
+  return found
+}
+
+/**
+ * Prefixes a route registered on `receiver` at position `at` is served under:
+ * - a router created with a prefix (new Router('/x')) → that prefix only
+ * - a router variable that is mounted directly → its mount prefixes
+ * - otherwise the nearest preceding mounted declaration (the factory function
+ *   that creates the router, e.g. authRoutes) → its mount prefixes
+ * - nothing mounted → served as written ('')
+ */
+function prefixesFor(
+  receiver: string,
+  at: number,
+  baked: Map<string, string>,
+  mounts: Map<string, string[]>,
+  owners: Array<{ name: string; at: number }>
+): string[] {
+  if (receiver === 'app' || receiver === 'this') return ['']
+  const own = baked.get(receiver)
+  const direct = mounts.get(receiver)
+  if (own !== undefined) {
+    // Core matches the path relative to the mount point first, then the full
+    // path, so mount('/users', new Router('/users')) serves /users/…, and
+    // mount('/v1', new Router('/admin')) serves /v1/admin/…
+    if (!direct) return [own]
+    return direct.map(mount => (joinPath(mount, '/') === joinPath(own, '/') ? own : joinPath(mount, own)))
+  }
+  if (direct) return direct
+  let owner: { name: string; at: number } | undefined
+  for (const d of owners) if (d.at < at && (!owner || d.at > owner.at)) owner = d
+  return owner ? mounts.get(owner.name)! : ['']
+}
+
+/** joinPath('/auth', '/register') → '/auth/register'; joinPath('/products', '/') → '/products'. */
+export function joinPath(prefix: string, path: string): string {
+  const base = prefix.replace(/\/+$/, '')
+  if (!base) return path
+  if (path === '/' || path === '') return base
+  return base + (path.startsWith('/') ? path : `/${path}`)
 }
 
 // ─── Call-argument parsing ────────────────────────────────────────────────────

@@ -193,7 +193,7 @@ describe('semver helpers', () => {
 
   it('satisfiesRange handles caret on 0.x, wildcards and exact versions', () => {
     expect(satisfiesRange('0.2.5', '^0.2.0')).toBe(true);
-    expect(satisfiesRange('0.3.0', '^0.2.0')).toBe(false);
+    expect(satisfiesRange('0.3.7', '^0.2.0')).toBe(false);
     expect(satisfiesRange('0.0.3', '^0.0.3')).toBe(true);
     expect(satisfiesRange('0.0.4', '^0.0.3')).toBe(false);
     expect(satisfiesRange('5.4.3', '*')).toBe(true);

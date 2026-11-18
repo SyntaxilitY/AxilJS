@@ -20,7 +20,7 @@ import { BaseValidator } from './schema';
 
 // ─── Validate Options ─────────────────────────────────────────────────────────
 
-interface ValidateOptions {
+export interface ValidateOptions {
   // Validate request body
   body?: BaseValidator<any>;
 
@@ -31,12 +31,38 @@ interface ValidateOptions {
   query?: BaseValidator<any>;
 }
 
+/** The schemas a validate() middleware checks (only the ones given). */
+export type ValidationSchemas = Readonly<ValidateOptions>;
+
+/**
+ * Well-known key under which validate() middleware exposes its schemas.
+ * Symbol.for() so tools can read it without importing this package
+ * (e.g. generateOpenAPI() in @axiljs/core).
+ */
+export const VALIDATION_SCHEMAS: unique symbol = Symbol.for('axiljs.validation.schemas');
+
+/**
+ * Middleware returned by validate(). Besides being a MiddlewareFn it
+ * carries the schemas it validates, for introspection / documentation:
+ *
+ *   const mw = validate({ body: createUser })
+ *   mw.schemas.body                 // createUser
+ *   mw[Symbol.for('axiljs.validation.schemas')].body   // same object
+ *   mw.schemas.body?.toJSONSchema() // JSON Schema 2020-12
+ *
+ * Both properties are read-only, non-enumerable and frozen.
+ */
+export type ValidatedMiddleware = MiddlewareFn & {
+  readonly schemas: ValidationSchemas;
+  readonly [VALIDATION_SCHEMAS]: ValidationSchemas;
+};
+
 /**
  * Create validation middleware.
  * Validated data replaces the original (includes transforms like trim).
  */
-export function validate(options: ValidateOptions): MiddlewareFn {
-  return (req, res, next) => {
+export function validate(options: ValidateOptions): ValidatedMiddleware {
+  const middleware: MiddlewareFn = (req, res, next) => {
     const allErrors: any[] = [];
 
     // Validate body
@@ -84,4 +110,16 @@ export function validate(options: ValidateOptions): MiddlewareFn {
 
     next();
   };
+
+  // Expose the schemas (behaviour unchanged): only the locations given
+  const schemas: ValidateOptions = {};
+  if (options.body) schemas.body = options.body;
+  if (options.params) schemas.params = options.params;
+  if (options.query) schemas.query = options.query;
+  Object.freeze(schemas);
+
+  Object.defineProperty(middleware, 'schemas', { value: schemas, enumerable: false });
+  Object.defineProperty(middleware, VALIDATION_SCHEMAS, { value: schemas, enumerable: false });
+
+  return middleware as ValidatedMiddleware;
 }

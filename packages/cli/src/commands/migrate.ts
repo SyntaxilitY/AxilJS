@@ -1,6 +1,12 @@
 /**
- * axil migrate [up|down|status]
+ * axil migrate [up|down|status|check]
  * Runs the @axiljs/orm MigrationRunner against the project's database.
+ *
+ * `check` (also `--check`) runs the ORM's migration safety analysis over
+ * pending migrations (every migration with `all`) without executing them and
+ * reports statements that lock or rewrite tables or break deployed code.
+ * `up` runs the same check first when the safety mode is `warn` or `block`
+ * (option, else package.json "axil": { "migrationSafety": … }, else off).
  *
  * Connection settings (from the environment, after loading <cwd>/.env —
  * variables already set in the environment win):
@@ -12,16 +18,21 @@
  * @axiljs/orm (and the DB driver) are resolved from the project first.
  */
 
-import { existsSync, readdirSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
 import Module from 'module'
 import { delimiter, isAbsolute, join, relative, resolve } from 'path'
 
 import * as ui from '../ui'
 import { loadEnvIntoProcess } from '../utils/env'
 
-export type MigrateAction = 'up' | 'down' | 'status'
+export type MigrateAction = 'up' | 'down' | 'status' | 'check'
 
-export const MIGRATE_ACTIONS: MigrateAction[] = ['up', 'down', 'status']
+export const MIGRATE_ACTIONS: MigrateAction[] = ['up', 'down', 'status', 'check']
+
+/** `off`: no check. `warn`: report findings, then migrate. `block`: refuse to migrate on any error finding. */
+export type MigrationSafetyMode = 'off' | 'warn' | 'block'
+
+export const SAFETY_MODES: MigrationSafetyMode[] = ['off', 'warn', 'block']
 
 export interface MigrateOptions {
   // Project directory (default: process.cwd())
@@ -30,12 +41,64 @@ export interface MigrateOptions {
   dir?: string
   // Environment to read the connection from (default: process.env after loading .env)
   env?: Record<string, string | undefined>
+  // `up` only: safety check before migrating (default: package.json axil.migrationSafety, else off)
+  safety?: MigrationSafetyMode
+  // `check` only: analyze every migration, not only pending ones
+  all?: boolean
+  // `check` only: print the report as JSON on stdout (no other output)
+  json?: boolean
+  // Approximate row counts: ["users=4200000", "orders=18m"] or { users: 4200000 }
+  largeTables?: string | string[] | Record<string, number>
+}
+
+export interface MigrationFindingReport {
+  rule:      string
+  severity:  'error' | 'warning' | 'info'
+  table?:    string
+  lock?:     string
+  statement: string
+  message:   string
+  fix:       string
+}
+
+export interface MigrationCheckReport {
+  name:       string
+  // Project-relative path of the migration file
+  file:       string
+  // Number of SQL statements captured from up()
+  statements: number
+  findings:   MigrationFindingReport[]
+}
+
+export interface MigrationCheckSummary {
+  // false when any finding is an error
+  ok:      boolean
+  driver:  DbConnectionConfig['driver']
+  // Which migrations were analyzed
+  scope:   'pending' | 'all'
+  // true when no database was reachable and every migration was treated as pending
+  offline: boolean
+  counts:  { migrations: number; findings: number; error: number; warning: number; info: number }
+  migrations: MigrationCheckReport[]
+}
+
+export interface MigrateResult {
+  // 1 when `check` found errors or `up --safety=block` refused to run, else 0
+  exitCode: number
+  // The safety report (`check`, and `up` with safety warn/block)
+  check?: MigrationCheckSummary
 }
 
 export interface DbConnectionConfig {
   driver:    'sqlite' | 'postgres' | 'mysql'
   url?:      string
   filename?: string
+}
+
+const DRIVER_ALIASES: Record<string, DbConnectionConfig['driver']> = {
+  sqlite: 'sqlite', sqlite3: 'sqlite',
+  postgres: 'postgres', postgresql: 'postgres', pg: 'postgres',
+  mysql: 'mysql', mariadb: 'mysql'
 }
 
 /** Build an ORM connection config from env vars; throws with guidance when missing. */
@@ -47,12 +110,7 @@ export function resolveDbConfig(env: Record<string, string | undefined>, cwd: st
   let driver: DbConnectionConfig['driver'] | undefined
 
   if (explicit) {
-    const map: Record<string, DbConnectionConfig['driver']> = {
-      sqlite: 'sqlite', sqlite3: 'sqlite',
-      postgres: 'postgres', postgresql: 'postgres', pg: 'postgres',
-      mysql: 'mysql', mariadb: 'mysql'
-    }
-    driver = map[explicit]
+    driver = DRIVER_ALIASES[explicit]
     if (!driver) {
       throw new Error(`Unsupported DB_DRIVER "${env.DB_DRIVER}". Use sqlite, postgres or mysql.`)
     }
@@ -87,6 +145,97 @@ export function resolveDbConfig(env: Record<string, string | undefined>, cwd: st
     throw new Error(`DB_DRIVER=${driver} requires DATABASE_URL to be set.`)
   }
   return { driver, url }
+}
+
+/**
+ * Parse `--large-table` values into the runner's tableSizes.
+ * Each entry is `name=rows`; several may be comma-separated. Rows accept
+ * underscores and a k / m / b suffix: `users=4_200_000`, `orders=18m`.
+ */
+export function parseTableSizes(input: string | string[] | Record<string, number> | undefined): Record<string, number> {
+  if (!input) return {}
+  if (!Array.isArray(input) && typeof input === 'object') {
+    const out: Record<string, number> = {}
+    for (const [name, rows] of Object.entries(input)) {
+      if (typeof rows !== 'number' || !Number.isFinite(rows) || rows < 0) {
+        throw new Error(`Invalid row count for table "${name}": ${String(rows)}.`)
+      }
+      out[name] = rows
+    }
+    return out
+  }
+
+  const out: Record<string, number> = {}
+  const entries = (Array.isArray(input) ? input : [input])
+    .flatMap(v => v.split(','))
+    .map(v => v.trim())
+    .filter(Boolean)
+
+  for (const entry of entries) {
+    const m = /^([A-Za-z_][\w$.]*)\s*=\s*(\d[\d_]*(?:\.\d+)?)\s*([kmb])?$/i.exec(entry)
+    if (!m) {
+      throw new Error(`Invalid --large-table "${entry}". Expected <table>=<rows>, e.g. users=4200000 or orders=18m.`)
+    }
+    const scale = { k: 1e3, m: 1e6, b: 1e9 }[(m[3] || '').toLowerCase() as 'k' | 'm' | 'b'] ?? 1
+    out[m[1]] = Math.round(Number(m[2].replace(/_/g, '')) * scale)
+  }
+  return out
+}
+
+export interface ProjectMigrationSettings {
+  safety?:     MigrationSafetyMode
+  tableSizes?: Record<string, number>
+}
+
+/**
+ * Project defaults from package.json:
+ *   "axil": { "migrationSafety": "warn", "migrationTableSizes": { "users": 4200000 } }
+ */
+export function readProjectMigrationSettings(cwd: string): ProjectMigrationSettings {
+  const file = join(cwd, 'package.json')
+  if (!existsSync(file)) return {}
+
+  let pkg: any
+  try { pkg = JSON.parse(readFileSync(file, 'utf8')) } catch { return {} }
+  const axil = pkg && typeof pkg.axil === 'object' && pkg.axil ? pkg.axil : {}
+  const settings: ProjectMigrationSettings = {}
+
+  if (axil.migrationSafety !== undefined) {
+    if (!SAFETY_MODES.includes(axil.migrationSafety)) {
+      throw new Error(
+        `Invalid "axil.migrationSafety" in package.json: ${JSON.stringify(axil.migrationSafety)}. ` +
+        `Expected one of: ${SAFETY_MODES.join(', ')}.`
+      )
+    }
+    settings.safety = axil.migrationSafety
+  }
+  if (axil.migrationTableSizes !== undefined) {
+    settings.tableSizes = parseTableSizes(axil.migrationTableSizes)
+  }
+  return settings
+}
+
+/**
+ * Connection config for `check`. With DB_DRIVER set but no DATABASE_URL the
+ * check still runs offline (every migration is treated as pending), so CI can
+ * gate migrations without a database.
+ */
+function resolveCheckConfig(env: Record<string, string | undefined>, cwd: string): DbConnectionConfig & { offline?: boolean } {
+  try {
+    return resolveDbConfig(env, cwd)
+  } catch (error) {
+    const driver = DRIVER_ALIASES[env.DB_DRIVER?.trim().toLowerCase() || '']
+    if (driver) return { driver, offline: true }
+    throw error
+  }
+}
+
+/** Driver stand-in for an offline check: reads fail, so the runner treats every migration as pending. */
+function offlineDriver(driver: string): unknown {
+  return {
+    config: { driver },
+    async query(): Promise<never> { throw new Error('offline') }
+  }
 }
 
 function hasMigrationFiles(dir: string, ext: RegExp): boolean {
@@ -129,7 +278,8 @@ function loadOrm(cwd: string): { orm: any; fromProject: boolean } {
 const MIGRATE_SUMMARIES: Record<MigrateAction, string> = {
   up:     'Apply pending migrations',
   down:   'Roll back the last batch',
-  status: 'Show migration status'
+  status: 'Show migration status',
+  check:  'Check migrations for locking and breaking changes'
 }
 
 /**
@@ -171,13 +321,19 @@ async function printStatus(runner: any): Promise<void> {
   ui.info(`${ran} ran, ${files.length - ran} pending`)
 }
 
-export async function migrate(action: string = 'up', opts: MigrateOptions = {}): Promise<void> {
+export async function migrate(action: string = 'up', opts: MigrateOptions = {}): Promise<MigrateResult> {
   if (!MIGRATE_ACTIONS.includes(action as MigrateAction)) {
     throw new Error(`Unknown migrate action "${action}". Expected one of: ${MIGRATE_ACTIONS.join(', ')}.`)
   }
+  if (opts.safety !== undefined && !SAFETY_MODES.includes(opts.safety)) {
+    throw new Error(`Invalid safety mode "${opts.safety}". Expected one of: ${SAFETY_MODES.join(', ')}.`)
+  }
 
   const started = Date.now()
-  ui.title('migrate', MIGRATE_SUMMARIES[action as MigrateAction])
+  const isCheck = action === 'check'
+  // --json: nothing but the JSON report on stdout
+  const quiet   = isCheck && opts.json === true
+  if (!quiet) ui.title('migrate', MIGRATE_SUMMARIES[action as MigrateAction])
 
   const cwd = opts.cwd || process.cwd()
   let env = opts.env
@@ -186,7 +342,11 @@ export async function migrate(action: string = 'up', opts: MigrateOptions = {}):
     env = process.env
   }
 
-  const config = resolveDbConfig(env, cwd)
+  const settings   = readProjectMigrationSettings(cwd)
+  const tableSizes = { ...settings.tableSizes, ...parseTableSizes(opts.largeTables) }
+  const safety     = action === 'up' ? (opts.safety ?? settings.safety ?? 'off') : 'off'
+
+  const config: DbConnectionConfig & { offline?: boolean } = isCheck ? resolveCheckConfig(env, cwd) : resolveDbConfig(env, cwd)
   const dir    = resolveMigrationsDir(cwd, opts.dir)
 
   if (!existsSync(dir)) {
@@ -198,13 +358,30 @@ export async function migrate(action: string = 'up', opts: MigrateOptions = {}):
   if (typeof createConnection !== 'function' || typeof MigrationRunner !== 'function') {
     throw new Error('The installed @axiljs/orm does not export createConnection/MigrationRunner.')
   }
+  if ((isCheck || safety !== 'off') && typeof MigrationRunner.prototype?.check !== 'function') {
+    throw new Error('The installed @axiljs/orm has no migration safety check. Upgrade it: npm install @axiljs/orm@latest')
+  }
 
-  ui.keyValue([
-    ['Driver',     config.driver],
-    ...(config.filename ? [['Database', ui.path(shortPath(cwd, config.filename))] as [string, string]] : []),
-    ['Migrations', ui.path(shortPath(cwd, dir))]
-  ])
-  ui.line()
+  // A check never creates a database: a missing SQLite file means every migration is pending
+  let offline = isCheck && (
+    config.offline === true ||
+    opts.all === true ||
+    (config.driver === 'sqlite' && !!config.filename && config.filename !== ':memory:' && !existsSync(config.filename))
+  )
+
+  if (!quiet) {
+    const sizes = Object.entries(tableSizes)
+    ui.keyValue([
+      ['Driver',     config.driver],
+      ...(config.filename ? [['Database', ui.path(shortPath(cwd, config.filename))] as [string, string]] : []),
+      ['Migrations', ui.path(shortPath(cwd, dir))],
+      ...(safety !== 'off' ? [['Safety', safety] as [string, string]] : []),
+      ...(sizes.length
+        ? [['Large tables', sizes.map(([t, n]) => `${t} ${ui.muted(`(${n.toLocaleString('en-US')} rows)`)}`).join(', ')] as [string, string]]
+        : [])
+    ])
+    ui.line()
+  }
 
   // When @axiljs/orm did not come from the project, its require() of
   // pg/mysql2/better-sqlite3 would not search the project's node_modules:
@@ -217,26 +394,190 @@ export async function migrate(action: string = 'up', opts: MigrateOptions = {}):
     ;(Module as any)._initPaths?.()
   }
 
-  const connection = await withOrmOutput<any>(() => createConnection(
-    { driver: config.driver, url: config.url, filename: config.filename },
-    `axil-migrate-${Date.now()}`
-  ))
-
+  let connection: any = null
   try {
-    const runner = new MigrationRunner(connection.getDriver(), dir)
-    if (action === 'up')     await withOrmOutput(() => runner.up())
-    if (action === 'down')   await withOrmOutput(() => runner.down())
-    if (action === 'status') await printStatus(runner)
+    if (!offline) {
+      try {
+        connection = await withOrmOutput<any>(() => createConnection(
+          { driver: config.driver, url: config.url, filename: config.filename },
+          `axil-migrate-${Date.now()}`
+        ), !quiet)
+      } catch (error) {
+        if (!isCheck) throw error
+        offline = true
+        if (!quiet) {
+          ui.warn('Could not connect to the database', `${(error as Error)?.message ?? String(error)}; checking every migration`)
+        }
+      }
+    }
+
+    const driver = connection ? connection.getDriver() : offlineDriver(config.driver)
+    const runner = new MigrationRunner(driver, dir, Object.keys(tableSizes).length ? { tableSizes } : undefined)
+
+    if (isCheck) {
+      const results = await withOrmOutput<any[]>(() => runner.check({ all: opts.all === true }), !quiet)
+      const summary = summarizeCheck(results, cwd, config.driver, opts.all === true ? 'all' : 'pending', offline)
+
+      if (quiet) {
+        console.log(JSON.stringify(summary, null, 2))
+        return { exitCode: summary.ok ? 0 : 1, check: summary }
+      }
+
+      renderCheck(summary)
+      if (summary.ok) {
+        ui.done(summary.counts.findings ? 'No blocking findings' : 'Safe to migrate', started)
+      } else {
+        ui.failed(
+          `${plural(summary.counts.error, 'error')} in ${plural(summary.migrations.filter(hasError).length, 'migration')}`,
+          'Fix the statements, or mark an intended one with "-- axil:allow <rule>".'
+        )
+      }
+      return { exitCode: summary.ok ? 0 : 1, check: summary }
+    }
+
+    let check: MigrationCheckSummary | undefined
+    if (action === 'up' && safety !== 'off') {
+      const results = await withOrmOutput<any[]>(() => runner.check())
+      check = summarizeCheck(results, cwd, config.driver, 'pending', false)
+      renderCheck(check, 'Safety check')
+      if (safety === 'block' && !check.ok) {
+        ui.failed(
+          `Blocked: ${plural(check.counts.error, 'error')} in ` +
+          `${plural(check.migrations.filter(hasError).length, 'migration')}; nothing was run`,
+          'Fix the statements, or mark an intended one with "-- axil:allow <rule>".'
+        )
+        return { exitCode: 1, check }
+      }
+      ui.section('Migrate')
+    }
+
+    try {
+      if (action === 'up')     await withOrmOutput(() => runner.up())
+      if (action === 'down')   await withOrmOutput(() => runner.down())
+      if (action === 'status') await printStatus(runner)
+    } catch (error) {
+      // An ORM that blocked on its own: MigrationSafetyError carries the results
+      if ((error as Error)?.name === 'MigrationSafetyError' && Array.isArray((error as any).results)) {
+        check = summarizeCheck((error as any).results, cwd, config.driver, 'pending', false)
+        renderCheck(check, 'Safety check')
+        ui.failed(
+          'Blocked by the migration safety check; nothing was run',
+          'Fix the statements, or mark an intended one with "-- axil:allow <rule>".'
+        )
+        return { exitCode: 1, check }
+      }
+      throw error
+    }
     if (action !== 'status') ui.done(action === 'up' ? 'Migrate done' : 'Rollback done', started)
     else ui.line()
+    return check ? { exitCode: 0, check } : { exitCode: 0 }
   } finally {
-    try { await withOrmOutput(() => connection.disconnect()) } catch {}
+    if (connection) {
+      try { await withOrmOutput(() => connection.disconnect(), !quiet) } catch {}
+    }
     if (patchPaths) {
       if (prevNodePath === undefined) delete process.env.NODE_PATH
       else process.env.NODE_PATH = prevNodePath
       ;(Module as any)._initPaths?.()
     }
   }
+}
+
+const SEVERITY_ORDER: Record<MigrationFindingReport['severity'], number> = { error: 0, warning: 1, info: 2 }
+
+const hasError = (m: MigrationCheckReport): boolean => m.findings.some(f => f.severity === 'error')
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/** Turn MigrationRunner#check() results into the CLI report (errors first, project-relative paths). */
+export function summarizeCheck(
+  results: any[],
+  cwd: string,
+  driver: DbConnectionConfig['driver'],
+  scope: 'pending' | 'all',
+  offline: boolean
+): MigrationCheckSummary {
+  const counts = { migrations: results.length, findings: 0, error: 0, warning: 0, info: 0 }
+
+  const migrations: MigrationCheckReport[] = results.map(r => {
+    const raw: any[] = Array.isArray(r.findings) ? r.findings : []
+    const findings = raw
+      .map((f, i): { f: MigrationFindingReport; i: number } => ({
+        i,
+        f: {
+          rule:      String(f.rule),
+          severity:  f.severity === 'error' || f.severity === 'warning' ? f.severity : 'info',
+          ...(f.table ? { table: String(f.table) } : {}),
+          ...(f.lock ? { lock: String(f.lock) } : {}),
+          statement: String(f.statement ?? ''),
+          message:   String(f.message ?? ''),
+          fix:       String(f.fix ?? '')
+        }
+      }))
+      .sort((a, b) => SEVERITY_ORDER[a.f.severity] - SEVERITY_ORDER[b.f.severity] || a.i - b.i)
+      .map(x => x.f)
+
+    for (const f of findings) {
+      counts.findings++
+      counts[f.severity]++
+    }
+    return {
+      name:       String(r.name),
+      file:       shortPath(cwd, String(r.file ?? r.name)).replace(/\\/g, '/'),
+      statements: Array.isArray(r.statements) ? r.statements.length : 0,
+      findings
+    }
+  })
+
+  return { ok: counts.error === 0, driver, scope, offline, counts, migrations }
+}
+
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text
+}
+
+/** Findings on the rail, grouped by migration file. */
+function renderCheck(summary: MigrationCheckSummary, heading = 'Migration safety'): void {
+  ui.section(heading)
+  if (summary.offline) {
+    ui.info('No database reachable', 'every migration is treated as pending')
+  }
+  if (summary.migrations.length === 0) {
+    ui.info(summary.scope === 'all' ? 'No migration files found' : 'No pending migrations to check')
+    return
+  }
+
+  for (const m of summary.migrations) {
+    if (m.findings.length === 0) {
+      ui.success(m.name, `${plural(m.statements, 'statement')}, no findings`)
+      continue
+    }
+    ui.line()
+    ui.step(ui.c.bold(m.name), `${m.file}  ${plural(m.findings.length, 'finding')}`)
+    for (const f of m.findings) {
+      const where = [f.table && `table ${f.table}`, f.lock && `lock ${f.lock}`]
+        .filter(Boolean)
+        .join(`  ${ui.sym.dot}  `)
+      const label = `${f.severity.padEnd(7)} ${f.rule}`
+      if (f.severity === 'error')        ui.problem(label, where)
+      else if (f.severity === 'warning') ui.warn(label, where)
+      else                               ui.info(label, where)
+      ui.detail(f.message)
+      if (f.fix) ui.detail(`Fix: ${f.fix}`)
+      if (f.statement) ui.detail(`SQL: ${truncate(f.statement, 140)}`)
+    }
+  }
+
+  const { counts } = summary
+  ui.line()
+  const parts = [
+    counts.error   ? ui.c.red(plural(counts.error, 'error'))        : ui.muted('0 errors'),
+    counts.warning ? ui.c.yellow(plural(counts.warning, 'warning')) : ui.muted('0 warnings'),
+    counts.info    ? ui.c.blue(`${counts.info} info`)               : ui.muted('0 info')
+  ]
+  ui.line(`${plural(counts.migrations, 'migration')} checked  ${ui.muted(ui.sym.dot)}  ${parts.join(ui.muted(', '))}`)
 }
 
 /** Project-relative path for display; absolute when outside the project. */
@@ -249,8 +590,9 @@ function shortPath(cwd: string, target: string): string {
  * Run an @axiljs/orm call with its console output captured, then re-print
  * it on the CLI rail (the ORM writes its own coloured lines and partial
  * "Migrating: x... done" writes, which would otherwise break the layout).
+ * With `render` false the output is discarded (`migrate check --json`).
  */
-async function withOrmOutput<T>(fn: () => Promise<T>): Promise<T> {
+async function withOrmOutput<T>(fn: () => Promise<T>, render = true): Promise<T> {
   const original = process.stdout.write
   let buffer = ''
   process.stdout.write = ((chunk: any, ...rest: any[]) => {
@@ -264,7 +606,7 @@ async function withOrmOutput<T>(fn: () => Promise<T>): Promise<T> {
     return await fn()
   } finally {
     process.stdout.write = original
-    for (const raw of buffer.split('\n')) renderOrmLine(ui.stripAnsi(raw).trim())
+    if (render) for (const raw of buffer.split('\n')) renderOrmLine(ui.stripAnsi(raw).trim())
   }
 }
 
