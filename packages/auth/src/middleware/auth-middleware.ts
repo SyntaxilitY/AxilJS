@@ -14,6 +14,7 @@
  *   app.get('/feed', authenticate(jwt, { required: false }), getFeed)
  */
 
+import { markAuth } from './marker';
 import { MiddlewareFn, UnauthorizedError } from '@axiljs/common';
 import { JWT, JWTPayload } from '../jwt/jwt';
 
@@ -118,7 +119,7 @@ export function authenticate(
 
   const sources = Array.isArray(source) ? source : [source];
 
-  return (req, res, next) => {
+  return markAuth((req, res, next) => {
     const token = extractToken(req, sources, cookieName, queryParam);
 
     if (!token) {
@@ -142,7 +143,7 @@ export function authenticate(
     } catch (error) {
       next(error instanceof Error ? error : new UnauthorizedError());
     }
-  };
+  }, 'authenticate');
 }
 
 /**

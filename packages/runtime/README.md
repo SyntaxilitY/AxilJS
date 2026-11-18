@@ -1,6 +1,6 @@
 # @axiljs/runtime
 
-Makes `@axiljs/decorator` metadata actually run: a per-request context, intent verification (`tPure`, `tReadOnly`, `tTenantIsolated`, `tIdempotent`, `tSlo`, …), resilience and concurrency interceptors (`tRetry`, `tTimeout`, `tCircuitBreaker`, `tBulkhead`, `tCache`, `tLock`, …), audit events and redaction driven by `tRedact` / `tSensitive`.
+Makes `@axiljs/decorator` metadata actually run: a per-request context, intent verification (`tPure`, `tReadOnly`, `tTenantIsolated`, `tIdempotent`, `tSlo`, …), resilience and concurrency interceptors (`tRetry`, `tTimeout`, `tCircuitBreaker`, `tBulkhead`, `tCache`, `tLock`, …), audit events, redaction driven by `tRedact` / `tSensitive`, and sensitive data lineage that reports tracked values reaching a response, log, event, queue or LLM request.
 
 Part of the [AxilJS](https://github.com/SyntaxilitY/AxilJS) ecosystem.
 
@@ -156,4 +156,70 @@ app.use(redactResponses())         // res.json() and res.success()/created()/...
 new Logger({ transports: [redactingTransport(new ConsoleTransport(), { fields: { authorization: 'mask' } })] })
 ```
 
-`tRedact` fields are always redacted. `tSensitive` fields are masked in logs and audit events but kept in responses (`redactResponses` defaults to `includeSensitive: false`). `fields` adds name-based rules for plain objects.
+`tRedact` fields are always redacted. `tSensitive` fields are masked in logs and audit events but kept in responses (`redactResponses` defaults to `includeSensitive: false`). `fields` adds name-based rules for plain objects. A `tSensitive` value loaded through the ORM and sent in a response is still reported by sensitive data lineage unless that exit is allowed (see below).
+
+## Sensitive data lineage
+
+Fields marked `@tSensitive(...)` or `@tRedact(...)` are tracked by value for the length of a request. If such a value leaves the process through an exit that is not allowed, the runtime reports a `tSensitive` intent violation, so an email address that ends up in a log line, an event payload or an LLM prompt fails a test instead of reaching a third party.
+
+```typescript
+import { tSensitive } from '@axiljs/decorator'
+import { requestContext, allowSensitive } from '@axiljs/runtime'
+
+@Entity('users')
+class User extends BaseModel {
+  @PrimaryKey() id!: number
+  @Column() @tSensitive('PII') email!: string
+}
+
+app.use(requestContext())   // lineage is per request; nothing is tracked outside a context
+
+app.get('/users/:id/summary', async (req, res) => {
+  const user = await User.find(req.params.id)   // user.email is now tracked
+  logger.info('summary', { email: user.email })  // violation: User.email (PII) reached log
+  res.success({ id: user.id, email: user.email }) // violation: User.email (PII) reached response
+})
+```
+
+**Sources.** `@axiljs/orm` reports every entity a `BaseModel` hydrates and every row a `BaseRepository` loads (column names are mapped back to properties). Call `trackSensitive(value)` for values from elsewhere (an HTTP client, a cache); plain objects can be described with `trackSensitive(rows, { entity: User, columns: { email: 'email_address' } })`. Objects, arrays and maps are walked with a depth limit and are cycle-safe.
+
+**Sinks.** Each exit checks its payload with `checkSink(sink, payload, target?)`:
+
+| Sink | Where it is checked |
+|---|---|
+| `response` | `@axiljs/core` `res.json()`, `res.text()`, `res.html()`, `res.send()` and every envelope helper (`res.success()`, ...) before the body is serialized |
+| `log` | `@axiljs/observability` `ConsoleTransport` and `FileTransport`; `redactingTransport()` (after redaction) |
+| `event` | `@axiljs/events` `EventBus.emit()` |
+| `queue` | `@axiljs/queue` `Queue.add()` / `addMany()` |
+| `ai` | `@axiljs/ai` provider requests (OpenAI, Anthropic, Gemini, Ollama; completions, streams and embeddings) |
+
+The payload is scanned for tracked values in nested strings, numbers, object keys, `toJSON()` output, buffers and already-serialized JSON text. A value masked or hashed by `redact()` no longer matches and passes. The violation names the origin and classification (`User.email (PII) reached log`) and the current route as target; the value itself never appears in the violation, the error or the warning. `checkSink` returns the leaks found, so custom exits (a mailer, a webhook client) can call it with their own sink name.
+
+**Allowing an exit.** Returning a user's own email from a profile endpoint is legitimate; say so explicitly:
+
+```typescript
+// Only inside fn (sync or async)
+app.get('/me', async (req, res) => {
+  const me = await User.find(getContext()!.user!.id)
+  allowSensitive('response', () => res.success(me))
+})
+
+// For the rest of the current request (e.g. from a route middleware)
+const allowResponse: MiddlewareFn = (_req, _res, next) => { allowSensitive('response'); next() }
+
+// Without code at the call site, keyed by origin: 'User.email', 'User.*', a classification ('PII') or '*'
+configureLineage({ allow: { response: ['User.email'], ai: ['INTERNAL'] } })
+```
+
+**Modes.** Lineage uses the intent mode (`configureIntent` / `AXIL_INTENT_MODE`). In `enforce` the sink throws `IntentViolationError` before anything is written: a response becomes the app's error response (HTTP 500, code `INTENT_VIOLATION`), `emit()` and `Queue.add()` reject, the provider request is not sent. Loggers never throw, so in enforce mode the leaking log entry is dropped and the violation recorded. In `warn` the violation is recorded, emitted as `runtime.intent.violation` and printed once per target and leak. `off` disables the checks; `configureLineage({ enabled: false })` disables tracking as well.
+
+**Options.** `configureLineage({ minLength: 4, maxValues: 500, maxDepth: 8 })`. `trackedSensitiveOrigins()` lists the origins tracked in the current request (never the values); `resetLineage()` restores the defaults.
+
+**Limitations.**
+
+- Only strings of at least 4 characters (after trimming) and numbers with at least 4 digits are tracked; shorter values would match too much. Numbers match only on digit boundaries.
+- Tracking is by exact value. A value that is transformed (hashed, encrypted, split, re-encoded, lower-cased, base64) is not recognized, and a value that leaves through an exit without a check (raw sockets, `fetch`, files written directly, `res.raw`) is not seen.
+- Taint lives in the request context of one process; it does not follow a value into a queue worker or another service. Values tracked are capped per request (`maxValues`).
+- Thrown errors are not a checked sink: an error message carrying a tracked value is caught only when it is written as a response or log entry.
+- Custom log transports are checked only when wrapped in `redactingTransport()` or when they call `checkSink('log', entry)` themselves.
+- Packages report through `globalThis[Symbol.for('axiljs.sensitive.observe')]` and `globalThis[Symbol.for('axiljs.sensitive.sink')]`, so lineage is active only when `@axiljs/runtime` is loaded in the process.

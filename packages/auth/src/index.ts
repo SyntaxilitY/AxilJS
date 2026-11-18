@@ -21,3 +21,4 @@ export { requireRole, requirePermission, requireOwnership } from './middleware/r
 
 // Password
 export { hashPassword, verifyPassword, isHashed } from './password/password';
+export { AUTH_MIDDLEWARE, markAuth } from './middleware/marker';

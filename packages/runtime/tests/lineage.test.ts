@@ -333,3 +333,44 @@ describe('end to end with @axiljs/core', () => {
     expect(getIntentViolations()).toHaveLength(0);
   });
 });
+
+describe('with @axiljs/orm as the source', () => {
+  it('taints values loaded by repositories and models', async () => {
+    const orm = await import('../../orm/src');
+    const { Entity, PrimaryKey, Column, BaseModel, BaseRepository, createConnection } = orm as any;
+
+    @Entity('lineage_people')
+    class Person extends BaseModel {
+      @PrimaryKey() id!: number;
+      @Column({ name: 'mail' }) @tSensitive('PII') email!: string;
+    }
+
+    @Entity('lineage_cards')
+    class Card {
+      @PrimaryKey() id!: number;
+      @Column({ name: 'card_number' }) @tSensitive('PCI') number!: string;
+    }
+
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const db = await createConnection({ driver: 'sqlite', filename: ':memory:' }, `lineage_${Math.random()}`);
+    spy.mockRestore();
+    try {
+      const driver = db.getDriver();
+      await driver.query('CREATE TABLE lineage_people (id INTEGER PRIMARY KEY, mail TEXT)');
+      await driver.query('CREATE TABLE lineage_cards (id INTEGER PRIMARY KEY, card_number TEXT)');
+      await driver.query("INSERT INTO lineage_people (mail) VALUES ('bob@example.com')");
+      await driver.query("INSERT INTO lineage_cards (card_number) VALUES ('5555444433331111')");
+      BaseModel.setDriver(driver, 'sqlite');
+
+      configureIntent({ mode: 'warn' });
+      await runWithContext({}, async () => {
+        await Person.find(1);
+        await new BaseRepository(Card, db).findById(1);
+        expect(trackedSensitiveOrigins().sort()).toEqual(['Card.number', 'Person.email']);
+        expect(checkSink('log', { msg: 'bob@example.com paid with 5555444433331111' })).toHaveLength(2);
+      });
+    } finally {
+      await db.disconnect();
+    }
+  });
+});

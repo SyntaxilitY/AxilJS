@@ -155,6 +155,86 @@ multi-range requests get the full file). `If-Range` is honoured with a date.
 `createSSE(res)` keeps an `Access-Control-Allow-Origin` already set by `cors()`
 and only defaults it to `*` when none is set.
 
+## OpenAPI
+
+The application can describe itself as an OpenAPI 3.1 document, built from its
+registered routes and the schemas of any `validate()` middleware on them.
+
+```typescript
+import { Application, Router, generateOpenAPI } from '@axiljs/core'
+import { validate, v } from '@axiljs/validation'
+
+const app = new Application()
+const users = new Router()
+users.get('/', validate({ query: v.object({ page: v.number().integer().default(1) }) }), listUsers)
+users.post('/', authenticateUser, validate({ body: createUserSchema }), createUser)
+users.get('/:id', getUser)
+app.mount('/api/users', users)
+
+app.routes()                                                   // [{ method, path, middleware, handler }, ...]
+app.openapi({ title: 'Users API', version: '1.0.0' })          // the document
+generateOpenAPI(app, { title: 'Users API', version: '1.0.0' }) // same, as a function
+
+// Serve it as JSON (generated on the first request, then cached)
+app.serveOpenAPI({ title: 'Users API', version: '1.0.0', servers: [{ url: 'http://localhost:3000' }] })
+app.serveOpenAPI('/docs/openapi.json', { title: 'Users API', version: '1.0.0' })
+```
+
+Generate a typed client from the served document with the CLI:
+
+```bash
+axil generate client --from http://localhost:3000/openapi.json --out src/api-client.ts
+```
+
+### `app.routes()`
+
+Returns every route in matching order: the app's own routes, then each mounted
+router's. `path` is the URL clients call: app routes include `config.prefix`;
+mounted routes get the mount prefix plus the router's own prefix (the app prefix
+is not applied to mounted routers). A router created with the mount prefix
+already in it (`new Router('/users')` mounted at `/users`) is not doubled.
+`middleware` lists global, router and route middleware in execution order, and
+`method` is `'*'` for `all()` routes. `router.routes()` gives the same for a
+single router.
+
+### What the document contains
+
+| Item | Rule |
+|---|---|
+| Version | `openapi: '3.1.0'`, `jsonSchemaDialect` JSON Schema 2020-12 |
+| Paths | `:id` becomes `{id}`; routes of one shape share the first route's param names |
+| Path parameters | required; schema from the `params` schema, else `string` |
+| Query parameters | one per property of the `query` schema; `required` from its `required` list |
+| Request body | `application/json`, stored as `components.schemas.<OperationId>Body` and referenced by `$ref`; required unless the body schema is optional |
+| `operationId` | lower-case method + PascalCase segments, `:param` as `By<Param>` (`GET /users/:id` is `getUsersById`, `GET /` is `getRoot`); a numeric suffix keeps duplicates unique |
+| Success response | `201` for POST, `200` otherwise (HEAD without content); body `components.schemas.Envelope` = `{ status, code, message, data }`, `data` unconstrained |
+| Error responses | `components.responses.Error` (`{ error: { code, message } }`) for `422` (validated routes), `401` and `403` (auth routes), `404` (routes with path params), plus `4XX` and `5XX` |
+| Security | `bearerAuth` (HTTP bearer, JWT) on routes with auth middleware; the scheme is only added when used |
+| Skipped | `all()` routes, wildcard (`*`) routes, the `serveOpenAPI()` route and handlers wrapped in `excludeFromOpenAPI()` |
+
+Schema discovery is duck-typed, so core does not depend on `@axiljs/validation`:
+a middleware with `fn[Symbol.for('axiljs.validation.schemas')]` or `fn.schemas`
+shaped `{ body?, params?, query? }` is used. Each schema's `toJSONSchema()` is
+called; plain JSON Schema objects are taken as they are. When several
+validation middleware run on one route, the later one wins per location.
+
+Auth detection is a heuristic. A middleware counts as authentication when it
+has `fn[Symbol.for('axiljs.auth')]` set (exported as `AUTH_MIDDLEWARE`) or its
+function name contains `authenticate`, `requireAuth`, `requireRole`,
+`requirePermission` or `requireOwnership`. Middleware returned by factories such
+as `authenticate(jwt)` are anonymous functions, so either wrap them in a named
+function, set the marker, or pass your own predicate:
+
+```typescript
+app.openapi({ title: 'API', version: '1.0.0', isAuthMiddleware: fn => fn === requireUser })
+```
+
+Limitations: response payloads (`data`) are not described, since handler output
+cannot be introspected; handlers that answer with `res.json()` instead of the
+envelope helpers are still documented with the envelope; `custom()` and
+`transform()` rules are not represented; the served document is cached after the
+first request, so routes added later are not included.
+
 ## Testing
 
 ```bash

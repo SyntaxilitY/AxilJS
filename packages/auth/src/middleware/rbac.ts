@@ -13,6 +13,7 @@
  *   app.post('/posts', authenticate(jwt), requirePermission('posts:create'), createPost)
  */
 
+import { markAuth } from './marker';
 import { MiddlewareFn, ForbiddenError, UnauthorizedError } from '@axiljs/common';
 
 /**
@@ -24,7 +25,7 @@ import { MiddlewareFn, ForbiddenError, UnauthorizedError } from '@axiljs/common'
 export function requireRole(roles: string | string[]): MiddlewareFn {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
-  return (req, res, next) => {
+  return markAuth((req, res, next) => {
     const user = req.locals?.user as any;
 
     if (!user) {
@@ -50,7 +51,7 @@ export function requireRole(roles: string | string[]): MiddlewareFn {
     }
 
     next();
-  };
+  }, 'requireRole');
 }
 
 /**
@@ -60,7 +61,7 @@ export function requireRole(roles: string | string[]): MiddlewareFn {
  * Permissions are strings like 'users:read', 'posts:create', 'admin:*'
  */
 export function requirePermission(permission: string): MiddlewareFn {
-  return (req, res, next) => {
+  return markAuth((req, res, next) => {
     const user = req.locals?.user as any;
 
     if (!user) {
@@ -94,7 +95,7 @@ export function requirePermission(permission: string): MiddlewareFn {
     }
 
     next();
-  };
+  }, 'requirePermission');
 }
 
 /**
@@ -105,7 +106,7 @@ export function requirePermission(permission: string): MiddlewareFn {
  *   app.get('/users/:id/profile', authenticate(jwt), requireOwnership('id'), getProfile)
  */
 export function requireOwnership(paramName: string = 'id'): MiddlewareFn {
-  return (req, res, next) => {
+  return markAuth((req, res, next) => {
     const user = req.locals?.user as any;
 
     if (!user) {
@@ -129,5 +130,5 @@ export function requireOwnership(paramName: string = 'id'): MiddlewareFn {
     }
 
     next();
-  };
+  }, 'requireOwnership');
 }
